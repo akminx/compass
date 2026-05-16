@@ -25,7 +25,10 @@ Not an auto-apply bot. Every application is a deliberate human decision.
 graph TD
     A[ATS APIs<br/>Greenhouse · Lever · Ashby] --> B[Scraper layer]
     B --> C[LangGraph pipeline]
-    C --> D{score ≥ 3.5?}
+    C --> EX[extract_node<br/>Pydantic AI]
+    EX --> RAG[RAG retrieval<br/>Chroma · sentence-transformers]
+    RAG --> SC[score_node]
+    SC --> D{score ≥ 3.5?}
     D -- yes --> E[HiTL interrupt]
     D -- borderline --> F[Reflection node]
     F --> E
@@ -36,6 +39,7 @@ graph TD
     I --> J[MCP server]
     J --> K[Claude Code / Cursor]
     C --> L[Langfuse traces]
+    M[Modal cron<br/>timeout checker] -- resumes timed-out threads --> E
 ```
 
 [→ Full architecture doc](docs/ARCHITECTURE.md)
@@ -80,10 +84,11 @@ See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full setup.
 |---|---|---|
 | Agent orchestration | LangGraph | Stateful graphs, HiTL interrupts, time-travel debugging |
 | Structured I/O | Pydantic AI | Typed LLM extraction — no silent schema failures |
+| RAG / vector store | ChromaDB + sentence-transformers | Semantic skill retrieval for score_node context |
 | Observability | Langfuse (self-hosted) | Full traces, cost tracking, eval scoring |
 | Knowledge store | Obsidian vault | Human-readable, git-trackable, queryable with Dataview |
 | Tool interface | MCP server | Exposes pipeline to Claude Code / Cursor |
-| Scheduling | Modal cron | Serverless daily scan |
+| Scheduling | Modal cron | Serverless daily scan + HiTL timeout checker |
 | Data sources | Greenhouse · Lever · Ashby public APIs | No ToS violations, structured JSON |
 
 ---

@@ -1,0 +1,4 @@
+"""
+Parallel job processing tests.
+Implemented in Phase 3 (amendments plan Task 7).
+"""

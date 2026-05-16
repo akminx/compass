@@ -9,8 +9,24 @@
 Compass is an agentic career coaching system. It finds job postings, scores them against a candidate profile, identifies skill gaps, generates study plans, and produces tailored resume variants. It is NOT an auto-apply bot — it is a research and preparation tool that keeps a human in the loop for every application decision.
 
 The system has two sides:
-1. **The pipeline** (this repo) — Python, LangGraph, Pydantic, Langfuse, ATS scrapers. Does the work.
+1. **The pipeline** (this repo) — Python, LangGraph, Pydantic AI, Langfuse, ChromaDB, ATS scrapers. Does the work.
 2. **The vault** (`~/Documents/compass-vault/`) — Obsidian markdown. Stores everything durably.
+
+## Portfolio Context (read this — it shapes every decision)
+
+This project exists to close specific skill gaps and produce a concrete interview story. The target roles are Applied AI Engineer, Agentic Systems Engineer, and FDE at Sierra AI, Scale AI, and Databricks.
+
+**What this project must demonstrate by the time it ships:**
+- LangGraph: stateful graph, conditional edges, `interrupt()` for HiTL, `AsyncSqliteSaver` checkpointing
+- RAG pipeline: Chroma vector store, sentence-transformers embeddings, semantic retrieval, context recall eval
+- Langfuse: self-hosted, full traces, cost per run, LLM-as-judge eval scoring
+- Pydantic AI: structured extraction with typed schemas
+- MCP server: vault + pipeline exposed as tools for Claude Code / Cursor
+- Eval harness: labeled dataset, score MAE, skill extraction recall, context recall
+- Modal: serverless cron for daily scrape + HiTL timeout checker
+- Production patterns: HiTL with externally-enforced timeout, parallel job processing with semaphore
+
+**The interview story:** "I built the system I'm using to run my own job search." The public Langfuse trace URL in the README is the single most concrete portfolio signal. Ship it, keep it running, use it daily.
 
 ---
 
@@ -20,14 +36,21 @@ The system has two sides:
 compass/
 ├── CLAUDE.md                  # This file — read first
 ├── docs/
+│   ├── ROADMAP.md             # Master project plan — phases, sub-plans, skills closed
 │   ├── ARCHITECTURE.md        # Full system design — read before coding
 │   ├── STATUS.md              # What's built vs. planned — update as you ship
 │   └── RUNBOOK.md             # How to run everything end to end
 ├── compass/
 │   ├── pipeline/              # LangGraph pipeline nodes and graph definition
-│   │   ├── graph.py           # Main graph definition
+│   │   ├── graph.py           # Main graph — build_graph() + run_pipeline()
 │   │   ├── nodes/             # One file per node
-│   │   └── state.py           # TypedDict state schema
+│   │   └── state.py           # TypedDict state schema (CompassState)
+│   ├── rag/                   # RAG layer — Chroma index + semantic retriever
+│   │   ├── indexer.py         # Build/refresh Chroma index from vault skills/
+│   │   └── retriever.py       # Retrieve relevant profile chunks for a JD
+│   ├── hitl/                  # HiTL timeout infrastructure
+│   │   ├── state_store.py     # SQLite table tracking pending interrupts + timestamps
+│   │   └── timeout_checker.py # Modal cron — resumes timed-out graph checkpoints
 │   ├── scrapers/              # ATS API scrapers
 │   │   ├── greenhouse.py
 │   │   ├── lever.py
@@ -40,8 +63,11 @@ compass/
 │   ├── mcp_server/            # MCP server exposing vault + pipeline as tools
 │   │   └── server.py
 │   ├── evals/                 # Eval harness
-│   │   ├── dataset.py         # Labeled dataset management
-│   │   └── runner.py          # Nightly eval runs
+│   │   ├── dataset.py         # Labeled dataset (EvalRecord schema)
+│   │   └── runner.py          # Score MAE + skill recall + context recall
+│   ├── analysis/              # Cross-job intelligence (Phase 3)
+│   │   ├── gap_aggregator.py  # Aggregate missing skills across all scored jobs, ranked by frequency × score
+│   │   └── study_planner.py   # Generate master-gap-plan.md from ranked gap list
 │   └── config.py              # All config, loaded from .env
 ├── tests/                     # Pytest tests
 ├── scripts/                   # One-off setup and maintenance scripts
@@ -91,10 +117,18 @@ LANGFUSE_SECRET_KEY=sk-lf-...
 # Vault
 VAULT_PATH=/Users/akash/Documents/compass-vault
 
+# RAG
+CHROMA_PATH=~/.compass/chroma          # Persistent Chroma index for skill notes
+EMBEDDING_MODEL=all-MiniLM-L6-v2       # sentence-transformers model name
+
+# HiTL
+HITL_STATE_DB=~/.compass/hitl.db       # SQLite for pending interrupt tracking
+HITL_TIMEOUT_HOURS=4                   # Hours before auto-cancel
+
 # Pipeline
 MAX_JOBS_PER_RUN=50
-SCORE_THRESHOLD=3.5        # Only write jobs scoring above this to vault
-HITL_TIMEOUT_HOURS=4       # Hours to wait for human approval before auto-cancel
+SCORE_THRESHOLD=3.5                    # Only write jobs scoring above this to vault
+MAX_CONCURRENT_JOBS=5                  # Parallel graph invocations per run
 ```
 
 ---
@@ -136,7 +170,9 @@ handler = CallbackHandler()
 result = await graph.ainvoke(state, config={"callbacks": [handler]})
 ```
 
-**Human-in-the-loop:** Use LangGraph's `interrupt()` for the human approval step. The interrupt saves state, waits for external input, and resumes. Do not use sleep loops.
+**Human-in-the-loop:** Use LangGraph's `interrupt()` for the human approval step. The interrupt checkpoints graph state and suspends — it does NOT have a built-in timer. The timeout is enforced externally: `compass/hitl/timeout_checker.py` is a Modal cron that polls `HiTLStateStore` every 30 minutes and resumes timed-out threads via `graph.ainvoke(Command(resume={"approved": False}), config={"configurable": {"thread_id": ...}})`. The `hitl_node` receives the actual LangGraph `thread_id` via its `config: RunnableConfig` parameter — not from state.
+
+**Graph compilation:** Never compile `build_graph()` at module level. Always compile inside `run_pipeline()` where the `AsyncSqliteSaver` checkpointer is available. A graph compiled without a checkpointer silently breaks `interrupt()`.
 
 ---
 

@@ -4,7 +4,9 @@
 
 ---
 
-## Current Status: 🟡 Pre-build — Setup Phase
+## Current Status: 🟡 Plan complete — Ready to implement
+
+Architecture amendments designed and reviewed. Implementation plan at `docs/superpowers/plans/2026-05-16-architecture-amendments.md`.
 
 ---
 
@@ -12,26 +14,29 @@
 
 | Layer | Status | Notes |
 |---|---|---|
-| Repo scaffold | ⬜ Not started | |
-| Obsidian vault schema | ⬜ Not started | |
-| ATS scrapers (Greenhouse) | ⬜ Not started | |
+| Repo scaffold | ✅ Done | uv project, pyproject.toml, directory structure |
+| Obsidian vault schema | ✅ Done | Frontmatter schemas in vault/schemas.py, vault seeded with profile docs |
+| Architecture design | ✅ Done | ARCHITECTURE.md, amendments plan reviewed and approved |
+| RAG layer (Chroma + retriever) | ⬜ Not started | Plan: Task 2-4 |
+| HiTL state store | ⬜ Not started | Plan: Task 5 |
+| ATS scrapers (Greenhouse) | ⬜ Not started | Plan: Phase 1 |
 | ATS scrapers (Lever) | ⬜ Not started | |
 | ATS scrapers (Ashby) | ⬜ Not started | |
 | JobSpy wrapper | ⬜ Not started | |
-| LangGraph pipeline skeleton | ⬜ Not started | |
+| LangGraph pipeline skeleton | ⬜ Not started | graph.py wired, nodes stubbed |
 | extract_node | ⬜ Not started | |
-| score_node | ⬜ Not started | |
+| score_node (with RAG) | ⬜ Not started | Plan: Task 4 |
 | reflection_node | ⬜ Not started | |
-| hitl_node | ⬜ Not started | |
+| hitl_node (with external timeout) | ⬜ Not started | Plan: Task 6 |
 | tailor_node | ⬜ Not started | |
 | vault_write_node | ⬜ Not started | |
-| Langfuse self-hosted setup | ⬜ Not started | |
+| Parallel job processing | ⬜ Not started | Plan: Task 7 |
+| Langfuse self-hosted setup | ⬜ Not started | docker-compose.yml ready |
 | Langfuse pipeline integration | ⬜ Not started | |
 | MCP server | ⬜ Not started | |
 | Eval dataset (30-50 pairs) | ⬜ Not started | |
-| Eval harness runner | ⬜ Not started | |
-| Modal deployment | ⬜ Not started | |
-| Streamlit/dashboard | ⬜ Not started | |
+| Eval harness (score MAE + context recall) | ⬜ Not started | Plan: Task 9 |
+| Modal deployment (daily scan + timeout checker) | ⬜ Not started | |
 
 ---
 
@@ -77,6 +82,6 @@
 ---
 
 ## Milestone Log
-<!-- Agent appends here as milestones are hit -->
 
 - `2026-05-15` — Project initialized, docs written, vault seeded
+- `2026-05-16` — Architecture amendments designed: RAG layer, HiTL external timeout, parallel processing. Plan reviewed, 5 bugs caught and fixed. Ready to implement.
