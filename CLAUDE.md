@@ -8,25 +8,33 @@
 
 Compass is an agentic career coaching system. It finds job postings, scores them against a candidate profile, identifies skill gaps, generates study plans, and produces tailored resume variants. It is NOT an auto-apply bot — it is a research and preparation tool that keeps a human in the loop for every application decision.
 
-The system has two sides:
+The system has three sides:
 1. **The pipeline** (this repo) — Python, LangGraph, Pydantic AI, Langfuse, ChromaDB, ATS scrapers. Does the work.
-2. **The vault** (`~/Documents/compass-vault/`) — Obsidian markdown. Stores everything durably.
+2. **The product vault** (`~/Documents/compass-vault/`) — Obsidian markdown. Schema-enforced. Agent-written.
+3. **The learning vault** (`~/Documents/learning-vault/`) — Free-form personal notes. Read-only to the agent, but the source of evidence for skill grading via `learning-vault://` URIs.
+
+The `compass.vault.learning_bridge` module resolves those URIs; the `compass.analysis.skill_assessor` reads the evidence and regrades skills in compass-vault accordingly. This loop is what makes the system actively reflect the JD-market skill stack.
 
 ## Portfolio Context (read this — it shapes every decision)
 
-This project exists to close specific skill gaps and produce a concrete interview story. The target roles are Applied AI Engineer, Agentic Systems Engineer, and FDE at Sierra AI, Scale AI, and Databricks.
+This project exists to close specific skill gaps and produce a concrete interview story. The target roles are **tier-2 product engineering at agentic startups** (Sierra Agent Engineer, Decagon MTS Agent Engineering, Ramp Agent Developer Platform, Hebbia/Glean Applied AI, Cognition AI Enablement, Maven AGI, Traversal, Cresta-stretch) and **tier-3 big-tech L3/L4 agentic roles** (NVIDIA Agentic AI, Apple Apple Intelligence, Google Cloud GenAI, AWS Bedrock).
 
-**What this project must demonstrate by the time it ships:**
-- LangGraph: stateful graph, conditional edges, `interrupt()` for HiTL, `AsyncSqliteSaver` checkpointing
-- RAG pipeline: Chroma vector store, sentence-transformers embeddings, semantic retrieval, context recall eval
-- Langfuse: self-hosted, full traces, cost per run, LLM-as-judge eval scoring
-- Pydantic AI: structured extraction with typed schemas
-- MCP server: vault + pipeline exposed as tools for Claude Code / Cursor
-- Eval harness: labeled dataset, score MAE, skill extraction recall, context recall
-- Modal: serverless cron for daily scrape + HiTL timeout checker
-- Production patterns: HiTL with externally-enforced timeout, parallel job processing with semaphore
+**FDE-track roles (Anthropic FDE, OpenAI FDE, Salesforce AI FDE) are out of scope** — Akash has insufficient YoE (1.5 vs 3+ required) and will revisit in 12–18 months.
 
-**The interview story:** "I built the system I'm using to run my own job search." The public Langfuse trace URL in the README is the single most concrete portfolio signal. Ship it, keep it running, use it daily.
+**What this project must demonstrate by the time it ships (Phase 2 complete per spec):**
+- **LangGraph**: stateful graph, conditional edges, `interrupt()` for HiTL, `AsyncSqliteSaver` checkpointing (Phase 1.B)
+- **RAG pipeline**: Chroma vector store, sentence-transformers embeddings, semantic retrieval over `_profile/skill-inventory.md` (Phase 1.B — replaces string-injection of MVP)
+- **Langfuse**: self-hosted, full traces, cost per run, LLM-as-judge eval scoring (Phase 0.B + 2.A)
+- **Pydantic AI**: structured extraction with typed schemas (Phase 0.B)
+- **MCP server**: vault + pipeline + assessor + gap aggregator exposed as tools (already implemented)
+- **Eval harness**: 30+ labeled JDs, score MAE, skill extraction recall, regression detection (Phase 2.A)
+- **Modal**: serverless cron for daily scrape + weekly assessor (Phase 1.B)
+- **Skill assessor loop** (unique angle): adversarial-grader Pydantic AI agent that reads evidence URIs from `learning-vault://` and regrades skills — meta-loop that makes Compass a real career coach not a job aggregator (already implemented)
+- **Production patterns**: HiTL with externally-enforced timeout, parallel job processing with semaphore, secrets-in-Modal-Secrets, pre-commit secret scanning
+
+**The interview story:** "I built the system I'm using to run my own job search — and I built an agent inside it that grades my skills against the live job market and tells me what to study next." The public Langfuse trace URL + master-gap-plan screenshot in the README are the headline portfolio signals.
+
+**Authoritative spec:** `docs/superpowers/specs/2026-05-17-compass-mvp-to-portfolio-ship-design.md`. Phase plan, scope, and definition of done live there. This CLAUDE.md is the day-to-day conventions; the spec is the contract.
 
 ---
 
@@ -65,9 +73,15 @@ compass/
 │   ├── evals/                 # Eval harness
 │   │   ├── dataset.py         # Labeled dataset (EvalRecord schema)
 │   │   └── runner.py          # Score MAE + skill recall + context recall
-│   ├── analysis/              # Cross-job intelligence (Phase 3)
-│   │   ├── gap_aggregator.py  # Aggregate missing skills across all scored jobs, ranked by frequency × score
-│   │   └── study_planner.py   # Generate master-gap-plan.md from ranked gap list
+│   ├── analysis/              # Cross-job intelligence
+│   │   ├── gap_aggregator.py  # Aggregate missing skills, ranked by frequency × match_score × tier_weight
+│   │   └── skill_assessor.py  # Regrade skills against evidence URIs using rubric (adversarial grader)
+│   ├── vault/
+│   │   ├── reader.py
+│   │   ├── writer.py
+│   │   ├── schemas.py         # Pydantic frontmatter schemas — extended with SkillAssessment + GapPlanEntry
+│   │   ├── taxonomy.py        # Load + normalize against compass-vault/_meta/skill-taxonomy.md
+│   │   └── learning_bridge.py # Resolve learning-vault:// URIs into evidence artifacts
 │   └── config.py              # All config, loaded from .env
 ├── tests/                     # Pytest tests
 ├── scripts/                   # One-off setup and maintenance scripts
@@ -114,8 +128,9 @@ LANGFUSE_HOST=http://localhost:3000
 LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 
-# Vault
-VAULT_PATH=/Users/akash/Documents/compass-vault
+# Vaults
+VAULT_PATH=/Users/akmini/Documents/compass-vault           # agent-owned product vault
+LEARNING_VAULT_PATH=/Users/akmini/Documents/learning-vault # read-only, source of evidence URIs
 
 # RAG
 CHROMA_PATH=~/.compass/chroma          # Persistent Chroma index for skill notes
@@ -210,12 +225,19 @@ The vault is at `$VAULT_PATH` (from .env). It is a directory of markdown files w
 
 The MCP server in `compass/mcp_server/server.py` exposes the vault and pipeline as tools for Claude Code and Cursor.
 
-Tools to expose:
-- `search_jobs(query: str) -> list[JobNote]` — semantic search over vault job notes
-- `get_skill_gaps(job_id: str) -> list[str]` — compare JD skills to skill-inventory.md
-- `score_jd(jd_text: str) -> JobScore` — score a raw JD against the candidate profile
-- `get_study_plan(skills: list[str]) -> StudyPlan` — generate a learning roadmap
-- `add_application(job_id: str) -> None` — mark a job as applied
+Tools exposed:
+- `score_jd(jd_text)` — score a raw JD against the profile (no vault write)
+- `search_jobs(query, limit)` — substring search over vault job notes
+- `get_skill_gaps(job_id)` — matched + missing skills for a job
+- `get_profile(section)` — read a `_profile/` file (resume, skill-inventory, preferences, etc.)
+- `read_learning_artifact(uri)` — resolve a `learning-vault://` URI
+- `assess_skills(scope=None)` — regrade evidence-backed skills with the adversarial rubric
+- `regenerate_gap_plan()` — recompute master-gap-plan.md
+- `get_master_gap_plan()` — read current top gaps
+- `suggest_evidence(skill, search_terms)` — surface candidate learning-vault files to cite
+- `list_canonical_skills()` — enumerate the taxonomy
+- `tailor_resume(job_id)` — tailoring suggestions for a specific job
+- `add_application(job_id)` — create an applications/ note
 
 Run the MCP server:
 ```bash

@@ -318,6 +318,29 @@ async def weekly_digest():
 
 ---
 
+## Layer 8 — Skill Assessment Loop (NEW)
+
+The piece that makes Compass an actual career coach instead of a job aggregator.
+
+**Components:**
+- `compass/vault/taxonomy.py` — loads `_meta/skill-taxonomy.md` (canonical skills + synonyms + tier demand). Every JD-extracted skill normalizes through this.
+- `compass/vault/learning_bridge.py` — resolves `learning-vault://path/to/file.md#anchor` URIs into evidence artifacts (snippet, kind, last_modified).
+- `compass/analysis/gap_aggregator.py` — combines all scored jobs into a ranked gap list. Formula: `gap_score = Σ (jobs_requiring × match_score × tier_weight)`. Tier weights from `_profile/preferences.md`. Writes `study-plans/master-gap-plan.md`.
+- `compass/analysis/skill_assessor.py` — adversarial-grader Pydantic AI agent. Reads `evidence:` URIs from each `skills/*.md`, applies the rubric in `_meta/skill-taxonomy.md`, regrades `my_level`. Asymmetric promotion (jumping 2+ levels requires HiTL). Respects `grade_override:` for human-locked grades.
+
+**The loop:**
+1. Daily scrape + pipeline writes jobs + updates skill `appears_in_jobs` counts.
+2. `gap_aggregator.regenerate()` writes top-10 gaps to `study-plans/master-gap-plan.md`.
+3. Human reads `master-gap-plan.md`, picks something to learn, writes notes in `learning-vault/`.
+4. Human adds the new learning-vault file path to `evidence:` in the relevant `compass-vault/skills/<Skill>.md`.
+5. Nightly `assess_skills` cron (or manual MCP call) reads the new evidence, regrades, updates `_profile/skill-inventory.md`.
+6. Next pipeline run sees the higher `my_level` → that skill no longer counts toward the gap → study plan reorders.
+
+**Why this matters for the portfolio:**
+"I built an agent that grades my own skills against the live JD market and tells me what to study next" is a meta-loop story that pattern-matches what Sierra/Decagon/Anthropic Applied AI explicitly value. Worth a blog post (flagged in the job-market report as the highest-leverage missing artifact).
+
+---
+
 ## What Compass Is NOT
 
 - **Not an auto-apply bot.** Every application is a conscious human decision. The HiTL interrupt enforces this.

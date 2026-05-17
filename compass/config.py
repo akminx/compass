@@ -11,19 +11,45 @@ load_dotenv()
 # ── LLM ──────────────────────────────────────────────────────────────────────
 OPENROUTER_API_KEY: str = os.environ["OPENROUTER_API_KEY"]
 COMPASS_MODEL: str = os.getenv("COMPASS_MODEL", "anthropic/claude-sonnet-4-6")
+ASSESSOR_MODEL: str = os.getenv("ASSESSOR_MODEL", COMPASS_MODEL)
 
 # ── Langfuse ──────────────────────────────────────────────────────────────────
 LANGFUSE_HOST: str = os.getenv("LANGFUSE_HOST", "http://localhost:3000")
 LANGFUSE_PUBLIC_KEY: str = os.getenv("LANGFUSE_PUBLIC_KEY", "")
 LANGFUSE_SECRET_KEY: str = os.getenv("LANGFUSE_SECRET_KEY", "")
 
-# ── Vault ─────────────────────────────────────────────────────────────────────
-VAULT_PATH: Path = Path(os.environ["VAULT_PATH"])
+# ── Vaults ────────────────────────────────────────────────────────────────────
+VAULT_PATH: Path = Path(os.environ["VAULT_PATH"]).expanduser()
+LEARNING_VAULT_PATH: Path = Path(
+    os.getenv("LEARNING_VAULT_PATH", "~/Documents/learning-vault")
+).expanduser()
+TAXONOMY_PATH: Path = VAULT_PATH / "_meta" / "skill-taxonomy.md"
+SKILL_INVENTORY_PATH: Path = VAULT_PATH / "_profile" / "skill-inventory.md"
+PREFERENCES_PATH: Path = VAULT_PATH / "_profile" / "preferences.md"
+MASTER_GAP_PLAN_PATH: Path = VAULT_PATH / "study-plans" / "master-gap-plan.md"
+AGENT_LOG_PATH: Path = VAULT_PATH / "_meta" / "agent-log.md"
+
+# ── RAG ───────────────────────────────────────────────────────────────────────
+CHROMA_PATH: Path = Path(os.getenv("CHROMA_PATH", "~/.compass/chroma")).expanduser()
+EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+
+# ── HiTL ──────────────────────────────────────────────────────────────────────
+HITL_STATE_DB: Path = Path(os.getenv("HITL_STATE_DB", "~/.compass/hitl.db")).expanduser()
+HITL_TIMEOUT_HOURS: int = int(os.getenv("HITL_TIMEOUT_HOURS", "4"))
 
 # ── Pipeline ──────────────────────────────────────────────────────────────────
 MAX_JOBS_PER_RUN: int = int(os.getenv("MAX_JOBS_PER_RUN", "50"))
 SCORE_THRESHOLD: float = float(os.getenv("SCORE_THRESHOLD", "3.5"))
-HITL_TIMEOUT_HOURS: int = int(os.getenv("HITL_TIMEOUT_HOURS", "4"))
+MAX_CONCURRENT_JOBS: int = int(os.getenv("MAX_CONCURRENT_JOBS", "5"))
+
+# ── Tier weights (gap_aggregator) — overrides from preferences.md at runtime ─
+DEFAULT_TIER_WEIGHTS: dict[str, float] = {
+    "apply-now": 1.0,
+    "6-month": 0.7,
+    "stretch": 0.3,
+    "skip": 0.0,
+    "unknown": 0.5,
+}
 
 # ── ATS targets ───────────────────────────────────────────────────────────────
 GREENHOUSE_BOARDS: list[str] = [
