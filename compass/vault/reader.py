@@ -1,33 +1,48 @@
 """
 Vault reader — reads structured notes from the Obsidian vault.
-
-Used by pipeline nodes to load the candidate profile, skill inventory,
-and check for existing job notes (deduplication).
 """
+from __future__ import annotations
+
 from pathlib import Path
+
+import frontmatter
+
 from compass.config import VAULT_PATH
 
 
 def read_profile_section(section: str) -> str:
-    """Read a section from _profile/. section = filename without .md"""
-    raise NotImplementedError("read_profile_section not yet implemented")
+    """Read a file from _profile/. Returns empty string if missing."""
+    path = VAULT_PATH / "_profile" / f"{section}.md"
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8")
 
 
 def read_skill_inventory() -> str:
-    """Read the full skill-inventory.md as a string for LLM context."""
-    raise NotImplementedError("read_skill_inventory not yet implemented")
+    return read_profile_section("skill-inventory")
 
 
 def read_resume() -> str:
-    """Read resume.md as a string."""
-    raise NotImplementedError("read_resume not yet implemented")
+    return read_profile_section("resume")
 
 
 def job_url_exists(url: str) -> bool:
-    """Check if a job with this URL already exists in the vault (for deduplication)."""
-    raise NotImplementedError("job_url_exists not yet implemented")
+    """Check whether any job note in the vault has the given URL in its frontmatter."""
+    jobs_dir = VAULT_PATH / "jobs"
+    if not jobs_dir.exists():
+        return False
+    for path in jobs_dir.glob("*.md"):
+        try:
+            post = frontmatter.load(path)
+        except Exception:
+            continue
+        if post.metadata.get("url") == url:
+            return True
+    return False
 
 
 def list_job_notes() -> list[Path]:
-    """Return all job note paths in vault/jobs/."""
-    raise NotImplementedError("list_job_notes not yet implemented")
+    jobs_dir = VAULT_PATH / "jobs"
+    if not jobs_dir.exists():
+        return []
+    return sorted(jobs_dir.glob("*.md"))
