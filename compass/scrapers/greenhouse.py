@@ -16,6 +16,7 @@ from datetime import date, datetime
 import httpx
 
 from compass.pipeline.state import RawJob
+from compass.scrapers._remote_parser import infer_remote_policy
 
 logger = logging.getLogger(__name__)
 
@@ -60,13 +61,14 @@ def _to_rawjob(board_token: str, raw: dict) -> RawJob | None:
                 raw.get("title", "?"),
             )
             return None
+        location_str = (raw.get("location") or {}).get("name") if raw.get("location") else None
         return RawJob(
             company=board_token,
             title=raw["title"],
             url=raw["absolute_url"],
             source="greenhouse",
-            location=(raw.get("location") or {}).get("name") if raw.get("location") else None,
-            remote=None,
+            location=location_str,
+            remote=infer_remote_policy(location_str),
             salary_min=None,
             salary_max=None,
             description=description,
