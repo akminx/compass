@@ -165,3 +165,36 @@ class TestUpgradeFamily:
 
         assert upgrade_family("swe-backend", "") == "swe-backend"
         assert upgrade_family("swe-backend", None) == "swe-backend"
+
+    def test_single_agentic_ai_mention_does_not_promote(self):
+        """Regression for substring-overlap bug: 'agentic AI' is ONE phrase, not
+        three separate hits via 'agent' ⊂ 'agentic' ⊂ 'agentic ai'."""
+        from compass.pipeline.role_family import upgrade_family
+
+        body = "Build backend infra in Go. We use agentic AI internally."
+        assert upgrade_family("swe-backend", body) == "swe-backend"
+
+    def test_two_distinct_agent_concepts_promotes(self):
+        """Two DIFFERENT agent concepts (e.g. 'agentic ai' + 'mcp') still promote."""
+        from compass.pipeline.role_family import upgrade_family
+
+        body = "Build MCP-based servers. Strong agentic AI background required."
+        assert upgrade_family("swe-backend", body) == "agent-engineer"
+
+    def test_mcp_matches_without_trailing_space(self):
+        """Regression for old keyword 'mcp ' (trailing space). With \\b boundaries,
+        'MCP-based' and 'MCP.' now match where the literal-space version missed."""
+        from compass.pipeline.role_family import upgrade_family
+
+        # Two distinct AGENT phrases required. Use 'mcp' + 'langgraph' so we
+        # isolate the MCP-matching behavior from the agentic-ai phrase.
+        body = "Build MCP-based servers using LangGraph for orchestration."
+        assert upgrade_family("swe-backend", body) == "agent-engineer"
+
+    def test_agentic_ai_mentioned_twice_still_one_distinct_hit(self):
+        """Duplicate mentions of the same phrase count as 1 distinct hit, not 2."""
+        from compass.pipeline.role_family import upgrade_family
+
+        body = "agentic AI here. agentic AI there. agentic AI everywhere."
+        # Only one distinct AGENT phrase ("agentic ai") — below threshold of 2.
+        assert upgrade_family("swe-backend", body) == "swe-backend"

@@ -131,27 +131,33 @@ _OUT_WORD_RE = re.compile(
 
 AGENT_SIGNAL = [
     "agent",
+    "agents",
     "agentic",
+    "agentic ai",
     "tool use",
     "tool-use",
+    "tool calling",
+    "function calling",
     "langgraph",
     "autogen",
-    "mcp ",
+    "mcp",
     "model context protocol",
     "react pattern",
-    "agentic ai",
-    "function calling",
-    "tool calling",
 ]
 LLM_SIGNAL = [
     "llm",
+    "llms",
     "large language model",
-    "gpt-",
+    "large language models",
+    "gpt-3",
+    "gpt-4",
+    "gpt-5",
     "claude",
     "gemini",
-    "rag ",
+    "rag",
     "retrieval-augmented",
     "embedding",
+    "embeddings",
     "vector database",
     "fine-tuning",
     "prompt engineering",
@@ -163,6 +169,7 @@ ML_SIGNAL = [
     "machine learning",
     "deep learning",
     "neural network",
+    "neural networks",
     "pytorch",
     "tensorflow",
     "sklearn",
@@ -180,23 +187,57 @@ GENERIC_FAMILIES = {
 }
 
 
+def _build_signal_pattern(keywords: list[str]) -> re.Pattern[str]:
+    """Compile one regex matching any keyword, with longest-first preference.
+
+    Python's regex alternation is left-priority. Sorting keywords by length DESC
+    ensures `"agentic ai"` wins over `"agentic"` wins over `"agent"` on the SAME
+    span — preventing the substring-overlap triple-count that promoted plain
+    backend roles whenever they mentioned the phrase "agentic AI" once.
+
+    Word boundaries (`\\b`) also auto-fix the old keyword artifacts like
+    `"mcp "` (trailing space required) — `\\bmcp\\b` now matches `MCP-based`
+    and `MCP.` cleanly.
+    """
+    sorted_kws = sorted(set(keywords), key=len, reverse=True)
+    parts = [re.escape(k) for k in sorted_kws]
+    return re.compile(r"\b(?:" + "|".join(parts) + r")\b", re.IGNORECASE)
+
+
+_AGENT_RE = _build_signal_pattern(AGENT_SIGNAL)
+_LLM_RE = _build_signal_pattern(LLM_SIGNAL)
+_ML_RE = _build_signal_pattern(ML_SIGNAL)
+
+
+def _count_distinct_phrases(body: str, pattern: re.Pattern[str]) -> int:
+    """Return the number of DISTINCT lowercased phrases the pattern matches.
+
+    `re.findall` walks left-to-right and never re-matches a consumed span, so
+    "agentic AI agentic AI" returns `["agentic AI", "agentic AI"]` → 1 distinct.
+    Combined with the longest-first pattern build, "agentic AI" never double-
+    counts via overlapping shorter substrings ("agent", "agentic").
+    """
+    if not body:
+        return 0
+    return len({m.lower() for m in pattern.findall(body)})
+
+
 def upgrade_family(family: str, body: str) -> str:
     """Promote generic engineering families to agentic specializations when the
     JD body shows enough AI/agent keyword density. Promote-only.
 
-    Threshold of >=2 distinct keywords prevents single-mention false positives.
+    Threshold of 2 distinct AGENT phrases (or 3 LLM / 2 ML) ensures multiple
+    independent signals are required — a JD with a single passing mention of
+    "agentic AI" no longer over-promotes.
     """
     if family not in GENERIC_FAMILIES:
         return family
-    b = (body or "").lower()
-    agent_hits = sum(1 for k in AGENT_SIGNAL if k in b)
-    if agent_hits >= 2:
+    body = body or ""
+    if _count_distinct_phrases(body, _AGENT_RE) >= 2:
         return "agent-engineer"
-    llm_hits = sum(1 for k in LLM_SIGNAL if k in b)
-    if llm_hits >= 3:
+    if _count_distinct_phrases(body, _LLM_RE) >= 3:
         return "applied-ai"
-    ml_hits = sum(1 for k in ML_SIGNAL if k in b)
-    if ml_hits >= 2:
+    if _count_distinct_phrases(body, _ML_RE) >= 2:
         return "applied-ai"
     return family
 
