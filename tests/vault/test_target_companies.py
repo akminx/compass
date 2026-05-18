@@ -149,6 +149,71 @@ def test_punctuation_stripped(tiered_vault):
     assert tc.get_tier("hebbia glean") == "apply-now"
 
 
+def test_bidirectional_substring_match(tiered_vault):
+    """Scraper board_tokens (single words) must match longer descriptive names
+    listed in target-companies.md, and vice versa. Bug A regression."""
+    import compass.vault.target_companies as tc
+
+    tc.refresh()
+    # query ⊂ key — board_token "nvidia" matches cell "NVIDIA Agentic AI"
+    assert tc.get_tier("nvidia") == "apply-now"
+    # query ⊂ key — board_token "apple" matches cell "Apple Apple Intelligence"
+    assert tc.get_tier("apple") == "apply-now"
+    # key ⊂ query — listed "Cursor" matches scraper token "cursoranysphere"
+    # (no such entry in fixture; instead exercise key⊂query with hebbia/HebbiaLabs)
+    md = (tiered_vault / "_profile" / "target-companies.md").read_text()
+    md += "\n## Tier `apply-now`\n\n| Company | Notes |\n|---|---|\n| Hebbia | combo |\n"
+    (tiered_vault / "_profile" / "target-companies.md").write_text(md)
+    tc.refresh()
+    assert tc.get_tier("hebbialabs") == "apply-now"  # key 'hebbia' ⊂ query 'hebbialabs'
+
+
+def test_bidirectional_match_respects_min_length(tiered_vault):
+    """'ai' / 'ml' should NOT match every long key via the fuzzy fallback."""
+    import compass.vault.target_companies as tc
+
+    tc.refresh()
+    # 'ai' is only 2 chars — below _MIN_FUZZY_LEN, so the fallback is skipped
+    assert tc.get_tier("ai") == "unknown"
+    # 'ml' likewise
+    assert tc.get_tier("ml") == "unknown"
+
+
+def test_bidirectional_match_higher_tier_wins(tmp_path, monkeypatch):
+    """When a query matches keys in multiple tiers, the highest tier (apply-now) wins."""
+    md = """## Tier `apply-now`
+
+| Company | Notes |
+|---|---|
+| GoogleCloudGenAI | apply-now match |
+
+## Tier `6-month`
+
+| Company | Notes |
+|---|---|
+| Google Vertex | weaker match |
+"""
+    vault = tmp_path / "v"
+    (vault / "_profile").mkdir(parents=True)
+    (vault / "_profile" / "target-companies.md").write_text(md)
+    import compass.config as cfg
+    import compass.vault.target_companies as tc
+
+    monkeypatch.setattr(cfg, "VAULT_PATH", vault)
+    tc.refresh()
+    # 'google' is contained by both keys — pick the higher tier
+    assert tc.get_tier("google") == "apply-now"
+
+
+def test_unrelated_query_still_unknown(tiered_vault):
+    """Bidirectional match must not over-match unrelated long queries."""
+    import compass.vault.target_companies as tc
+
+    tc.refresh()
+    # No key contains 'salesforce' nor vice versa → unknown
+    assert tc.get_tier("salesforce") == "unknown"
+
+
 def test_company_header_row_skipped(tmp_path, monkeypatch):
     """Defensive: a literal '| Company |' header must NOT be parsed as a company."""
     md = """## Tier `apply-now`

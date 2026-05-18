@@ -99,11 +99,50 @@ def refresh() -> None:
     logger.info("target_companies: parsed %d entries", len(_company_to_tier))
 
 
+# Minimum length for the bidirectional substring fallback. Prevents tiny tokens
+# like "ai" / "ml" from matching every long key by accident.
+_MIN_FUZZY_LEN = 4
+
+
 def get_tier(company: str) -> Tier:
+    """Resolve a tier for a company name.
+
+    Lookup strategy:
+      1. Exact normalized match.
+      2. Bidirectional substring fallback — handles the common case where a
+         scraper board_token is a single word (e.g. "gleanwork", "nvidia") but
+         target-companies.md uses a longer descriptive name in one cell
+         (e.g. "Glean", "NVIDIA Agentic AI", "Vapi, Retell, Wispr Flow").
+         Either direction (query ⊂ key OR key ⊂ query) counts as a match.
+      3. If multiple bidirectional matches with different tiers, the highest
+         tier (apply-now > 6-month > stretch > skip) wins.
+    """
     if _company_to_tier is None:
         refresh()
     assert _company_to_tier is not None  # mypy: refresh sets it
-    return _company_to_tier.get(_normalize(company), "unknown")
+
+    query = _normalize(company)
+    if not query:
+        return "unknown"
+
+    # Exact match
+    direct = _company_to_tier.get(query)
+    if direct is not None:
+        return direct
+
+    # Bidirectional substring fallback (guarded by min-length to avoid noise)
+    if len(query) < _MIN_FUZZY_LEN:
+        return "unknown"
+
+    best_tier: Tier | None = None
+    for key, tier in _company_to_tier.items():
+        if len(key) < _MIN_FUZZY_LEN:
+            continue
+        if (query in key or key in query) and (
+            best_tier is None or TIER_ORDER.index(tier) < TIER_ORDER.index(best_tier)
+        ):
+            best_tier = tier
+    return best_tier or "unknown"
 
 
 # Parse at import for callers that don't trigger refresh().
