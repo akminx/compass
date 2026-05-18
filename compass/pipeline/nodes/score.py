@@ -1,17 +1,86 @@
 """
-score_node — scores a job against the candidate profile.
+score_node — score a job against the candidate profile.
 
-Reads skill-inventory.md and resume.md from the vault.
-LLM scores match 0.0–5.0 with explicit reasoning and per-skill breakdown.
-Jobs below SCORE_THRESHOLD are logged and dropped.
-Langfuse traces this call.
+Reads resume.md + skill-inventory.md from the vault and passes them as context
+to the LLM. Returns a JobScore (0.0–5.0) with matched/missing/tailoring breakdown.
 
-TODO: implement
+Model: SCORE_MODEL (default google/gemini-2.5-flash).
 """
 
-from compass.pipeline.state import CompassState
+from __future__ import annotations
+
+import logging
+
+from compass.llm import make_agent
+from compass.pipeline.state import CompassState, JobRequirements, JobScore
+from compass.vault.reader import read_resume, read_skill_inventory
+
+logger = logging.getLogger(__name__)
+
+_SYSTEM_PROMPT = """You score a job description against a candidate's profile.
+
+Score 0.0–5.0:
+- 5.0 = perfect match, candidate has every required skill at production level
+- 4.0 = strong match, candidate has ~80% of required skills with real evidence
+- 3.0 = decent match, candidate has core skills but missing some required ones
+- 2.0 = stretch, candidate has adjacent skills but lacks several required ones
+- 1.0 = poor match, fundamental skill gaps
+- 0.0 = wrong field entirely
+
+Be honest. Score conservatively when evidence is conceptual rather than shipped.
+
+Return a JobScore with:
+- score: float 0.0–5.0
+- reasoning: 2–3 sentences justifying the score
+- matched_skills: canonical skills the candidate has (level >= 2)
+- missing_skills: canonical skills the JD requires but the candidate lacks (level < 2)
+- tailoring_notes: ONE sentence suggesting how to frame the application (skip if score < 3.0)
+"""
+
+
+def _build_agent():
+    return make_agent("score", output_type=JobScore, system_prompt=_SYSTEM_PROMPT)
+
+
+def _format_prompt(req: JobRequirements, profile_text: str) -> str:
+    return (
+        f"# CANDIDATE PROFILE\n{profile_text}\n\n"
+        f"# JOB REQUIREMENTS\n"
+        f"required: {', '.join(req.required_skills) or '(none)'}\n"
+        f"nice-to-have: {', '.join(req.nice_to_have_skills) or '(none)'}\n"
+        f"years_experience: {req.years_experience}\n"
+        f"seniority: {req.seniority}\n"
+        f"remote_policy: {req.remote_policy}\n"
+        f"summary: {req.summary}\n"
+    )
+
+
+async def _score(req: JobRequirements, profile_text: str) -> JobScore:
+    """The LLM call. Tests monkeypatch this wrapper rather than the underlying Agent."""
+    agent = _build_agent()
+    result = await agent.run(_format_prompt(req, profile_text))
+    return result.output
+
+
+def _profile_text() -> str:
+    return f"## RESUME\n{read_resume()}\n\n## SKILL INVENTORY\n{read_skill_inventory()}"
 
 
 async def score_node(state: CompassState) -> dict:
-    """Score the current job against the candidate profile in the vault."""
-    raise NotImplementedError("score_node not yet implemented")
+    req = state.get("extracted_requirements")
+    if req is None:
+        return {
+            "score_result": None,
+            "errors": [*state.get("errors", []), "score_node: extracted_requirements is None"],
+        }
+
+    try:
+        result = await _score(req, _profile_text())
+    except Exception as e:
+        logger.warning("score_node: LLM call failed — %s", e)
+        return {
+            "score_result": None,
+            "errors": [*state.get("errors", []), f"score_node: {e}"],
+        }
+
+    return {"score_result": result}
