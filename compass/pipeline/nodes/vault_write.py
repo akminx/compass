@@ -1,12 +1,83 @@
 """
-vault_write_node — TODO: implement
+vault_write_node — persist a scored job to the compass vault.
 
-See docs/ARCHITECTURE.md for this node's responsibilities.
+Writes three things:
+1. JobNote -> jobs/YYYY-MM-DD-Company-Title.md (idempotent on URL via write_job_note)
+2. Increments appears_in_jobs on each skill the JD requires (via update_skill_note)
+3. Upserts companies/Company.md (via write_company_note)
+
+All skills passed downstream are already canonical (extract_node normalized them).
+This node never normalizes — if a non-canonical skill appears here, that's an
+upstream bug.
 """
 
-from compass.pipeline.state import CompassState
+from __future__ import annotations
+
+import logging
+from datetime import date
+from typing import TYPE_CHECKING
+
+from compass.vault.schemas import CompanyNote, JobNote
+from compass.vault.writer import update_skill_note, write_company_note, write_job_note
+
+if TYPE_CHECKING:
+    from compass.pipeline.state import CompassState
+
+logger = logging.getLogger(__name__)
 
 
 async def vault_write_node(state: CompassState) -> dict:
-    """TODO: implement vault_write_node"""
-    raise NotImplementedError("vault_write_node not yet implemented")
+    job = state.get("current_job")
+    score = state.get("score_result")
+    req = state.get("extracted_requirements")
+
+    if job is None or score is None or req is None:
+        missing = [
+            n
+            for n, v in [
+                ("current_job", job),
+                ("score_result", score),
+                ("extracted_requirements", req),
+            ]
+            if v is None
+        ]
+        return {
+            "vault_written": False,
+            "errors": [*state.get("errors", []), f"vault_write_node: missing {missing}"],
+        }
+
+    note = JobNote(
+        company=job.company,
+        title=job.title,
+        url=job.url,
+        source=job.source,
+        date_found=job.date_posted or date.today(),
+        match_score=score.score,
+        score_reasoning=score.reasoning,
+        salary_min=job.salary_min,
+        salary_max=job.salary_max,
+        location=job.location,
+        remote=None,
+        seniority=req.seniority,
+        years_required=req.years_experience,
+        skills_required=req.required_skills,
+        skills_nice_to_have=req.nice_to_have_skills,
+        skills_matched=score.matched_skills,
+        skills_missing=score.missing_skills,
+        jd_summary=req.summary,
+        tailored_paragraph=state.get("tailored_paragraph"),
+    )
+    write_job_note(note)
+
+    for canonical in req.required_skills:
+        update_skill_note(canonical, job.url)
+
+    # TODO(Phase 1.A): read company tier from target-companies.md instead of "unknown".
+    # `write_company_note` is idempotent, so roles_seen=1 currently never increments;
+    # Phase 1.A application-tracking will rewire this to read-merge-write properly.
+    write_company_note(CompanyNote(company=job.company, tier="unknown", roles_seen=1))
+
+    return {
+        "vault_written": True,
+        "jobs_written": state.get("jobs_written", 0) + 1,
+    }
