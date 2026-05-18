@@ -13,6 +13,18 @@ os.environ.setdefault("OPENROUTER_API_KEY", "test-stub")
 os.environ.setdefault("VAULT_PATH", "/tmp/compass-vault-pytest-placeholder")
 os.environ.setdefault("LEARNING_VAULT_PATH", "/tmp/learning-vault-pytest-placeholder")
 
+# Seed the placeholder vault with the canonical skill-taxonomy.md from the user's
+# real vault if it exists — taxonomy.normalize() is needed by extract_node tests
+# and reads from VAULT_PATH/_meta/skill-taxonomy.md (cached). This is read-only.
+_real_taxonomy = os.path.expanduser("~/Documents/compass-vault/_meta/skill-taxonomy.md")
+_placeholder_meta = os.path.join(os.environ["VAULT_PATH"], "_meta")
+_placeholder_taxonomy = os.path.join(_placeholder_meta, "skill-taxonomy.md")
+if os.path.exists(_real_taxonomy) and not os.path.exists(_placeholder_taxonomy):
+    os.makedirs(_placeholder_meta, exist_ok=True)
+    import shutil as _shutil
+
+    _shutil.copyfile(_real_taxonomy, _placeholder_taxonomy)
+
 from pathlib import Path
 
 import pytest
@@ -59,5 +71,13 @@ def temp_vault(tmp_path: Path, monkeypatch):
         monkeypatch.setattr(writer_mod, "VAULT_PATH", vault)
     if hasattr(writer_mod, "AGENT_LOG_PATH"):
         monkeypatch.setattr(writer_mod, "AGENT_LOG_PATH", vault / "_meta" / "agent-log.md")
+
+    try:
+        import compass.pipeline.nodes.extract as extract_mod
+
+        if hasattr(extract_mod, "VAULT_PATH"):
+            monkeypatch.setattr(extract_mod, "VAULT_PATH", vault)
+    except ImportError:
+        pass
 
     return vault
