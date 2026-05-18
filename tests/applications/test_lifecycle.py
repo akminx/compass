@@ -56,6 +56,40 @@ class TestAddApplication:
             add_application(job_id="Sierra-Agent")
 
 
+class TestFindJobnoteCaseInsensitive:
+    """Regression: scraper board_tokens are usually lowercase ("sierra"), but
+    humans naturally type capitalized company names ("Sierra"). The filename
+    substring match must be case-insensitive so MCP lookups don't fail on
+    capitalization mismatches."""
+
+    def test_capitalized_query_matches_lowercase_filename(self, temp_vault):
+        # ATS scrapers pass lowercase board_tokens — simulate that.
+        _seed_jobnote(temp_vault, company="sierra", title="Agent Engineer", url="https://x/s")
+        from compass.applications.lifecycle import find_jobnote
+
+        # Human types capital S as they see it in target-companies.md
+        p = find_jobnote("Sierra-Agent_Engineer")
+        assert "sierra-Agent_Engineer" in p.name
+
+    def test_lowercase_query_still_works(self, temp_vault):
+        _seed_jobnote(temp_vault, company="sierra", title="Agent Engineer", url="https://x/s")
+        from compass.applications.lifecycle import find_jobnote
+
+        p = find_jobnote("sierra-agent_engineer")
+        assert p.exists()
+
+    def test_url_match_is_case_sensitive(self, temp_vault):
+        """URLs are spec-case-sensitive; don't fuzz them."""
+        _seed_jobnote(temp_vault, company="sierra", title="X", url="https://x/CaseSensitive")
+        from compass.applications.lifecycle import find_jobnote
+
+        # Lookup by exact URL works
+        assert find_jobnote("https://x/CaseSensitive").exists()
+        # Different-case URL fails (no filename or URL match)
+        with pytest.raises(LookupError):
+            find_jobnote("https://x/casesensitive")
+
+
 class TestUpdateStatus:
     def test_valid_transition(self, temp_vault):
         _seed_jobnote(temp_vault)

@@ -41,13 +41,21 @@ VALID_TRANSITIONS: dict[str, set[str]] = {
 
 def find_jobnote(job_id: str) -> Path:
     """Public: resolve a job_id (filename substring or url) to a JobNote path.
-    Used by add_application AND by the MCP tailor_resume tool."""
+
+    Used by add_application AND by the MCP tailor_resume tool. The filename
+    substring match is CASE-INSENSITIVE because Obsidian renders frontmatter
+    `company` fields as written (often lowercase from ATS board_tokens), but
+    humans naturally type capitalized names — so `"Sierra-Agent_Engineer"`
+    must find a file named `2025-02-13-sierra-Agent_Engineer-<hash>.md`. The
+    URL field comparison stays exact (URLs are case-sensitive by spec).
+    """
     jobs_dir = cfg.VAULT_PATH / "jobs"
     if not jobs_dir.exists():
         raise LookupError(f"no jobs/ directory in vault at {cfg.VAULT_PATH}")
+    job_id_lower = job_id.lower()
     matches: list[Path] = []
     for p in jobs_dir.glob("*.md"):
-        if job_id in p.name:
+        if job_id_lower in p.name.lower():
             matches.append(p)
             continue
         try:
