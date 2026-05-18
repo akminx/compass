@@ -18,34 +18,51 @@ from datetime import datetime
 from compass.config import VAULT_PATH
 from compass.llm import make_agent
 from compass.pipeline.state import CompassState, JobRequirements
-from compass.vault.taxonomy import normalize
+from compass.vault.taxonomy import all_canonicals, normalize
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = """You extract structured requirements from a job description.
+
+def _build_system_prompt() -> str:
+    """Inject the canonical taxonomy into the prompt at call time.
+
+    The LLM must pick from this exact list — that closes the "agent frameworks"
+    → dropped-as-unknown failure mode where JDs use generic phrasing that
+    doesn't match canonical names character-for-character.
+    """
+    canonicals = ", ".join(all_canonicals())
+    return f"""You extract structured requirements from a job description.
 
 Return a JobRequirements with these fields (no extras, no comments):
-- required_skills: list of technical skills the JD explicitly requires (frameworks, languages, tools, platforms). Use the EXACT name as written in the JD.
-- nice_to_have_skills: list of technical skills the JD lists as preferred / nice-to-have / bonus / "you might have".
+- required_skills: list of technical skills the JD explicitly requires.
+- nice_to_have_skills: list of technical skills the JD lists as preferred / bonus.
 - years_experience: integer minimum years stated (e.g. "3+ years" → 3), or null if not stated.
 - seniority: exactly one of: junior | mid | senior | staff | unknown.
 - remote_policy: exactly one of: remote | hybrid | onsite | unknown.
-- summary: ONE short paragraph (1-2 sentences max) describing what the role does day-to-day.
+- summary: ONE short paragraph (1-2 sentences max) describing the role.
+
+CRITICAL — skill names:
+You MUST output every skill using the EXACT canonical name from this list (case-sensitive):
+
+{canonicals}
+
+Map JD phrasing to the closest canonical. Examples:
+- "agent frameworks" or "agent orchestration" → LangChain, LangGraph (whichever is mentioned, or both if generic)
+- "Python 3.x" or "py" → Python
+- "TypeScript / Node.js" → TypeScript
+- "vector database" without specifying which → Chroma (or pgvector if SQL-adjacent)
+- "tool calling" or "function calling" → Function calling
+- "structured outputs" or "JSON mode" → Structured outputs
+- "human in the loop" → HiTL
+- "observability" without specifying → Langfuse
+- "evals" or "evaluation" → Eval harness
+
+If a JD-mentioned skill has NO good canonical match (e.g. Salesforce, Figma, motion graphics), OMIT it entirely from required_skills and nice_to_have_skills. Do not invent canonical names not in the list above.
 
 RULES:
-- Skills must be GENUINELY TECHNICAL (frameworks, languages, tools). Do NOT include: soft skills, credentials, degrees, industries, methodologies that aren't tools.
-- Return empty list [] when a section has no entries. Do not omit fields.
+- Skills must be GENUINELY TECHNICAL. Do NOT include soft skills, credentials, degrees, industries.
+- Return [] when a section has no canonical matches. Do not omit fields.
 - For "5+ years" → years_experience=5. For "Bachelor's required" → years_experience=null.
-
-EXAMPLE (illustrative — do not echo this):
-Input JD: "We're hiring a Senior Python engineer. 5+ years required. Must know FastAPI, PostgreSQL, AWS. Nice to have: Kubernetes, GraphQL. Remote-friendly."
-Output:
-  required_skills: ["Python", "FastAPI", "PostgreSQL", "AWS"]
-  nice_to_have_skills: ["Kubernetes", "GraphQL"]
-  years_experience: 5
-  seniority: "senior"
-  remote_policy: "remote"
-  summary: "Backend engineering role building APIs and managing AWS infrastructure."
 """
 
 # Gemini 2.5 Flash structured-output reliability degrades beyond ~10k input chars.
@@ -63,7 +80,7 @@ def _build_agent():
     return make_agent(
         "extract",
         output_type=JobRequirements,
-        system_prompt=_SYSTEM_PROMPT,
+        system_prompt=_build_system_prompt(),
         output_retries=_EXTRACT_RETRIES,
     )
 

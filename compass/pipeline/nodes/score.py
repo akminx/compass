@@ -32,9 +32,17 @@ Be honest. Score conservatively when evidence is conceptual rather than shipped.
 Return a JobScore with:
 - score: float 0.0–5.0
 - reasoning: 2–3 sentences justifying the score
-- matched_skills: canonical skills the candidate has (level >= 2)
-- missing_skills: canonical skills the JD requires but the candidate lacks (level < 2)
+- matched_skills: skills from the JD's required+nice-to-have list that the candidate has (level >= 2)
+- missing_skills: skills from the JD's required+nice-to-have list that the candidate lacks (level < 2)
 - tailoring_notes: ONE sentence suggesting how to frame the application (skip if score < 3.0)
+
+HARD CONSTRAINTS on matched_skills and missing_skills:
+1. Every skill in matched_skills MUST appear in the JD's required or nice_to_have list. Do NOT list skills from the candidate's profile that the JD did not ask for.
+2. Every skill in missing_skills MUST appear in the JD's required or nice_to_have list. Do NOT list every skill in the canonical taxonomy that the candidate lacks.
+3. The union (matched_skills ∪ missing_skills) MUST be a subset of the JD's required ∪ nice_to_have lists.
+4. If the JD has no required or nice_to_have skills, matched_skills and missing_skills MUST both be empty lists.
+
+Use the EXACT skill names from the JD's required/nice_to_have lists (don't paraphrase).
 """
 
 
@@ -83,4 +91,27 @@ async def score_node(state: CompassState) -> dict:
             "errors": [*state.get("errors", []), f"score_node: {e}"],
         }
 
-    return {"score_result": result}
+    return {"score_result": _constrain_to_jd_skills(result, req)}
+
+
+def _constrain_to_jd_skills(score: JobScore, req: JobRequirements) -> JobScore:
+    """Defense in depth: drop matched/missing skills the JD didn't actually ask for.
+
+    The score prompt forbids the LLM from inventing matched/missing skills
+    outside the JD's required+nice_to_have lists. This is the post-hoc filter
+    that enforces the same constraint at code-level — so a prompt-following
+    failure can't pollute the gap_aggregator with skills the JD never required.
+    """
+    jd_universe = set(req.required_skills) | set(req.nice_to_have_skills)
+    filtered_matched = [s for s in score.matched_skills if s in jd_universe]
+    filtered_missing = [s for s in score.missing_skills if s in jd_universe]
+    dropped = (set(score.matched_skills) | set(score.missing_skills)) - jd_universe
+    if dropped:
+        logger.info(
+            "score_node: dropped %d skills not in JD universe (LLM ignored prompt constraint): %s",
+            len(dropped),
+            sorted(dropped),
+        )
+    return score.model_copy(
+        update={"matched_skills": filtered_matched, "missing_skills": filtered_missing}
+    )
