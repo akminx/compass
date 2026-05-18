@@ -54,10 +54,21 @@ def make_agent(
     *,
     output_type: type[BaseModel],
     system_prompt: str,
+    output_retries: int = 1,
 ) -> Agent:
     """Construct a pydantic-ai Agent for a node with the routed model + provider.
 
     Explicit keyword-only args (no **kwargs) so call sites are self-documenting
     and typos surface at type-check time, not at runtime.
+
+    `output_retries` controls how many additional attempts pydantic-ai makes when
+    the LLM returns schema-invalid output. Default 1 matches pydantic-ai's
+    default; nodes facing flaky structured-output models (e.g. extract on
+    Gemini Flash) can bump this higher.
     """
-    return Agent(_get_model(node), output_type=output_type, system_prompt=system_prompt)
+    return Agent(
+        _get_model(node),
+        output_type=output_type,
+        system_prompt=system_prompt,
+        output_retries=output_retries,
+    )

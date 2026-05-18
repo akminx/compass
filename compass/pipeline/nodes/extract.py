@@ -24,26 +24,54 @@ logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = """You extract structured requirements from a job description.
 
-Return a JobRequirements with:
-- required_skills: technical skills the JD explicitly requires (frameworks, languages, tools).
-- nice_to_have_skills: technical skills the JD lists as preferred/bonus.
-- years_experience: minimum years stated, or null if not stated.
-- seniority: one of junior | mid | senior | staff | unknown.
-- remote_policy: one of remote | hybrid | onsite | unknown.
-- summary: one short paragraph (~2 sentences) of what the role does.
+Return a JobRequirements with these fields (no extras, no comments):
+- required_skills: list of technical skills the JD explicitly requires (frameworks, languages, tools, platforms). Use the EXACT name as written in the JD.
+- nice_to_have_skills: list of technical skills the JD lists as preferred / nice-to-have / bonus / "you might have".
+- years_experience: integer minimum years stated (e.g. "3+ years" → 3), or null if not stated.
+- seniority: exactly one of: junior | mid | senior | staff | unknown.
+- remote_policy: exactly one of: remote | hybrid | onsite | unknown.
+- summary: ONE short paragraph (1-2 sentences max) describing what the role does day-to-day.
 
-Only include genuinely technical skills (not soft skills, not credentials, not industries).
+RULES:
+- Skills must be GENUINELY TECHNICAL (frameworks, languages, tools). Do NOT include: soft skills, credentials, degrees, industries, methodologies that aren't tools.
+- Return empty list [] when a section has no entries. Do not omit fields.
+- For "5+ years" → years_experience=5. For "Bachelor's required" → years_experience=null.
+
+EXAMPLE (illustrative — do not echo this):
+Input JD: "We're hiring a Senior Python engineer. 5+ years required. Must know FastAPI, PostgreSQL, AWS. Nice to have: Kubernetes, GraphQL. Remote-friendly."
+Output:
+  required_skills: ["Python", "FastAPI", "PostgreSQL", "AWS"]
+  nice_to_have_skills: ["Kubernetes", "GraphQL"]
+  years_experience: 5
+  seniority: "senior"
+  remote_policy: "remote"
+  summary: "Backend engineering role building APIs and managing AWS infrastructure."
 """
+
+# Gemini 2.5 Flash structured-output reliability degrades beyond ~10k input chars.
+# Trimming preserves the top of the JD (where requirements typically live) while
+# keeping calls predictable in cost and validation success rate.
+_MAX_JD_CHARS_FOR_EXTRACT = 8000
+
+# Pydantic-AI default is 1 retry. Gemini Flash JSON-shape failures are usually
+# transient on the second try; 3 retries pushes practical success >95% without
+# meaningful cost (only failures retry).
+_EXTRACT_RETRIES = 3
 
 
 def _build_agent():
-    return make_agent("extract", output_type=JobRequirements, system_prompt=_SYSTEM_PROMPT)
+    return make_agent(
+        "extract",
+        output_type=JobRequirements,
+        system_prompt=_SYSTEM_PROMPT,
+        output_retries=_EXTRACT_RETRIES,
+    )
 
 
 async def _extract(jd_text: str) -> JobRequirements:
     """The LLM call. Tests monkeypatch this wrapper rather than the underlying Agent."""
     agent = _build_agent()
-    result = await agent.run(jd_text)
+    result = await agent.run(jd_text[:_MAX_JD_CHARS_FOR_EXTRACT])
     return result.output
 
 

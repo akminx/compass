@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import frontmatter
 from langgraph.graph import END, START, StateGraph
@@ -38,8 +38,19 @@ logger = logging.getLogger(__name__)
 
 
 def _route_after_hitl(state: CompassState) -> str:
-    """If approved, run tailor; otherwise skip directly to vault_write."""
-    return "tailor" if state.get("human_approved") else "vault_write"
+    """Route based on the explicit `human_approved` value.
+
+    Three-way check so Phase 1.B's real `interrupt()` flow can distinguish:
+      True  -> approved, run tailor
+      False -> explicit reject, skip tailor
+      None  -> hitl never ran / interrupted-and-cancelled, skip tailor
+
+    Today None and False both skip tailor, but the explicit comparison means
+    a future "cancelled" branch can be added without restructuring the edge.
+    """
+    if state.get("human_approved") is True:
+        return "tailor"
+    return "vault_write"
 
 
 def build_graph():
@@ -145,7 +156,8 @@ async def _process_one(graph, job: RawJob, sem: asyncio.Semaphore) -> CompassSta
 
 async def run_pipeline(raw_jobs: list[RawJob] | None = None) -> CompassState:
     """Scrape (or accept) jobs, dedup, run per-job graph, regenerate gap plan."""
-    start = time.monotonic()
+    start_monotonic = time.monotonic()
+    start_wall = datetime.now()  # captured alongside monotonic; immune to NTP/DST mid-run
     if raw_jobs is None:
         raw_jobs = await _scrape_all()
 
@@ -176,9 +188,9 @@ async def run_pipeline(raw_jobs: list[RawJob] | None = None) -> CompassState:
     if aggregate["jobs_written"] > 0:
         gap_aggregator.regenerate(write=True)
 
-    duration_s = time.monotonic() - start
+    duration_s = time.monotonic() - start_monotonic
     _append_run_log(aggregate, duration_s)
-    unknown_count = _count_unknown_skills_seen_this_run(start)
+    unknown_count = _count_unknown_skills_seen_this_run(start_wall)
     logger.info(
         "pipeline: processed=%d written=%d errors=%d unknown_skills_seen=%d duration=%.1fs",
         aggregate["jobs_processed"],
@@ -210,13 +222,17 @@ def _append_run_log(state: CompassState, duration_s: float) -> None:
         f.write(row)
 
 
-def _count_unknown_skills_seen_this_run(start_monotonic: float) -> int:
-    """Count rows appended to the unknown-skills log since `start_monotonic`."""
+def _count_unknown_skills_seen_this_run(start_wall: datetime) -> int:
+    """Count rows appended to the unknown-skills log since `start_wall`.
+
+    Takes wall-clock start directly (captured at run_pipeline entry) instead
+    of converting monotonic-to-wall — that conversion drifts on NTP/DST steps
+    mid-run.
+    """
     log_path = VAULT_PATH / "_meta" / "unknown-skills-log.md"
     if not log_path.exists():
         return 0
-    approx_wall = datetime.now() - timedelta(seconds=time.monotonic() - start_monotonic)
-    cutoff = approx_wall.isoformat(timespec="seconds")
+    cutoff = start_wall.isoformat(timespec="seconds")
     return sum(
         1
         for line in log_path.read_text(encoding="utf-8").splitlines()
