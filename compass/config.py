@@ -11,7 +11,14 @@ load_dotenv()
 # ── LLM ──────────────────────────────────────────────────────────────────────
 OPENROUTER_API_KEY: str = os.environ["OPENROUTER_API_KEY"]
 COMPASS_MODEL: str = os.getenv("COMPASS_MODEL", "anthropic/claude-sonnet-4-6")
-ASSESSOR_MODEL: str = os.getenv("ASSESSOR_MODEL", COMPASS_MODEL)
+ASSESSOR_MODEL: str = os.getenv("ASSESSOR_MODEL", "anthropic/claude-sonnet-4-6")
+
+# ── Per-node model routing (OpenRouter model IDs) ────────────────────────────
+EXTRACT_MODEL: str = os.getenv("EXTRACT_MODEL", "google/gemini-2.5-flash")
+SCORE_MODEL: str = os.getenv("SCORE_MODEL", "google/gemini-2.5-flash")
+REFLECT_MODEL: str = os.getenv("REFLECT_MODEL", "anthropic/claude-sonnet-4-6")
+TAILOR_MODEL: str = os.getenv("TAILOR_MODEL", "anthropic/claude-sonnet-4-6")
+# ASSESSOR_MODEL already defined above; defaults to anthropic/claude-sonnet-4-6.
 
 # ── Langfuse ──────────────────────────────────────────────────────────────────
 LANGFUSE_HOST: str = os.getenv("LANGFUSE_HOST", "http://localhost:3000")
