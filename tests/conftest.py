@@ -80,4 +80,24 @@ def temp_vault(tmp_path: Path, monkeypatch):
     except ImportError:
         pass
 
+    try:
+        import compass.pipeline.graph as graph_mod
+
+        if hasattr(graph_mod, "VAULT_PATH"):
+            monkeypatch.setattr(graph_mod, "VAULT_PATH", vault)
+    except ImportError:
+        pass
+
+    try:
+        import compass.analysis.gap_aggregator as gap_mod
+
+        if hasattr(gap_mod, "VAULT_PATH"):
+            monkeypatch.setattr(gap_mod, "VAULT_PATH", vault)
+        if hasattr(gap_mod, "MASTER_GAP_PLAN_PATH"):
+            monkeypatch.setattr(
+                gap_mod, "MASTER_GAP_PLAN_PATH", vault / "study-plans" / "master-gap-plan.md"
+            )
+    except ImportError:
+        pass
+
     return vault
