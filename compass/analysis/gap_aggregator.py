@@ -128,7 +128,12 @@ def aggregate(
 
     for job in jobs:
         weight = tier_weights.get(job.tier, tier_weights.get("unknown", 0.5))
-        score_factor = max(job.match_score / 5.0, 0.1)  # don't zero out low-match jobs entirely
+        # Below 1.0 the rubric says "wrong field entirely" or "fundamental
+        # skill gaps" — these jobs shouldn't contribute to gap math even at
+        # 10% weight. Cap at 5.0 to defend against out-of-range LLM output
+        # (Pydantic now constrains JobScore.score to [0,5] but defense is cheap).
+        clamped = max(0.0, min(job.match_score, 5.0))
+        score_factor = 0.0 if clamped < 1.0 else clamped / 5.0
         # Required skills count at full weight; nice-to-haves at half (they're
         # signal of market direction but not job-required gaps).
         seen_for_this_job: set[str] = set()
@@ -258,9 +263,69 @@ def regenerate(write: bool = True) -> tuple[list[GapPlanEntry], str]:
     entries = aggregate(jobs, levels, weights)
     rendered = render_master_plan(entries, jobs_n=len(jobs))
     if write:
+        _sync_skill_counters(entries)
         MASTER_GAP_PLAN_PATH.parent.mkdir(parents=True, exist_ok=True)
         MASTER_GAP_PLAN_PATH.write_text(rendered, encoding="utf-8")
     return entries, rendered
+
+
+def _sync_skill_counters(entries: list[GapPlanEntry]) -> None:
+    """Rewrite `appears_in_jobs` on each `skills/*.md` so the counter matches
+    the actual JobNote frontmatter (the source of truth).
+
+    Previously `update_skill_note` accumulated on every pipeline run — even
+    re-writes of the same JobNote — causing drift. Now we treat the counter
+    as derived data and recompute from JobNotes at gap_aggregator time.
+
+    Creates missing skill notes for canonicals that appear in JobNotes but
+    weren't yet seeded by scripts/seed_skills.py. Skills not appearing in any
+    JobNote get appears_in_jobs=0 (resets stale data from previous runs).
+    """
+    import yaml
+
+    from compass.vault.taxonomy import category_for
+
+    skills_dir = VAULT_PATH / "skills"
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    by_canonical = {e.skill: e for e in entries}
+
+    # Update existing skill notes
+    seen_canonicals: set[str] = set()
+    for path in skills_dir.glob("*.md"):
+        text = path.read_text(encoding="utf-8")
+        m = re.match(r"^(---\n)(.*?)(\n---\n)(.*)", text, re.DOTALL)
+        if not m:
+            continue
+        fm = yaml.safe_load(m.group(2)) or {}
+        canonical = fm.get("skill")
+        if not canonical:
+            continue
+        seen_canonicals.add(canonical)
+        entry = by_canonical.get(canonical)
+        new_count = entry.appears_in_jobs if entry else 0
+        if fm.get("appears_in_jobs") == new_count:
+            continue
+        fm["appears_in_jobs"] = new_count
+        new_fm = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True).strip()
+        path.write_text(f"---\n{new_fm}\n---\n{m.group(4)}", encoding="utf-8")
+
+    # Create skill notes for canonicals seen in JobNotes but missing on disk
+    safe_filename = re.compile(r"[^\w\-.]+")
+    for canonical, entry in by_canonical.items():
+        if canonical in seen_canonicals:
+            continue
+        category = category_for(canonical) or "language"
+        filename = safe_filename.sub("_", canonical).strip("_") + ".md"
+        new_path = skills_dir / filename
+        stub_fm = {
+            "type": "skill",
+            "skill": canonical,
+            "category": category,
+            "appears_in_jobs": entry.appears_in_jobs,
+            "my_level": 0,
+        }
+        yaml_text = yaml.safe_dump(stub_fm, sort_keys=False, allow_unicode=True).strip()
+        new_path.write_text(f"---\n{yaml_text}\n---\n# {canonical}\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

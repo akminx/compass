@@ -145,6 +145,13 @@ def _synonym_index() -> dict[str, str]:
     return idx
 
 
+# Canonicals where case matters because dropping case creates a collision
+# with a common English word or unrelated tech. e.g. "React" (the framework)
+# vs "ReAct" (the prompting pattern) both normalize to "react" — we want JDs
+# mentioning React.js to NOT silently become the agentic ReAct pattern.
+_CASE_SENSITIVE_CANONICALS: frozenset[str] = frozenset({"ReAct", "Go"})
+
+
 def normalize(raw_skill: str) -> str | None:
     """Map an arbitrary skill string to its canonical form, or None if unknown.
 
@@ -154,11 +161,27 @@ def normalize(raw_skill: str) -> str | None:
     unrelated input. Phase 0.B's extract_node injects the canonical taxonomy
     into the LLM prompt, so the model returns canonical names directly — the
     substring escape hatch is no longer needed.
+
+    `_CASE_SENSITIVE_CANONICALS` blocks specific collisions: an input "React"
+    (capital R only) won't map to canonical "ReAct" because the case patterns
+    differ. The LLM has to emit the exact canonical case for those skills.
     """
     key = _norm_key(raw_skill)
     if not key:
         return None
-    return _synonym_index().get(key)
+    canonical = _synonym_index().get(key)
+    if canonical is None:
+        return None
+    if canonical in _CASE_SENSITIVE_CANONICALS and raw_skill != canonical:
+        # The input case-collapses to a sensitive canonical's key but isn't
+        # the canonical itself. Accept only if it's one of the canonical's
+        # explicit synonyms (those are deliberate aliases by the taxonomy
+        # author — e.g. "Golang" -> "Go" is intentional, but bare "go" is not).
+        skill_def = load_taxonomy().get(canonical)
+        if skill_def and raw_skill in skill_def.synonyms:
+            return canonical
+        return None
+    return canonical
 
 
 def category_for(canonical: str) -> str | None:

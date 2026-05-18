@@ -60,14 +60,21 @@ async def test_vault_write_node_writes_jobnote(temp_vault):
     assert "MCP" in loaded.metadata["skills_required"]
 
 
-async def test_vault_write_node_increments_skill_counters(temp_vault):
+async def test_vault_write_node_records_skills_on_jobnote(temp_vault):
+    """The JobNote's skills_required field is the source of truth for which
+    skills the JD asked for. gap_aggregator's _sync_skill_counters reads
+    this and updates skills/<name>.md counters at end of each run — the
+    vault_write_node no longer increments per-call (that path drifted)."""
+    import frontmatter
+
     from compass.pipeline.nodes.vault_write import vault_write_node
 
     await vault_write_node(_state(["MCP", "LangGraph"], ["MCP"]))
-    skill_files = list((temp_vault / "skills").glob("*.md"))
-    skills_written = {f.stem for f in skill_files}
-    assert "MCP" in skills_written
-    assert "LangGraph" in skills_written
+    job_files = list((temp_vault / "jobs").glob("*.md"))
+    assert len(job_files) == 1
+    loaded = frontmatter.load(job_files[0])
+    assert "MCP" in loaded.metadata["skills_required"]
+    assert "LangGraph" in loaded.metadata["skills_required"]
 
 
 async def test_vault_write_node_writes_company_note(temp_vault):

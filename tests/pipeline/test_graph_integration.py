@@ -50,7 +50,7 @@ async def test_run_pipeline_end_to_end(temp_vault, mocked_llms):
             title="Agent Engineer",
             url="https://jobs.ashbyhq.com/sierra/test-uuid",
             source="ashby",
-            description="Build agents at Sierra.",
+            description="Build agents at Sierra with Python, LangGraph, MCP, and FastAPI.",
             location="NYC",
             date_posted=date(2026, 5, 17),
         ),

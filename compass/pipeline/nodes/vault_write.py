@@ -18,7 +18,7 @@ from datetime import date
 from typing import TYPE_CHECKING
 
 from compass.vault.schemas import CompanyNote, JobNote
-from compass.vault.writer import update_skill_note, write_company_note, write_job_note
+from compass.vault.writer import write_company_note, write_job_note
 
 if TYPE_CHECKING:
     from compass.pipeline.state import CompassState
@@ -69,8 +69,10 @@ async def vault_write_node(state: CompassState) -> dict:
     )
     write_job_note(note)
 
-    for canonical in req.required_skills:
-        update_skill_note(canonical, job.url)
+    # Skill counters are derived data — gap_aggregator._sync_skill_counters()
+    # recomputes them from JobNote frontmatter at end of each run. We do NOT
+    # call update_skill_note here because that accumulated incorrectly on
+    # job overwrites (every pipeline rerun used to inflate the counter).
 
     # TODO(Phase 1.A): read company tier from target-companies.md instead of "unknown".
     # `write_company_note` is idempotent, so roles_seen=1 currently never increments;

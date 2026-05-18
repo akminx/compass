@@ -123,6 +123,11 @@ def write_company_note(note: CompanyNote) -> Path:
         # Preserve human-set fields when the incoming note has the default value.
         if note.tier == "unknown" and existing.get("tier", "unknown") != "unknown":
             update["tier"] = existing["tier"]
+        if (
+            note.hiring_signal == "unknown"
+            and existing.get("hiring_signal", "unknown") != "unknown"
+        ):
+            update["hiring_signal"] = existing["hiring_signal"]
         if not note.why_interesting and existing.get("why_interesting"):
             update["why_interesting"] = existing["why_interesting"]
         if not note.geo and existing.get("geo"):
@@ -131,6 +136,8 @@ def write_company_note(note: CompanyNote) -> Path:
             update["known_stack"] = existing["known_stack"]
         if not note.interview_format_notes and existing.get("interview_format_notes"):
             update["interview_format_notes"] = existing["interview_format_notes"]
+        if not note.tags and existing.get("tags"):
+            update["tags"] = existing["tags"]
         note = note.model_copy(update=update)
 
     post = frontmatter.Post(content=f"# {note.company}\n\n{note.why_interesting}\n")

@@ -93,13 +93,24 @@ async def _extract(jd_text: str) -> JobRequirements:
     return result.output
 
 
-def _normalize_skill_list(skills: list[str], unknown_sink: list[str] | None = None) -> list[str]:
-    """Map each raw skill to canonical; drop unknowns but record them for later review.
+def _normalize_skill_list(
+    skills: list[str],
+    jd_text: str | None = None,
+    unknown_sink: list[str] | None = None,
+) -> list[str]:
+    """Map each raw skill to canonical; drop unknowns AND skills absent from the JD body.
 
-    Unknown skills are appended to `unknown_sink` (if provided) so the caller can
-    persist them to the unknown-skills log for weekly review.
+    The LLM occasionally hallucinates plausible-but-absent skills based on
+    company name (e.g. "Federated Learning" for an Anthropic sales JD that
+    mentions only Spanish + Salesforce). This filter requires that the
+    canonical name (or one of its synonyms) actually appears as a substring
+    of the JD text — otherwise the LLM made it up.
+
+    Unknown skills are appended to `unknown_sink` (if provided) so the caller
+    can persist them to the unknown-skills log for weekly review.
     """
     out: list[str] = []
+    jd_lower = jd_text.lower() if jd_text else None
     for raw in skills:
         canon = normalize(raw)
         if canon is None:
@@ -107,9 +118,28 @@ def _normalize_skill_list(skills: list[str], unknown_sink: list[str] | None = No
             if unknown_sink is not None:
                 unknown_sink.append(raw)
             continue
+        if jd_lower is not None and not _skill_appears_in_jd(canon, raw, jd_lower):
+            logger.info(
+                "extract: dropping %r (canonical %r) — not found in JD text (likely LLM hallucination)",
+                raw,
+                canon,
+            )
+            continue
         if canon not in out:
             out.append(canon)
     return out
+
+
+def _skill_appears_in_jd(canonical: str, raw: str, jd_lower: str) -> bool:
+    """True if the canonical name, the raw LLM output, or any of the canonical's
+    taxonomy synonyms appears as a substring of the (already lowercased) JD body."""
+    from compass.vault.taxonomy import load_taxonomy
+
+    candidates = {canonical.lower(), raw.lower()}
+    skill_def = load_taxonomy().get(canonical)
+    if skill_def:
+        candidates.update(s.lower() for s in skill_def.synonyms)
+    return any(c and c in jd_lower for c in candidates)
 
 
 def _record_unknown_skills(skills: list[str], job_url: str) -> None:
@@ -157,14 +187,34 @@ async def extract_node(state: CompassState) -> dict:
         }
 
     unknown: list[str] = []
+    jd_text = job.description
     normalized = JobRequirements(
-        required_skills=_normalize_skill_list(raw_req.required_skills, unknown),
-        nice_to_have_skills=_normalize_skill_list(raw_req.nice_to_have_skills, unknown),
+        required_skills=_normalize_skill_list(raw_req.required_skills, jd_text, unknown),
+        nice_to_have_skills=_normalize_skill_list(raw_req.nice_to_have_skills, jd_text, unknown),
         years_experience=raw_req.years_experience,
-        seniority=raw_req.seniority,
+        seniority=_seniority_with_title_fallback(raw_req.seniority, job.title),
         remote_policy=raw_req.remote_policy,
         summary=raw_req.summary,
     )
     if unknown:
         _record_unknown_skills(unknown, job.url)
     return {"extracted_requirements": normalized}
+
+
+def _seniority_with_title_fallback(llm_value: str, title: str) -> str:
+    """Code-level safety net: if the LLM returned "unknown" but the title
+    contains an obvious seniority signal, use the title-derived value.
+    Pydantic doesn't catch this because "unknown" is a valid Literal value."""
+    if llm_value != "unknown":
+        return llm_value
+    title_low = title.lower()
+    if any(t in title_low for t in (" staff ", "staff ", " staff", "principal")):
+        return "staff"
+    if any(t in title_low for t in ("senior", " sr.", "sr ", " sr")):
+        return "senior"
+    if any(
+        t in title_low
+        for t in ("junior", " jr.", "jr ", "entry-level", "entry level", "new grad", "intern")
+    ):
+        return "junior"
+    return "unknown"

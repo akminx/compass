@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Literal, TypedDict
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 Source = Literal["greenhouse", "lever", "ashby", "jobspy", "smoke", "manual"]
 Seniority = Literal["junior", "mid", "senior", "staff", "unknown"]
@@ -44,7 +44,7 @@ class JobRequirements(BaseModel):
 class JobScore(BaseModel):
     """LLM-generated match score for a job against the candidate profile."""
 
-    score: float  # 0.0 – 5.0
+    score: float = Field(ge=0.0, le=5.0)  # constrained; out-of-range = retry
     reasoning: str
     matched_skills: list[str]
     missing_skills: list[str]

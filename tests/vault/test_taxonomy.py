@@ -58,3 +58,26 @@ def test_normalize_does_not_resolve_demand_tokens():
 
     for token in ["low", "medium", "high", "highest"]:
         assert normalize(token) is None, f"normalize({token!r}) should be None"
+
+
+def test_normalize_react_does_not_collapse_to_react_pattern():
+    """Regression: 'React' (the framework, capital R only) used to silently map
+    to 'ReAct' (the agentic prompting pattern, capital R and A) because
+    _norm_key lowercases everything. _CASE_SENSITIVE_CANONICALS blocks this."""
+    from compass.vault.taxonomy import normalize
+
+    assert normalize("React") is None  # the framework — not in our taxonomy
+    assert normalize("react") is None  # lowercase, definitely not ReAct
+    assert normalize("ReAct") == "ReAct"  # the canonical, exact case match
+
+
+def test_normalize_go_disambiguation():
+    """'Go' the language is in the taxonomy but case-sensitive — bare 'go' or
+    'Go ahead' substrings shouldn't return 'Go'."""
+    from compass.vault.taxonomy import normalize
+
+    assert normalize("Go") == "Go"  # exact canonical match
+    assert normalize("golang") == "Go"  # explicit synonym in the taxonomy
+    # 'go' alone is ambiguous — case-sensitive guard rejects lowercase
+    # bare-canonical (not an explicit synonym)
+    assert normalize("go") is None
