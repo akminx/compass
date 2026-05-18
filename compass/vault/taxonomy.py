@@ -124,18 +124,19 @@ def _synonym_index() -> dict[str, str]:
 
 
 def normalize(raw_skill: str) -> str | None:
-    """Map an arbitrary skill string to its canonical form, or None if unknown."""
+    """Map an arbitrary skill string to its canonical form, or None if unknown.
+
+    Strict synonym match only. The previous substring fallback produced false
+    positives like "Pythonist" -> Python, "Goblet" -> Go, "react" -> ReAct
+    because short canonical keys (go, react, modal) appeared as substrings of
+    unrelated input. Phase 0.B's extract_node injects the canonical taxonomy
+    into the LLM prompt, so the model returns canonical names directly — the
+    substring escape hatch is no longer needed.
+    """
     key = _norm_key(raw_skill)
     if not key:
         return None
-    idx = _synonym_index()
-    if key in idx:
-        return idx[key]
-    # token-level fallback: pick first canonical whose key is a substring
-    for canon_key, canon_name in idx.items():
-        if canon_key and canon_key in key:
-            return canon_name
-    return None
+    return _synonym_index().get(key)
 
 
 def category_for(canonical: str) -> str | None:

@@ -136,3 +136,27 @@ def test_append_agent_log_preserves_existing_content(temp_vault):
     assert "first" in log_text
     assert "second" in log_text
     assert log_text.index("first") < log_text.index("second")
+
+
+def test_job_filenames_unique_per_url_even_with_identical_titles(temp_vault):
+    """Regression: titles that sanitize to the same string used to collide on
+    disk (e.g. "Engineer / Backend" and "Engineer (Backend)" both became
+    "Engineer_Backend.md"), causing silent overwrites for different URLs.
+    Including a URL hash in the filename eliminates this class of bug."""
+    from compass.vault.writer import write_job_note
+
+    note_a = _make_job_note(
+        title="Senior Engineer / Backend",
+        url="https://jobs.ashbyhq.com/co/aaa-111",
+    )
+    note_b = _make_job_note(
+        title="Senior Engineer (Backend)",
+        url="https://jobs.ashbyhq.com/co/bbb-222",
+    )
+    p_a = write_job_note(note_a)
+    p_b = write_job_note(note_b)
+
+    assert p_a != p_b, "different URLs must never produce the same filename"
+    assert p_a.exists()
+    assert p_b.exists()
+    assert len(list((temp_vault / "jobs").glob("*.md"))) == 2

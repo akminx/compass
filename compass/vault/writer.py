@@ -9,6 +9,7 @@ Rules:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 from datetime import datetime
@@ -36,7 +37,16 @@ def _safe_segment(s: str) -> str:
 
 
 def _job_filename(note: JobNote) -> str:
-    return f"{note.date_found.isoformat()}-{_safe_segment(note.company)}-{_safe_segment(note.title)}.md"
+    """JobNote filename includes a short URL hash so titles that sanitize to
+    the same string (e.g. "Engineer / Backend" vs "Engineer (Backend)") never
+    collide on disk. Two different URLs can never produce the same filename."""
+    url_suffix = hashlib.sha1(note.url.encode("utf-8")).hexdigest()[:8]
+    return (
+        f"{note.date_found.isoformat()}"
+        f"-{_safe_segment(note.company)}"
+        f"-{_safe_segment(note.title)}"
+        f"-{url_suffix}.md"
+    )
 
 
 def _to_metadata(model: BaseModel) -> dict:
