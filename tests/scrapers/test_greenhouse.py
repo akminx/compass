@@ -88,14 +88,18 @@ async def test_scrape_greenhouse_rejects_empty_content(httpx_mock):
     rather than send empty JDs downstream."""
     httpx_mock.add_response(
         url=f"{GREENHOUSE_BASE}/sample/jobs?content=true",
-        json={"jobs": [{
-            "id": 1,
-            "title": "Account Executive",
-            "absolute_url": "https://example.com/ae",
-            "location": {"name": "Remote"},
-            "updated_at": "2026-05-18T10:00:00-07:00",
-            "content": "",  # the broken state
-        }]},
+        json={
+            "jobs": [
+                {
+                    "id": 1,
+                    "title": "Account Executive",
+                    "absolute_url": "https://example.com/ae",
+                    "location": {"name": "Remote"},
+                    "updated_at": "2026-05-18T10:00:00-07:00",
+                    "content": "",  # the broken state
+                }
+            ]
+        },
     )
     jobs = await scrape_greenhouse("sample")
     assert jobs == []  # empty content -> dropped, not silently passed

@@ -8,7 +8,9 @@ No authentication required.
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
+import re
 from datetime import date, datetime
 
 import httpx
@@ -20,6 +22,17 @@ logger = logging.getLogger(__name__)
 LEVER_BASE = "https://api.lever.co/v0/postings"
 _REQUEST_TIMEOUT = 20.0
 _USER_AGENT = "compass-job-scraper/0.1"
+
+_SCRIPT_STYLE_RE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE)
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _strip_html(raw: str) -> str:
+    """Same cheap HTML-to-text strategy as the Greenhouse scraper."""
+    text = _SCRIPT_STYLE_RE.sub(" ", raw)
+    text = _TAG_RE.sub(" ", text)
+    text = html.unescape(text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _ms_to_date(ms: int | None) -> date | None:
@@ -33,8 +46,31 @@ def _ms_to_date(ms: int | None) -> date | None:
         return None
 
 
+def _resolve_description(raw: dict) -> str:
+    """Prefer plain text; fall back to stripped HTML.
+
+    Some Lever boards (observed: Spotify) leave `descriptionPlain` empty on a
+    subset of postings while still populating the HTML `description`. Without
+    the fallback, those postings reach the LLM with empty content and the
+    extract node hallucinates skills from the title alone.
+    """
+    plain = (raw.get("descriptionPlain") or "").strip()
+    if plain:
+        return plain
+    html_body = raw.get("description") or ""
+    return _strip_html(html_body)
+
+
 def _to_rawjob(company: str, raw: dict) -> RawJob | None:
     try:
+        description = _resolve_description(raw)
+        if not description:
+            logger.warning(
+                "lever %s: empty description for %r — dropping (API may have changed)",
+                company,
+                raw.get("text", "?"),
+            )
+            return None
         categories = raw.get("categories") or {}
         return RawJob(
             company=company,
@@ -45,7 +81,7 @@ def _to_rawjob(company: str, raw: dict) -> RawJob | None:
             remote=None,
             salary_min=None,
             salary_max=None,
-            description=raw.get("descriptionPlain", ""),
+            description=description,
             date_posted=_ms_to_date(raw.get("createdAt")),
         )
     except (KeyError, TypeError) as e:
