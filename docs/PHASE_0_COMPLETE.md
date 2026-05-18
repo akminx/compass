@@ -191,8 +191,52 @@ cat ~/Documents/compass-vault/study-plans/master-gap-plan.md
 | Blog post on the skill_assessor loop | Portfolio claim | **2.C** | Differentiated story; requires assessor to actually run live (Phase 1.B cron) |
 | Workday / Apple / Google / AWS / Microsoft scrapers | Coverage expansion | **3+** | Long-tail per spec |
 | Getro / YC WAAS / HN Who-is-Hiring | Coverage expansion | **3+** | Long-tail per spec |
+| CLI env vars don't override `.env` for ATS board lists (running with `LEVER_SLUGS=` still hits the .env defaults; produces noisy 404 logs) | Config UX | **1.B** | Low-impact; resolve when restructuring config for Modal Secrets in 1.B |
+| Greenhouse / Lever scrapers don't populate `remote` field (Ashby does — fixed 2026-05-18) | Cosmetic | **1.A** | Greenhouse/Lever APIs encode remote in `location` string rather than a typed flag; needs string-pattern parsing |
+| Taxonomy expansion for adjacent infra skills (PostgreSQL, Redis, Kafka, ClickHouse, Salesforce, HubSpot, Figma) | Coverage | **1.B** | Out of agentic-AI core; weekly review of unknown-skills-log surfaces these as candidates |
 
 **Every item has a known fix and an assigned phase. Nothing in Phase 0 is broken-but-unflagged.**
+
+## Post-retro fixes (2026-05-18 PM session)
+
+Adversarial re-verification of Phase 0 surfaced 6 additional silent bugs that the original "ready" pass missed. All landed before this addendum:
+
+| # | Bug | Fix |
+|---|---|---|
+| 17 | **`SCORE_THRESHOLD` not enforced on vault writes** — `.env` documented it as gating writes but only `hitl_node` used it. Vault filled with sub-3.5 sales/PM/designer noise. | `vault_write_node` short-circuits and logs to agent-log below threshold; regression test in `tests/pipeline/test_vault_write.py` |
+| 18 | **"LLMs" / "Large Language Models" / "Machine Learning" / "Deep Learning" / "Reinforcement Learning" missing from taxonomy** — agentic-AI JDs lost their core skill signal and dropped to unknown-skills log. | Added 4 canonicals with synonym coverage to `_meta/skill-taxonomy.md`; regression test in `tests/vault/test_taxonomy.py::test_normalize_ml_foundations` |
+| 19 | **Full JD body discarded** — only the LLM-generated summary survived to the JobNote, blocking human verification of agent extractions. | `write_job_note(note, full_description=...)` appends a `## Full JD` section; vault_write_node passes `job.description`; regression tests |
+| 20 | **Ashby scraper read wrong field** — used `locationName` but live boards (Sierra, Posthog, Ramp) populate `location`. Every Ashby JobNote had `location: null`. Also: `isRemote` was discarded. | Fall back through `location → locationName`; capture `isRemote` into `RawJob.remote`; regression test |
+| 21 | **`score_reasoning` occasionally truncated mid-clause** by Gemini Flash structured-output; passed Pydantic validation because any non-empty string was valid. | `_score_with_retry` enforces minimum length + terminal punctuation; retries once before accepting; regression tests for both retry and no-retry paths |
+| 22 | **31 stale pre-fix JobNotes still in vault** with hallucinated matched/missing skills (URL-dedup prevented refresh). | One-shot cleanup script `scripts/cleanup_stale_jobnotes.py` — dry-run by default, `--apply` deletes. Mtime cutoff + JD-universe leak check identify the bad notes. Per CLAUDE.md, deletion is human-triggered. |
+| 23 | **Langfuse callback API mismatch** (`host` kwarg invalid in newer `langfuse.langchain.CallbackHandler`). Already flagged in retro; degrades gracefully but no traces recorded. | Deferred to Phase 1.B observability work — already in deferred table above. |
+
+**Tests:** 72 → 81 (9 new regression tests). **Lint:** clean.
+
+**One-time cleanup the user runs:**
+```bash
+uv run python -m scripts.cleanup_stale_jobnotes              # dry-run
+uv run python -m scripts.cleanup_stale_jobnotes --apply      # actually delete
+# then:
+uv run python -m compass.pipeline.graph                       # re-score with current code
+```
+
+## Known semantic limitation introduced in this pass (must be addressed first in Phase 1.A)
+
+The bug #17 fix (enforcing `SCORE_THRESHOLD` on vault writes) cleaned up vault clutter but introduced a **gap-aggregator bias**: only roles you'd score ≥3.5 on contribute to the master gap plan. This is the **wrong filter** for the project's goal.
+
+**What Akash actually wants** — and what the gap aggregator should reflect — is "the skills every agentic-engineering JD asks for, even the ones I'd score 2.0 on today, because those are the ones I should be studying toward." Filtering by match score hides exactly the stretch roles whose gaps are most informative for study planning.
+
+The right filter is **role family** (agentic-eng vs sales/marketing/design), applied **before** scoring so non-relevant JDs never burn an LLM call. Sales/PM/designer JDs drop out at the gate; agentic-eng JDs all reach the vault regardless of current match score; the gap aggregator reads everything.
+
+### Phase 1.A first-task ordering (do this before anything else)
+
+1. **Implement role-family gate** in a new `compass/pipeline/nodes/intake_filter.py` (or extend `intake_node`) that classifies each `RawJob.title` + JD first paragraph into one of: `agentic-eng`, `swe-adjacent`, `data/ml`, `pm`, `sales`, `marketing`, `design`, `ops`, `other`. Pre-sales / solution architecture / customer engineering are sales-adjacent. Drop everything outside an allow-list before extract_node runs.
+2. **Remove the `SCORE_THRESHOLD` gate from `vault_write_node`** (lines 50–66 of `compass/pipeline/nodes/vault_write.py`) — keep it only in `hitl_node` where it gates tailor-paragraph generation. Once role-family filtering removes the noise upstream, the threshold-on-write gate becomes harmful: it hides agentic-eng roles whose gaps you should be studying.
+3. **Populate `role_family`** on the JobNote (currently `''` on every note — dead field) from the gate's classification. Phase 1.A's Dataview dashboard groups by it.
+4. **Re-cleanup** the vault one more time after this change ships and re-run the pipeline so the master gap plan reflects all agentic-eng roles in the wild.
+
+Skipping step 2 means continuing to ship a gap plan that's biased toward easy wins instead of stretch targets — directly contrary to what Akash said he wants the tool to do.
 
 ---
 

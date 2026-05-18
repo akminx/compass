@@ -52,10 +52,17 @@ mcp = FastMCP("compass")
 
 @mcp.tool()
 async def score_jd(jd_text: str) -> dict:
-    """Score a pasted JD against the candidate profile. Does NOT write to the vault."""
+    """Score a pasted JD against the candidate profile. Does NOT write to the vault.
+
+    Runs only extract + score — bypasses tailor (Sonnet, ~$0.05/call) and
+    vault_write so this is cheap (~$0.003) and side-effect-free. Returns the
+    extracted requirements alongside the score so the caller sees what the
+    LLM thought the JD was asking for.
+    """
     from datetime import date
 
-    from compass.pipeline.graph import build_graph
+    from compass.pipeline.nodes.extract import extract_node
+    from compass.pipeline.nodes.score import score_node
     from compass.pipeline.state import CompassState, RawJob
 
     job = RawJob(
@@ -66,22 +73,35 @@ async def score_jd(jd_text: str) -> dict:
         description=jd_text,
         date_posted=date.today(),
     )
-    graph = build_graph()
     state: CompassState = {
-        "raw_jobs": [job],
-        "current_job": None,
+        "raw_jobs": [],
+        "current_job": job,
         "extracted_requirements": None,
         "score_result": None,
         "human_approved": None,
         "human_feedback": None,
+        "tailored_paragraph": None,
         "vault_written": False,
         "jobs_processed": 0,
         "jobs_written": 0,
         "errors": [],
     }
-    result = await graph.ainvoke(state)
-    score = result.get("score_result")
-    return score.model_dump() if score else {"error": "no score produced"}
+    extract_result = await extract_node(state)
+    if extract_result.get("errors"):
+        return {"error": extract_result["errors"][-1]}
+    state = {**state, **extract_result}
+    score_result = await score_node(state)
+    if score_result.get("errors"):
+        return {"error": score_result["errors"][-1]}
+    state = {**state, **score_result}
+    score = state.get("score_result")
+    req = state.get("extracted_requirements")
+    if score is None:
+        return {"error": "no score produced"}
+    return {
+        "score": score.model_dump(),
+        "requirements": req.model_dump() if req else None,
+    }
 
 
 # ── Vault read ───────────────────────────────────────────────────────────────

@@ -57,8 +57,13 @@ def _to_metadata(model: BaseModel) -> dict:
     return model.model_dump(mode="json", by_alias=True)
 
 
-def write_job_note(note: JobNote) -> Path:
-    """Write a JobNote to vault/jobs/. Idempotent on URL — same URL overwrites the same file."""
+def write_job_note(note: JobNote, full_description: str | None = None) -> Path:
+    """Write a JobNote to vault/jobs/. Idempotent on URL — same URL overwrites the same file.
+
+    When `full_description` is provided, the raw scraped JD is appended below the
+    LLM summary in a `## Full JD` section so the human can verify what the agent
+    actually saw without going back to the source URL.
+    """
     jobs_dir = VAULT_PATH / "jobs"
     jobs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -74,7 +79,10 @@ def write_job_note(note: JobNote) -> Path:
     if target is None:
         target = jobs_dir / _job_filename(note)
 
-    post = frontmatter.Post(content=f"# {note.company} — {note.title}\n\n{note.jd_summary}\n")
+    body = f"# {note.company} — {note.title}\n\n{note.jd_summary}\n"
+    if full_description:
+        body += f"\n## Full JD\n\n{full_description.strip()}\n"
+    post = frontmatter.Post(content=body)
     post.metadata = _to_metadata(note)
     target.write_text(frontmatter.dumps(post) + "\n", encoding="utf-8")
     append_agent_log(f"vault_write job {note.company} {note.title} score={note.match_score}")

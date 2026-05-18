@@ -6,12 +6,12 @@ Run once after cloning: uv run python scripts/seed_vault.py
 Creates all required folders and placeholder files.
 Does NOT overwrite existing files.
 """
-from pathlib import Path
 import sys
+from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from compass.config import VAULT_PATH
-
 
 FOLDERS = [
     "_raw/jd-captures",

@@ -105,3 +105,40 @@ async def test_vault_write_node_persists_tailored_paragraph(temp_vault):
     job_files = list((temp_vault / "jobs").glob("*.md"))
     loaded = frontmatter.load(job_files[0])
     assert loaded.metadata["tailored_paragraph"] == "Lead with your Cisco MCP server work."
+
+
+async def test_vault_write_node_skips_below_threshold(temp_vault, monkeypatch):
+    """Regression: SCORE_THRESHOLD is documented in .env as gating vault writes.
+    Pre-fix the threshold was only used by hitl_node, so sales/PM/designer roles
+    scoring <3.5 still got written and cluttered the daily dashboard."""
+    import compass.pipeline.nodes.vault_write as vw
+
+    monkeypatch.setattr(vw, "SCORE_THRESHOLD", 3.5)
+    result = await vw.vault_write_node(_state(["MCP"], [], score=2.0))
+    assert result["vault_written"] is False
+    assert list((temp_vault / "jobs").glob("*Sierra*.md")) == []
+
+
+async def test_vault_write_node_writes_at_or_above_threshold(temp_vault, monkeypatch):
+    import compass.pipeline.nodes.vault_write as vw
+
+    monkeypatch.setattr(vw, "SCORE_THRESHOLD", 3.5)
+    result = await vw.vault_write_node(_state(["MCP"], ["MCP"], score=3.5))
+    assert result["vault_written"] is True
+    assert len(list((temp_vault / "jobs").glob("*Sierra*.md"))) == 1
+
+
+async def test_vault_write_node_persists_full_jd_body(temp_vault, monkeypatch):
+    """vault_write_node passes job.description through to write_job_note so the
+    raw JD is preserved in the JobNote body, not just the LLM summary."""
+    import compass.pipeline.nodes.vault_write as vw
+
+    monkeypatch.setattr(vw, "SCORE_THRESHOLD", 0.0)
+    state = _state(["MCP"], ["MCP"], score=4.2)
+    state["current_job"] = state["current_job"].model_copy(
+        update={"description": "VERY_DISTINCTIVE_RAW_JD_MARKER agentic engineering."}
+    )
+    await vw.vault_write_node(state)
+    body = next((temp_vault / "jobs").glob("*Sierra*.md")).read_text()
+    assert "## Full JD" in body
+    assert "VERY_DISTINCTIVE_RAW_JD_MARKER" in body

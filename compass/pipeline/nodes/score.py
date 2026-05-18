@@ -70,6 +70,30 @@ async def _score(req: JobRequirements, profile_text: str) -> JobScore:
     return result.output
 
 
+def _reasoning_complete(text: str) -> bool:
+    """Gemini Flash occasionally streams a truncated reasoning string that ends
+    mid-clause (e.g. "...entirely outside the candidate"). The structured-output
+    schema doesn't catch this because any non-empty string is valid. Cheap check:
+    require at least 20 chars and a terminal punctuation mark."""
+    t = (text or "").strip()
+    return len(t) >= 20 and t[-1] in ".!?\""
+
+
+async def _score_with_retry(req: JobRequirements, profile_text: str) -> JobScore:
+    result = await _score(req, profile_text)
+    if _reasoning_complete(result.reasoning):
+        return result
+    logger.warning(
+        "score_node: reasoning looks truncated (%d chars, tail=%r) — retrying once",
+        len(result.reasoning or ""),
+        (result.reasoning or "")[-40:],
+    )
+    retry = await _score(req, profile_text)
+    if not _reasoning_complete(retry.reasoning):
+        logger.warning("score_node: retry still produced incomplete reasoning — accepting anyway")
+    return retry
+
+
 def _profile_text() -> str:
     return f"## RESUME\n{read_resume()}\n\n## SKILL INVENTORY\n{read_skill_inventory()}"
 
@@ -83,7 +107,7 @@ async def score_node(state: CompassState) -> dict:
         }
 
     try:
-        result = await _score(req, _profile_text())
+        result = await _score_with_retry(req, _profile_text())
     except Exception as e:
         logger.exception("score_node: LLM call failed")
         return {

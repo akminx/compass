@@ -120,8 +120,13 @@ async def test_run_pipeline_regenerates_gap_plan(temp_vault, mocked_llms):
     assert "generated_by: gap_aggregator" in plan_path.read_text()
 
 
-async def test_run_pipeline_skips_tailor_when_below_threshold(monkeypatch, temp_vault):
-    """Low-score jobs are still written but tailor must not fire — verifies graph routing."""
+async def test_run_pipeline_skips_vault_and_tailor_when_below_threshold(monkeypatch, temp_vault):
+    """Low-score jobs are dropped: no tailor call AND no JobNote written.
+
+    The .env documents SCORE_THRESHOLD as gating vault writes — vault_write_node
+    short-circuits below threshold, so neither tailor nor the JobNote should land.
+    The pipeline-runs log still records that we processed the job.
+    """
     from compass.pipeline.graph import run_pipeline
     from compass.pipeline.nodes import extract, score, tailor
 
@@ -140,7 +145,7 @@ async def test_run_pipeline_skips_tailor_when_below_threshold(monkeypatch, temp_
     async def fake_score(req, profile_text):
         return JobScore(
             score=2.0,
-            reasoning="weak",
+            reasoning="weak match against requirements.",
             matched_skills=[],
             missing_skills=["MCP"],
             tailoring_notes="",
@@ -165,14 +170,9 @@ async def test_run_pipeline_skips_tailor_when_below_threshold(monkeypatch, temp_
         ),
     ]
     state = await run_pipeline(raw_jobs=raw_jobs)
-    # Job still written for analysis (per spec: rejected jobs persist for eval data):
-    assert state["jobs_written"] == 1
-    # But tailor was skipped:
+    assert state["jobs_written"] == 0
     assert tailor_calls["count"] == 0
-    # And no tailored_paragraph on the JobNote:
-    job_files = list((temp_vault / "jobs").glob("*Sample*.md"))
-    loaded = frontmatter.load(job_files[0])
-    assert loaded.metadata.get("tailored_paragraph") is None
+    assert list((temp_vault / "jobs").glob("*Sample*.md")) == []
 
 
 async def test_run_pipeline_appends_to_run_log(temp_vault, mocked_llms):

@@ -93,3 +93,44 @@ async def test_scrape_ashby_drops_empty_description(httpx_mock):
     )
     jobs = await scrape_ashby("sample")
     assert jobs == []
+
+
+async def test_scrape_ashby_prefers_location_over_locationname(httpx_mock):
+    """Regression: live Ashby boards (Sierra, Posthog, Ramp) populate `location`,
+    not `locationName`. The pre-fix scraper read `locationName` only and dropped
+    location for every job. Also captures `isRemote` into the remote field."""
+    httpx_mock.add_response(
+        url=f"{ASHBY_BASE}/sample?includeCompensation=true",
+        json={
+            "jobs": [
+                {
+                    "id": "x",
+                    "title": "Product Engineer",
+                    "jobUrl": "https://jobs.ashbyhq.com/sample/x",
+                    "location": "San Francisco, CA",
+                    "isRemote": False,
+                    "publishedAt": "2026-05-18T10:00:00.000Z",
+                    "descriptionPlain": "Build product surfaces.",
+                    "compensation": None,
+                    "shouldDisplayCompensationOnJobBoard": False,
+                },
+                {
+                    "id": "y",
+                    "title": "Backend Engineer",
+                    "jobUrl": "https://jobs.ashbyhq.com/sample/y",
+                    "location": "Remote",
+                    "isRemote": True,
+                    "publishedAt": "2026-05-18T10:00:00.000Z",
+                    "descriptionPlain": "Ingestion pipeline.",
+                    "compensation": None,
+                    "shouldDisplayCompensationOnJobBoard": False,
+                },
+            ]
+        },
+    )
+    jobs = await scrape_ashby("sample")
+    assert len(jobs) == 2
+    assert jobs[0].location == "San Francisco, CA"
+    assert jobs[0].remote is False
+    assert jobs[1].location == "Remote"
+    assert jobs[1].remote is True

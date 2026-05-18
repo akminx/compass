@@ -30,7 +30,7 @@ SENTINEL_COMPANY = "_SmokeTestCo"
 def main() -> int:
     print(f"Vault path: {VAULT_PATH}")
     if not VAULT_PATH.exists():
-        print(f"  X VAULT_PATH does not exist")
+        print("  X VAULT_PATH does not exist")
         return 1
 
     note = JobNote(
@@ -55,32 +55,32 @@ def main() -> int:
     print(f"  OK updated skill note: {skill_path.name}")
 
     append_agent_log("smoke test ran")
-    print(f"  OK appended to agent-log")
+    print("  OK appended to agent-log")
 
     # 2. Read
     if not job_url_exists(SENTINEL_URL):
         print(f"  X job_url_exists returned False for {SENTINEL_URL}")
         return 1
-    print(f"  OK job_url_exists found the URL")
+    print("  OK job_url_exists found the URL")
 
     if job_path not in list_job_notes():
-        print(f"  X list_job_notes did not include the new path")
+        print("  X list_job_notes did not include the new path")
         return 1
-    print(f"  OK list_job_notes includes the new file")
+    print("  OK list_job_notes includes the new file")
 
     # 3. Validate round-tripped frontmatter
     loaded = frontmatter.load(job_path)
     if loaded.metadata.get("company") != SENTINEL_COMPANY:
         print(f"  X company mismatch on reload: {loaded.metadata.get('company')!r}")
         return 1
-    print(f"  OK frontmatter round-trips cleanly")
+    print("  OK frontmatter round-trips cleanly")
 
     # 4. Clean up
     job_path.unlink()
     company_path.unlink()
-    print(f"  OK cleaned up sentinel files (skill note retained - has real counter)")
+    print("  OK cleaned up sentinel files (skill note retained - has real counter)")
 
-    print(f"\nPASSED: vault round-trip works end-to-end")
+    print("\nPASSED: vault round-trip works end-to-end")
     return 0
 
 

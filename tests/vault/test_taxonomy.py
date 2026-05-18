@@ -49,6 +49,23 @@ def test_normalize_returns_none_for_truly_unknown():
     assert normalize("totally-fake-skill") is None
 
 
+def test_normalize_ml_foundations():
+    """Regression: 'Large Language Models', 'LLM', 'Machine Learning', 'Deep
+    Learning', 'Reinforcement Learning' used to drop to the unknown-skills log,
+    suppressing match scores for the agentic-AI JDs the project targets."""
+    from compass.vault.taxonomy import normalize
+
+    for raw in ["Large Language Models", "Large Language Model", "LLM", "LLMs",
+                "language models", "Generative AI", "Gen AI"]:
+        assert normalize(raw) == "LLMs", f"{raw!r} should map to LLMs"
+    for raw in ["Machine Learning", "ML", "applied ML", "machine-learning"]:
+        assert normalize(raw) == "Machine Learning", f"{raw!r} should map to Machine Learning"
+    assert normalize("Deep Learning") == "Deep Learning"
+    assert normalize("Neural Networks") == "Deep Learning"
+    assert normalize("Reinforcement Learning") == "Reinforcement Learning"
+    assert normalize("RL") == "Reinforcement Learning"
+
+
 def test_normalize_does_not_resolve_demand_tokens():
     """Regression: 3-column tables (Voice, Fine-Tuning) in skill-taxonomy.md
     used to leak demand-level strings ('low', 'medium') into the synonym

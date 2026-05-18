@@ -59,6 +59,30 @@ def test_write_job_note_sanitizes_filename(temp_vault):
     assert "?" not in path.name
 
 
+def test_write_job_note_persists_full_jd_when_provided(temp_vault):
+    """Regression: pre-fix JobNotes only carried the LLM-generated summary; the
+    raw JD was discarded after extract+score. Humans then couldn't verify what
+    the agent actually saw without going back to the URL. Now the full JD is
+    appended below the summary in a `## Full JD` section."""
+    from compass.vault.writer import write_job_note
+
+    full = "Posthog is hiring an ingestion engineer.\nPrimary language: Go.\nKafka required."
+    note = _make_job_note()
+    path = write_job_note(note, full_description=full)
+    body = path.read_text()
+    assert "## Full JD" in body
+    assert "Posthog is hiring an ingestion engineer." in body
+    assert "Kafka required." in body
+
+
+def test_write_job_note_omits_full_jd_section_when_not_provided(temp_vault):
+    """Backwards-compatibility: callers that don't pass full_description still work."""
+    from compass.vault.writer import write_job_note
+
+    path = write_job_note(_make_job_note())
+    assert "## Full JD" not in path.read_text()
+
+
 def test_write_job_note_idempotent_on_duplicate_url(temp_vault):
     """Writing the same URL twice should overwrite the same file, not create a second."""
     from compass.vault.writer import write_job_note

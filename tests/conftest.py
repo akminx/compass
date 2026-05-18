@@ -19,7 +19,10 @@ os.environ.setdefault("LEARNING_VAULT_PATH", "/tmp/learning-vault-pytest-placeho
 _real_taxonomy = os.path.expanduser("~/Documents/compass-vault/_meta/skill-taxonomy.md")
 _placeholder_meta = os.path.join(os.environ["VAULT_PATH"], "_meta")
 _placeholder_taxonomy = os.path.join(_placeholder_meta, "skill-taxonomy.md")
-if os.path.exists(_real_taxonomy) and not os.path.exists(_placeholder_taxonomy):
+if os.path.exists(_real_taxonomy):
+    # Always re-copy so taxonomy edits in the source vault are picked up on the
+    # next test run. Without this, the lru_cached normalize() returns stale data
+    # against an old copy and edits to the taxonomy aren't testable.
     os.makedirs(_placeholder_meta, exist_ok=True)
     import shutil as _shutil
 

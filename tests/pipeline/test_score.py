@@ -180,3 +180,72 @@ async def test_score_node_resolves_matched_missing_overlap(monkeypatch, temp_vau
         result["score_result"].missing_skills
     )
     assert overlap == set()
+
+
+async def test_score_node_retries_on_truncated_reasoning(monkeypatch, temp_vault):
+    """Regression: Gemini Flash occasionally streams a truncated reasoning string
+    (e.g. ending mid-clause at 'entirely outside the candidate'). The first call
+    returns junk, _score_with_retry catches it and runs once more."""
+    from compass.pipeline.nodes import score
+
+    call_count = {"n": 0}
+
+    async def flaky_score(req, profile_text):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return JobScore(
+                score=0.0,
+                reasoning="entirely outside the candidate",  # no trailing punctuation
+                matched_skills=[],
+                missing_skills=[],
+                tailoring_notes="",
+            )
+        return JobScore(
+            score=0.0,
+            reasoning="This role is entirely outside the candidate's domain.",
+            matched_skills=[],
+            missing_skills=[],
+            tailoring_notes="",
+        )
+
+    monkeypatch.setattr(score, "_score", flaky_score)
+    req = JobRequirements(
+        required_skills=[],
+        nice_to_have_skills=[],
+        years_experience=None,
+        seniority="unknown",
+        remote_policy="unknown",
+        summary="Accounting role.",
+    )
+    result = await score.score_node(_state(req))
+    assert call_count["n"] == 2
+    assert result["score_result"].reasoning.endswith(".")
+
+
+async def test_score_node_no_retry_on_complete_reasoning(monkeypatch, temp_vault):
+    """Don't burn a second LLM call when the first response is well-formed."""
+    from compass.pipeline.nodes import score
+
+    call_count = {"n": 0}
+
+    async def good_score(req, profile_text):
+        call_count["n"] += 1
+        return JobScore(
+            score=4.0,
+            reasoning="Strong overlap on Python and LangGraph evidence.",
+            matched_skills=["Python"],
+            missing_skills=[],
+            tailoring_notes="",
+        )
+
+    monkeypatch.setattr(score, "_score", good_score)
+    req = JobRequirements(
+        required_skills=["Python"],
+        nice_to_have_skills=[],
+        years_experience=2,
+        seniority="mid",
+        remote_policy="remote",
+        summary="...",
+    )
+    await score.score_node(_state(req))
+    assert call_count["n"] == 1

@@ -78,13 +78,16 @@ def _to_rawjob(slug: str, raw: dict) -> RawJob | None:
             else None
         )
         salary_min, salary_max = _parse_compensation(comp)
+        # Most boards use `location`; a few legacy responses use `locationName`.
+        # Empty string means "field present but null" — coerce to None.
+        location = (raw.get("location") or raw.get("locationName") or "").strip() or None
         return RawJob(
             company=slug,
             title=raw["title"],
             url=raw["jobUrl"],
             source="ashby",
-            location=raw.get("locationName") or None,
-            remote=None,
+            location=location,
+            remote=bool(raw.get("isRemote")) if "isRemote" in raw else None,
             salary_min=salary_min,
             salary_max=salary_max,
             description=description,
