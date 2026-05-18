@@ -2,23 +2,77 @@
 Lever public API scraper.
 
 Endpoint: GET https://api.lever.co/v0/postings/{company}?mode=json
-No authentication required — fully public.
-
-Usage:
-    jobs = await scrape_lever("databricks")
-    jobs = await scrape_lever_many(["databricks", "anthropic"])
+No authentication required.
 """
+from __future__ import annotations
+
+import asyncio
+import logging
+from datetime import date, datetime
+
 import httpx
+
 from compass.pipeline.state import RawJob
 
+logger = logging.getLogger(__name__)
+
 LEVER_BASE = "https://api.lever.co/v0/postings"
+_REQUEST_TIMEOUT = 20.0
+_USER_AGENT = "compass-job-scraper/0.1"
+
+
+def _ms_to_date(ms: int | None) -> date | None:
+    if ms is None:
+        return None
+    try:
+        return datetime.fromtimestamp(ms / 1000).date()
+    except (TypeError, ValueError, OSError):
+        return None
+
+
+def _to_rawjob(company: str, raw: dict) -> RawJob | None:
+    try:
+        categories = raw.get("categories") or {}
+        return RawJob(
+            company=company,
+            title=raw["text"],
+            url=raw["hostedUrl"],
+            source="lever",
+            location=categories.get("location") or None,
+            remote=None,
+            salary_min=None,
+            salary_max=None,
+            description=raw.get("descriptionPlain", ""),
+            date_posted=_ms_to_date(raw.get("createdAt")),
+        )
+    except (KeyError, TypeError) as e:
+        logger.warning("lever: malformed posting skipped: %s", e)
+        return None
 
 
 async def scrape_lever(company: str) -> list[RawJob]:
-    """Scrape open jobs from a Lever company board."""
-    raise NotImplementedError("scrape_lever not yet implemented")
+    """Scrape all open postings from a Lever company."""
+    url = f"{LEVER_BASE}/{company}?mode=json"
+    try:
+        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT, headers={"User-Agent": _USER_AGENT}) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+    except (httpx.HTTPError, ValueError) as e:
+        logger.warning("lever %s: %s", company, e)
+        return []
+    if not isinstance(data, list):
+        logger.warning("lever %s: unexpected payload type %s", company, type(data).__name__)
+        return []
+    return [j for j in (_to_rawjob(company, raw) for raw in data) if j is not None]
 
 
 async def scrape_lever_many(companies: list[str]) -> list[RawJob]:
-    """Scrape multiple Lever boards concurrently."""
-    raise NotImplementedError("scrape_lever_many not yet implemented")
+    if not companies:
+        return []
+    results = await asyncio.gather(*[scrape_lever(c) for c in companies], return_exceptions=True)
+    out: list[RawJob] = []
+    for r in results:
+        if isinstance(r, list):
+            out.extend(r)
+    return out
