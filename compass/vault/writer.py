@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 import frontmatter
 
 from compass.config import AGENT_LOG_PATH, VAULT_PATH
-from compass.vault.schemas import CompanyNote, JobNote, SkillCategory, SkillNote
+from compass.vault.schemas import ApplicationNote, CompanyNote, JobNote, SkillCategory, SkillNote
 from compass.vault.taxonomy import category_for
 
 if TYPE_CHECKING:
@@ -152,6 +152,50 @@ def write_company_note(note: CompanyNote) -> Path:
     post.metadata = _to_metadata(note)
     path.write_text(frontmatter.dumps(post) + "\n", encoding="utf-8")
     append_agent_log(f"vault_write company {note.company} roles_seen={note.roles_seen}")
+    return path
+
+
+def _application_filename(note: ApplicationNote) -> str:
+    """Filename includes a short hash of job_ref so applying to two different
+    postings at one company on the same day produces two separate files.
+    Mirrors the JobNote-filename strategy from bug #11 in Phase 0."""
+    job_ref_hash = hashlib.sha1(note.job_ref.encode("utf-8")).hexdigest()[:8]
+    return (
+        f"{note.applied_date.isoformat()}"
+        f"-{_safe_segment(note.company)}"
+        f"-{_safe_segment(note.title)}"
+        f"-{job_ref_hash}.md"
+    )
+
+
+def write_application_note(note: ApplicationNote) -> Path:
+    """Write or update an application note. Idempotent on (company, title, applied_date, job_ref).
+
+    Re-running with the same identity overwrites the file in place; downstream
+    callers use this to record status transitions without duplicating notes.
+    Two different postings at the same company on the same day produce distinct
+    files because the filename includes a hash of job_ref.
+    """
+    apps_dir = VAULT_PATH / "applications"
+    apps_dir.mkdir(parents=True, exist_ok=True)
+    path = apps_dir / _application_filename(note)
+
+    body = f"# {note.company} — {note.title}\n\n"
+    body += f"Applied: {note.applied_date.isoformat()}\n"
+    body += f"Status: {note.status}\n"
+    if note.next_action:
+        body += f"\n**Next action:** {note.next_action}"
+        if note.next_action_date:
+            body += f" (by {note.next_action_date.isoformat()})"
+        body += "\n"
+
+    post = frontmatter.Post(content=body)
+    post.metadata = _to_metadata(note)
+    path.write_text(frontmatter.dumps(post) + "\n", encoding="utf-8")
+    append_agent_log(
+        f"vault_write application {note.company} {note.title} "
+        f"applied={note.applied_date} status={note.status}"
+    )
     return path
 
 
