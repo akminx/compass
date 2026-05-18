@@ -36,6 +36,8 @@ def _state(
             missing_skills=[s for s in skills_required if s not in skills_matched],
             tailoring_notes="lead with MCP",
         ),
+        "in_scope": True,
+        "role_family": "agent-engineer",
         "human_approved": True,
         "human_feedback": None,
         "tailored_paragraph": None,
@@ -107,33 +109,11 @@ async def test_vault_write_node_persists_tailored_paragraph(temp_vault):
     assert loaded.metadata["tailored_paragraph"] == "Lead with your Cisco MCP server work."
 
 
-async def test_vault_write_node_skips_below_threshold(temp_vault, monkeypatch):
-    """Regression: SCORE_THRESHOLD is documented in .env as gating vault writes.
-    Pre-fix the threshold was only used by hitl_node, so sales/PM/designer roles
-    scoring <3.5 still got written and cluttered the daily dashboard."""
-    import compass.pipeline.nodes.vault_write as vw
-
-    monkeypatch.setattr(vw, "SCORE_THRESHOLD", 3.5)
-    result = await vw.vault_write_node(_state(["MCP"], [], score=2.0))
-    assert result["vault_written"] is False
-    assert list((temp_vault / "jobs").glob("*Sierra*.md")) == []
-
-
-async def test_vault_write_node_writes_at_or_above_threshold(temp_vault, monkeypatch):
-    import compass.pipeline.nodes.vault_write as vw
-
-    monkeypatch.setattr(vw, "SCORE_THRESHOLD", 3.5)
-    result = await vw.vault_write_node(_state(["MCP"], ["MCP"], score=3.5))
-    assert result["vault_written"] is True
-    assert len(list((temp_vault / "jobs").glob("*Sierra*.md"))) == 1
-
-
-async def test_vault_write_node_persists_full_jd_body(temp_vault, monkeypatch):
+async def test_vault_write_node_persists_full_jd_body(temp_vault):
     """vault_write_node passes job.description through to write_job_note so the
     raw JD is preserved in the JobNote body, not just the LLM summary."""
     import compass.pipeline.nodes.vault_write as vw
 
-    monkeypatch.setattr(vw, "SCORE_THRESHOLD", 0.0)
     state = _state(["MCP"], ["MCP"], score=4.2)
     state["current_job"] = state["current_job"].model_copy(
         update={"description": "VERY_DISTINCTIVE_RAW_JD_MARKER agentic engineering."}
@@ -142,3 +122,98 @@ async def test_vault_write_node_persists_full_jd_body(temp_vault, monkeypatch):
     body = next((temp_vault / "jobs").glob("*Sierra*.md")).read_text()
     assert "## Full JD" in body
     assert "VERY_DISTINCTIVE_RAW_JD_MARKER" in body
+
+
+async def test_low_score_in_scope_still_writes(temp_vault):
+    """Phase 1.A: gap_aggregator needs stretch-role data → write all in-scope JDs
+    regardless of match_score. Pre-1.A this returned vault_written=False."""
+    from compass.pipeline.nodes.vault_write import vault_write_node
+
+    state = _state(["Python"], ["Python"], score=1.5)
+    state["in_scope"] = True
+    state["role_family"] = "swe-backend"
+    result = await vault_write_node(state)
+
+    assert result["vault_written"] is True
+    assert len(list((temp_vault / "jobs").glob("*Sierra*.md"))) == 1
+
+
+async def test_role_family_threaded_to_jobnote(temp_vault):
+    """role_family from state lands in JobNote frontmatter."""
+    from compass.pipeline.nodes.vault_write import vault_write_node
+
+    state = _state(["LangGraph"], ["LangGraph"], score=4.0)
+    state["in_scope"] = True
+    state["role_family"] = "agent-engineer"
+    await vault_write_node(state)
+
+    path = next((temp_vault / "jobs").glob("*Sierra*.md"))
+    assert frontmatter.load(path).metadata["role_family"] == "agent-engineer"
+
+
+async def test_tier_resolved_from_target_companies(temp_vault):
+    """target-companies.md says Sierra=apply-now → JobNote.tier == 'apply-now'."""
+    (temp_vault / "_profile" / "target-companies.md").write_text(
+        "## Tier `apply-now`\n\n| Company | Geo |\n|---|---|\n| Sierra | SF |\n"
+    )
+    import compass.vault.target_companies as tc
+
+    tc.refresh()
+
+    from compass.pipeline.nodes.vault_write import vault_write_node
+
+    state = _state(["MCP"], ["MCP"], score=4.5)
+    state["in_scope"] = True
+    state["role_family"] = "agent-engineer"
+    await vault_write_node(state)
+
+    path = next((temp_vault / "jobs").glob("*Sierra*.md"))
+    assert frontmatter.load(path).metadata["tier"] == "apply-now"
+
+
+async def test_unknown_company_tier_remains_unknown(temp_vault):
+    """No target-companies.md entry → JobNote.tier == 'unknown'."""
+    import compass.vault.target_companies as tc
+
+    tc.refresh()
+
+    from compass.pipeline.nodes.vault_write import vault_write_node
+
+    state = _state(["MCP"], ["MCP"], score=4.5)
+    state["in_scope"] = True
+    state["role_family"] = "agent-engineer"
+    state["current_job"] = state["current_job"].model_copy(update={"company": "RandomCo"})
+    await vault_write_node(state)
+
+    path = next((temp_vault / "jobs").glob("*RandomCo*.md"))
+    assert frontmatter.load(path).metadata["tier"] == "unknown"
+
+
+async def test_human_edited_company_tier_preserved(temp_vault):
+    """Bug #15 regression: if Akash edits a CompanyNote's tier in Obsidian to
+    override what target-companies.md says, vault_write must NOT clobber that
+    edit on the next pipeline run."""
+    from compass.vault.schemas import CompanyNote
+    from compass.vault.writer import write_company_note
+
+    write_company_note(CompanyNote(company="Sierra", tier="stretch", roles_seen=3))
+
+    (temp_vault / "_profile" / "target-companies.md").write_text(
+        "## Tier `apply-now`\n\n| Company | Notes |\n|---|---|\n| Sierra | x |\n"
+    )
+    import compass.vault.target_companies as tc
+
+    tc.refresh()
+
+    from compass.pipeline.nodes.vault_write import vault_write_node
+
+    state = _state(["MCP"], ["MCP"], score=4.5)
+    state["in_scope"] = True
+    state["role_family"] = "agent-engineer"
+    await vault_write_node(state)
+
+    md = frontmatter.load(temp_vault / "companies" / "Sierra.md").metadata
+    assert md["tier"] == "stretch", "human-edited CompanyNote tier was clobbered"
+
+    job_path = next((temp_vault / "jobs").glob("*Sierra*.md"))
+    assert frontmatter.load(job_path).metadata["tier"] == "apply-now"

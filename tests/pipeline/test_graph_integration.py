@@ -120,12 +120,12 @@ async def test_run_pipeline_regenerates_gap_plan(temp_vault, mocked_llms):
     assert "generated_by: gap_aggregator" in plan_path.read_text()
 
 
-async def test_run_pipeline_skips_vault_and_tailor_when_below_threshold(monkeypatch, temp_vault):
-    """Low-score jobs are dropped: no tailor call AND no JobNote written.
-
-    The .env documents SCORE_THRESHOLD as gating vault writes — vault_write_node
-    short-circuits below threshold, so neither tailor nor the JobNote should land.
-    The pipeline-runs log still records that we processed the job.
+async def test_run_pipeline_skips_tailor_when_below_threshold_but_still_writes(
+    monkeypatch, temp_vault
+):
+    """Phase 1.A: low-score jobs are still written to vault so gap_aggregator can
+    surface stretch-role gaps. Tailor (Sonnet cost) is still skipped for low scores
+    because hitl_node auto-rejects below SCORE_THRESHOLD.
     """
     from compass.pipeline.graph import run_pipeline
     from compass.pipeline.nodes import extract, score, tailor
@@ -170,9 +170,11 @@ async def test_run_pipeline_skips_vault_and_tailor_when_below_threshold(monkeypa
         ),
     ]
     state = await run_pipeline(raw_jobs=raw_jobs)
-    assert state["jobs_written"] == 0
+    # Phase 1.A: vault write no longer gated on score — stretch-role data feeds gap_aggregator.
+    assert state["jobs_written"] == 1
+    assert len(list((temp_vault / "jobs").glob("*Sample*.md"))) == 1
+    # Tailor (Sonnet cost) is still skipped — hitl_node auto-rejects below SCORE_THRESHOLD.
     assert tailor_calls["count"] == 0
-    assert list((temp_vault / "jobs").glob("*Sample*.md")) == []
 
 
 async def test_run_pipeline_appends_to_run_log(temp_vault, mocked_llms):

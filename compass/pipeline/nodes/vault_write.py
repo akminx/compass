@@ -1,14 +1,21 @@
 """
 vault_write_node — persist a scored job to the compass vault.
 
-Writes three things:
-1. JobNote -> jobs/YYYY-MM-DD-Company-Title.md (idempotent on URL via write_job_note)
-2. Increments appears_in_jobs on each skill the JD requires (via update_skill_note)
-3. Upserts companies/Company.md (via write_company_note)
+Writes two things:
+1. JobNote -> jobs/YYYY-MM-DD-Company-Title-<hash>.md (idempotent on URL via write_job_note)
+2. Upserts companies/Company.md (via write_company_note, preserving human-edited tier)
+
+Skill counters are NOT touched here — gap_aggregator._sync_skill_counters() recomputes
+them from JobNote frontmatter at end of each run, which avoids double-counting on reruns.
 
 All skills passed downstream are already canonical (extract_node normalized them).
 This node never normalizes — if a non-canonical skill appears here, that's an
 upstream bug.
+
+Phase 1.A note: the SCORE_THRESHOLD write gate has been intentionally removed.
+Stretch-role data (low-scoring JDs) is needed by gap_aggregator to surface the
+full market skill picture. The threshold still gates tailor (Sonnet cost control)
+inside hitl_node — only the vault-write gate is gone.
 """
 
 from __future__ import annotations
@@ -17,9 +24,8 @@ import logging
 from datetime import date
 from typing import TYPE_CHECKING
 
-from compass.config import SCORE_THRESHOLD
 from compass.vault.schemas import CompanyNote, JobNote
-from compass.vault.writer import append_agent_log, write_company_note, write_job_note
+from compass.vault.writer import write_company_note, write_job_note
 
 if TYPE_CHECKING:
     from compass.pipeline.state import CompassState
@@ -47,23 +53,38 @@ async def vault_write_node(state: CompassState) -> dict:
             "errors": [*state.get("errors", []), f"vault_write_node: missing {missing}"],
         }
 
-    # Threshold gate: .env documents SCORE_THRESHOLD as "only write jobs scoring
-    # above this to vault". Without this check the vault fills with sales / PM /
-    # designer roles that score 0.0–3.0 and clutter the daily dashboard. The
-    # pipeline-runs log still records that we processed them.
-    if score.score < SCORE_THRESHOLD:
-        append_agent_log(
-            f"vault_write skipped (below threshold {SCORE_THRESHOLD}) "
-            f"{job.company} {job.title} score={score.score}"
-        )
-        logger.info(
-            "vault_write: skipping %s — %s (score=%.1f < threshold=%.1f)",
-            job.company,
-            job.title,
-            score.score,
-            SCORE_THRESHOLD,
-        )
-        return {"vault_written": False}
+    # SCORE_THRESHOLD is intentionally NOT applied here in Phase 1.A. The threshold
+    # still gates tailor (Sonnet cost control) inside hitl_node. Removing it here
+    # lets stretch-role gaps drive the master gap plan — see spec § 2.
+
+    from compass.vault.target_companies import get_tier
+
+    # JobNote.tier is a per-posting snapshot — always use the currently-resolved
+    # tier so a later edit to target-companies.md doesn't retroactively change
+    # what the snapshot said when the job was first seen.
+    company_tier = get_tier(job.company)
+
+    # CompanyNote.tier — read-before-write to preserve human edits in Obsidian.
+    # If an existing CompanyNote has a non-default tier, pass "unknown" on
+    # write_company_note so its merge logic preserves the existing tier.
+    # (writer.py only preserves when incoming.tier == "unknown".)
+    # Bug #15 (Phase 0) regression guard.
+    import frontmatter as _fm
+
+    import compass.config as _cfg
+
+    company_tier_for_write = company_tier
+    companies_dir = _cfg.VAULT_PATH / "companies"
+    if companies_dir.exists():
+        for existing in companies_dir.glob("*.md"):
+            try:
+                existing_md = _fm.load(existing).metadata
+            except Exception:
+                continue
+            if existing_md.get("company") == job.company:
+                if existing_md.get("tier", "unknown") not in ("unknown", ""):
+                    company_tier_for_write = "unknown"
+                break
 
     note = JobNote(
         company=job.company,
@@ -79,6 +100,8 @@ async def vault_write_node(state: CompassState) -> dict:
         remote=("remote" if job.remote else None),
         seniority=req.seniority,
         years_required=req.years_experience,
+        role_family=state.get("role_family") or "",
+        tier=company_tier,
         skills_required=req.required_skills,
         skills_nice_to_have=req.nice_to_have_skills,
         skills_matched=score.matched_skills,
@@ -93,10 +116,7 @@ async def vault_write_node(state: CompassState) -> dict:
     # call update_skill_note here because that accumulated incorrectly on
     # job overwrites (every pipeline rerun used to inflate the counter).
 
-    # TODO(Phase 1.A): read company tier from target-companies.md instead of "unknown".
-    # `write_company_note` is idempotent, so roles_seen=1 currently never increments;
-    # Phase 1.A application-tracking will rewire this to read-merge-write properly.
-    write_company_note(CompanyNote(company=job.company, tier="unknown", roles_seen=1))
+    write_company_note(CompanyNote(company=job.company, tier=company_tier_for_write, roles_seen=1))
 
     return {
         "vault_written": True,
