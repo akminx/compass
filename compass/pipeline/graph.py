@@ -107,6 +107,8 @@ def _initial_state(job: RawJob) -> CompassState:
         "current_job": job,
         "extracted_requirements": None,
         "score_result": None,
+        "in_scope": None,
+        "role_family": None,
         "human_approved": None,
         "human_feedback": None,
         "tailored_paragraph": None,
@@ -182,6 +184,8 @@ async def run_pipeline(raw_jobs: list[RawJob] | None = None) -> CompassState:
         "jobs_processed": len(fresh),
         "jobs_written": sum(int(bool(r.get("vault_written"))) for r in results),
         "errors": [e for r in results for e in r.get("errors", [])],
+        "in_scope": None,
+        "role_family": None,
     }
 
     if aggregate["jobs_written"] > 0:

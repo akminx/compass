@@ -60,6 +60,9 @@ class CompassState(TypedDict):
     extracted_requirements: JobRequirements | None
     score_result: JobScore | None
 
+    in_scope: bool | None
+    role_family: str | None
+
     human_approved: bool | None
     human_feedback: str | None
     tailored_paragraph: str | None
