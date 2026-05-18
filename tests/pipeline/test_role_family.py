@@ -60,7 +60,7 @@ class TestKeywordClassify:
         # Regression: "auxiliary ux" must NOT trigger OUT via the " ux " substring trick.
         # "Software Engineer, Auxiliary Systems" has no IN keyword match (no backend/frontend/etc.),
         # so it is borderline (None), NOT out-of-scope (False).
-        in_scope, family = keyword_classify("Software Engineer, Auxiliary Systems")
+        in_scope, _family = keyword_classify("Software Engineer, Auxiliary Systems")
         assert in_scope is not False  # must not be wrongly classified OUT
 
     def test_standalone_ux_still_out(self):
