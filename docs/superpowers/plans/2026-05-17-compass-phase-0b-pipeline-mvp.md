@@ -4,7 +4,7 @@
 
 **Goal:** Wire LLMs into the Phase 0.A foundation. End state: `MAX_JOBS_PER_RUN=5 uv run python -m compass.pipeline.graph` runs end-to-end against real ATS data, produces ≥5 scored JobNotes in `compass-vault/jobs/`, and regenerates `master-gap-plan.md`.
 
-**Architecture:** Single-job LangGraph (extract → score → reflect → hitl → tailor → vault_write). `run_pipeline` scrapes once, builds the vault URL set once, filters dupes, then invokes the graph per job in a serial loop with bounded concurrency. Models routed per-node via `compass.llm.get_model(node)` which reads env vars at call time (not cached). HiTL remains auto-approve in 0.B (real `interrupt()` is Phase 1.B). Langfuse wiring deferred to Phase 1.B — Phase 0.B uses pydantic-ai's structured logging.
+**Architecture:** Single-job LangGraph (extract → score → reflect → hitl → tailor → vault_write). `run_pipeline` scrapes once, builds the vault URL set once, filters dupes, then invokes the graph per job in a serial loop with bounded concurrency. Models routed per-node via `compass.llm.get_model(node)` which reads env vars at call time (not cached). HiTL remains auto-approve in 0.B (real `interrupt()` is Phase 1.B). **Langfuse callback wiring lands in 0.B** (even though the public-trace URL ships in 2.B) so every real run accumulates traces from day one. A `_meta/pipeline-runs.md` log records one row per run (timestamp, processed, written, errors, duration) — forensic trail + portfolio screenshot material.
 
 **Tech Stack:** Python 3.12 · pydantic-ai 1.97 (OpenAI-compatible provider against OpenRouter) · LangGraph (single-node-at-a-time per invocation) · httpx · pytest + pytest-asyncio (no network in unit tests; live LLMs only in the final verification step).
 
@@ -12,7 +12,7 @@
 
 **Carries these Phase 0.A deferred edges forward:**
 
-1. `extract_node` normalizes every extracted skill through `taxonomy.normalize()`. Unknown skills are dropped + logged at extraction time. Downstream nodes never see raw/unknown skill strings — closes the "language" fallback edge in `update_skill_note`.
+1. `extract_node` normalizes every extracted skill through `taxonomy.normalize()`. Unknown skills are dropped from `required_skills`/`nice_to_have_skills` (so gap_aggregator doesn't count noise) BUT every unknown skill is recorded to `compass-vault/_meta/unknown-skills-log.md` (one append per skill per sighting) so the user can review weekly and decide to (a) graduate the skill to the canonical taxonomy, (b) add it as a synonym to an existing canonical, or (c) leave it as noise. Frequency aggregation across the log is left to a future helper script. Downstream nodes never see raw/unknown skill strings.
 2. `run_pipeline` builds the vault URL set **once per batch** using `list_job_notes()`. The graph never calls `job_url_exists()` per-job; that O(N) scan is gone.
 3. `compass/llm.py` reads `EXTRACT_MODEL` / `SCORE_MODEL` / `REFLECT_MODEL` / `TAILOR_MODEL` / `OPENROUTER_API_KEY` at function-call time, NOT at import. No `@lru_cache` on the resolver. Test fixtures can swap env between tests.
 4. `vault_write_node` only routes through the existing `write_job_note` (idempotent on URL) — no new file-creation paths introduced.
@@ -228,9 +228,10 @@ def test_get_model_id_missing_env_raises(monkeypatch):
 
 def test_make_agent_returns_pydantic_ai_agent(monkeypatch):
     """make_agent should construct a pydantic-ai Agent wired to OpenRouter."""
-    from compass.llm import make_agent
     from pydantic import BaseModel
     from pydantic_ai import Agent
+
+    from compass.llm import make_agent
 
     monkeypatch.setenv("EXTRACT_MODEL", "google/gemini-2.5-flash")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-stub")
@@ -240,6 +241,22 @@ def test_make_agent_returns_pydantic_ai_agent(monkeypatch):
 
     agent = make_agent("extract", output_type=Result, system_prompt="hi")
     assert isinstance(agent, Agent)
+
+
+def test_make_agent_requires_keyword_args(monkeypatch):
+    """Positional args after `node` must fail — keeps call sites explicit."""
+    from pydantic import BaseModel
+
+    from compass.llm import make_agent
+
+    monkeypatch.setenv("EXTRACT_MODEL", "google/gemini-2.5-flash")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-stub")
+
+    class Result(BaseModel):
+        answer: str
+
+    with pytest.raises(TypeError):
+        make_agent("extract", Result, "hi")  # type: ignore[misc]
 ```
 
 - [ ] **Step 2: Run to verify they fail**
@@ -265,8 +282,8 @@ production hot-reloads pick up `.env` changes after a restart only.
 from __future__ import annotations
 
 import os
-from typing import Any
 
+from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -303,9 +320,18 @@ def _get_model(node: str) -> OpenAIChatModel:
     return OpenAIChatModel(get_model_id(node), provider=provider)
 
 
-def make_agent(node: str, **agent_kwargs: Any) -> Agent:
-    """Construct a pydantic-ai Agent for a node with the routed model + provider."""
-    return Agent(_get_model(node), **agent_kwargs)
+def make_agent(
+    node: str,
+    *,
+    output_type: type[BaseModel],
+    system_prompt: str,
+) -> Agent:
+    """Construct a pydantic-ai Agent for a node with the routed model + provider.
+
+    Explicit keyword-only args (no **kwargs) so call sites are self-documenting
+    and typos surface at type-check time, not at runtime.
+    """
+    return Agent(_get_model(node), output_type=output_type, system_prompt=system_prompt)
 ```
 
 - [ ] **Step 4: Run to verify they pass**
@@ -386,15 +412,14 @@ async def test_extract_node_normalizes_known_skills(monkeypatch):
     assert req.nice_to_have_skills == ["FastAPI"]
 
 
-async def test_extract_node_drops_unknown_skills(monkeypatch, caplog):
-    """Unknown skills are dropped from the requirements and logged."""
-    import logging
+async def test_extract_node_drops_unknown_skills_but_records_them(monkeypatch, temp_vault):
+    """Unknown skills are dropped from requirements but written to the unknown-skills log."""
     from compass.pipeline.nodes import extract
 
     async def fake_extract(jd_text: str) -> JobRequirements:
         return JobRequirements(
-            required_skills=["LangGraph", "NotARealSkillXyz123"],
-            nice_to_have_skills=[],
+            required_skills=["LangGraph", "NotARealSkillXyz123", "MojoLang"],
+            nice_to_have_skills=["AlsoFake"],
             years_experience=None,
             seniority="mid",
             remote_policy="remote",
@@ -402,11 +427,19 @@ async def test_extract_node_drops_unknown_skills(monkeypatch, caplog):
         )
 
     monkeypatch.setattr(extract, "_extract", fake_extract)
-    with caplog.at_level(logging.INFO, logger="compass.pipeline.nodes.extract"):
-        result = await extract.extract_node(_state("anything"))
+    result = await extract.extract_node(_state("anything"))
 
+    # Unknown skills dropped from extracted requirements:
     assert result["extracted_requirements"].required_skills == ["LangGraph"]
-    assert any("NotARealSkillXyz123" in rec.message for rec in caplog.records)
+    assert result["extracted_requirements"].nice_to_have_skills == []
+
+    # Unknown skills recorded to log for human review:
+    log_path = temp_vault / "_meta" / "unknown-skills-log.md"
+    assert log_path.exists(), "unknown-skills-log.md should be created on first unknown skill"
+    log_text = log_path.read_text()
+    assert "NotARealSkillXyz123" in log_text
+    assert "MojoLang" in log_text
+    assert "AlsoFake" in log_text
 
 
 async def test_extract_node_with_missing_current_job_returns_error(monkeypatch):
@@ -445,7 +478,9 @@ Model: EXTRACT_MODEL (default google/gemini-2.5-flash). Routed via compass.llm.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
+from compass.config import VAULT_PATH
 from compass.llm import make_agent
 from compass.pipeline.state import CompassState, JobRequirements
 from compass.vault.taxonomy import normalize
@@ -471,23 +506,56 @@ def _build_agent():
 
 
 async def _extract(jd_text: str) -> JobRequirements:
-    """Make the LLM call. Tests monkeypatch THIS function, not the Agent."""
+    """The LLM call. Tests monkeypatch this wrapper rather than the underlying Agent."""
     agent = _build_agent()
     result = await agent.run(jd_text)
     return result.output
 
 
-def _normalize_skill_list(skills: list[str]) -> list[str]:
-    """Map each raw skill to canonical; drop + log unknowns."""
+def _normalize_skill_list(skills: list[str], unknown_sink: list[str] | None = None) -> list[str]:
+    """Map each raw skill to canonical; drop unknowns but record them for later review.
+
+    Unknown skills are appended to `unknown_sink` (if provided) so the caller can
+    persist them to the unknown-skills log for weekly review.
+    """
     out: list[str] = []
     for raw in skills:
         canon = normalize(raw)
         if canon is None:
-            logger.info("extract: dropping unknown skill %r (not in canonical taxonomy)", raw)
+            logger.info("extract: unknown skill %r (not in canonical taxonomy)", raw)
+            if unknown_sink is not None:
+                unknown_sink.append(raw)
             continue
         if canon not in out:
             out.append(canon)
     return out
+
+
+def _record_unknown_skills(skills: list[str], job_url: str) -> None:
+    """Append seen unknown skills to compass-vault/_meta/unknown-skills-log.md.
+
+    Format is a plain markdown log so the user can scan it weekly and decide
+    whether to (a) graduate to canonical, (b) add as a synonym, (c) ignore.
+    A separate helper script can aggregate frequencies — out of scope for 0.B.
+    """
+    if not skills:
+        return
+    log_path = VAULT_PATH / "_meta" / "unknown-skills-log.md"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    # Create with header on first write
+    if not log_path.exists():
+        log_path.write_text(
+            "# Unknown Skills Log\n\n"
+            "Skills seen in scraped JDs that don't match a canonical entry in "
+            "`_meta/skill-taxonomy.md`. Review weekly; either add to canonical, "
+            "add as a synonym to an existing canonical, or ignore.\n\n"
+            "Format: `[ISO timestamp] skill_name (from job_url)`\n\n---\n\n",
+            encoding="utf-8",
+        )
+    now = datetime.now().isoformat(timespec="seconds")
+    with log_path.open("a", encoding="utf-8") as f:
+        for skill in skills:
+            f.write(f"[{now}] {skill}  (from {job_url})\n")
 
 
 async def extract_node(state: CompassState) -> dict:
@@ -508,14 +576,17 @@ async def extract_node(state: CompassState) -> dict:
             "errors": [*state.get("errors", []), f"extract_node: {e}"],
         }
 
+    unknown: list[str] = []
     normalized = JobRequirements(
-        required_skills=_normalize_skill_list(raw_req.required_skills),
-        nice_to_have_skills=_normalize_skill_list(raw_req.nice_to_have_skills),
+        required_skills=_normalize_skill_list(raw_req.required_skills, unknown),
+        nice_to_have_skills=_normalize_skill_list(raw_req.nice_to_have_skills, unknown),
         years_experience=raw_req.years_experience,
         seniority=raw_req.seniority,
         remote_policy=raw_req.remote_policy,
         summary=raw_req.summary,
     )
+    if unknown:
+        _record_unknown_skills(unknown, job.url)
     return {"extracted_requirements": normalized}
 ```
 
@@ -679,8 +750,8 @@ def _build_agent():
 
 def _format_prompt(req: JobRequirements, profile_text: str) -> str:
     return (
-        f"CANDIDATE PROFILE\n{'=' * 60}\n{profile_text}\n\n"
-        f"JOB REQUIREMENTS\n{'=' * 60}\n"
+        f"# CANDIDATE PROFILE\n{profile_text}\n\n"
+        f"# JOB REQUIREMENTS\n"
         f"required: {', '.join(req.required_skills) or '(none)'}\n"
         f"nice-to-have: {', '.join(req.nice_to_have_skills) or '(none)'}\n"
         f"years_experience: {req.years_experience}\n"
@@ -691,7 +762,7 @@ def _format_prompt(req: JobRequirements, profile_text: str) -> str:
 
 
 async def _score(req: JobRequirements, profile_text: str) -> JobScore:
-    """Make the LLM call. Tests monkeypatch THIS function."""
+    """The LLM call. Tests monkeypatch this wrapper rather than the underlying Agent."""
     agent = _build_agent()
     result = await agent.run(_format_prompt(req, profile_text))
     return result.output
@@ -863,8 +934,13 @@ def _build_agent():
     return make_agent("tailor", output_type=TailoringResult, system_prompt=_SYSTEM_PROMPT)
 
 
+# Sonnet handles long context fine, but trimming keeps tailor calls predictable in cost.
+# 6000 chars ≈ ~1500 tokens of JD body — enough signal for one paragraph of tailoring.
+_MAX_JD_CHARS_FOR_TAILOR = 6000
+
+
 async def _tailor(job_summary: str, profile_text: str, missing: list[str], matched: list[str]) -> str:
-    """LLM call. Tests monkeypatch this."""
+    """The LLM call. Tests monkeypatch this wrapper rather than the underlying Agent."""
     agent = _build_agent()
     prompt = (
         f"CANDIDATE PROFILE\n{profile_text}\n\n"
@@ -889,7 +965,7 @@ async def tailor_node(state: CompassState) -> dict:
 
     try:
         paragraph = await _tailor(
-            job.description[:1500],
+            job.description[:_MAX_JD_CHARS_FOR_TAILOR],
             profile,
             score.missing_skills,
             score.matched_skills,
@@ -1316,6 +1392,9 @@ async def vault_write_node(state: CompassState) -> dict:
     for canonical in req.required_skills:
         update_skill_note(canonical, job.url)
 
+    # TODO(Phase 1.A): read company tier from target-companies.md instead of "unknown".
+    # `write_company_note` is idempotent, so roles_seen=1 currently never increments;
+    # Phase 1.A application-tracking will rewire this to read-merge-write properly.
     write_company_note(CompanyNote(company=job.company, tier="unknown", roles_seen=1))
 
     return {
@@ -1464,6 +1543,71 @@ async def test_run_pipeline_regenerates_gap_plan(temp_vault, mocked_llms):
     plan_path = temp_vault / "study-plans" / "master-gap-plan.md"
     assert plan_path.exists()
     assert "generated_by: gap_aggregator" in plan_path.read_text()
+
+
+async def test_run_pipeline_skips_tailor_when_below_threshold(monkeypatch, temp_vault):
+    """Low-score jobs are still written but tailor must not fire — verifies graph routing."""
+    from compass.pipeline.graph import run_pipeline
+    from compass.pipeline.nodes import extract, score, tailor
+
+    tailor_calls = {"count": 0}
+
+    async def fake_extract(jd_text):
+        return JobRequirements(
+            required_skills=["MCP"], nice_to_have_skills=[],
+            years_experience=2, seniority="mid", remote_policy="hybrid",
+            summary="Build agents.",
+        )
+
+    async def fake_score(req, profile_text):
+        return JobScore(
+            score=2.0, reasoning="weak", matched_skills=[],
+            missing_skills=["MCP"], tailoring_notes="",
+        )
+
+    async def fake_tailor(*args, **kwargs):
+        tailor_calls["count"] += 1
+        return "should not run"
+
+    monkeypatch.setattr(extract, "_extract", fake_extract)
+    monkeypatch.setattr(score, "_score", fake_score)
+    monkeypatch.setattr(tailor, "_tailor", fake_tailor)
+
+    raw_jobs = [
+        RawJob(
+            company="Sample", title="Engineer",
+            url="https://example.com/low-score",
+            source="greenhouse", description="...", date_posted=date(2026, 5, 17),
+        ),
+    ]
+    state = await run_pipeline(raw_jobs=raw_jobs)
+    # Job still written for analysis (per spec: rejected jobs persist for eval data):
+    assert state["jobs_written"] == 1
+    # But tailor was skipped:
+    assert tailor_calls["count"] == 0
+    # And no tailored_paragraph on the JobNote:
+    job_files = list((temp_vault / "jobs").glob("*Sample*.md"))
+    loaded = frontmatter.load(job_files[0])
+    assert loaded.metadata.get("tailored_paragraph") is None
+
+
+async def test_run_pipeline_appends_to_run_log(temp_vault, mocked_llms):
+    """Every run_pipeline invocation appends a row to _meta/pipeline-runs.md."""
+    from compass.pipeline.graph import run_pipeline
+
+    raw_jobs = [
+        RawJob(
+            company="Sierra", title="Agent Engineer",
+            url="https://jobs.ashbyhq.com/sierra/run-log-test",
+            source="ashby", description="...", date_posted=date(2026, 5, 17),
+        ),
+    ]
+    await run_pipeline(raw_jobs=raw_jobs)
+    log_path = temp_vault / "_meta" / "pipeline-runs.md"
+    assert log_path.exists()
+    log_text = log_path.read_text()
+    assert "| Timestamp |" in log_text  # header was written
+    assert "| 1 |" in log_text  # one job processed
 ```
 
 - [ ] **Step 2: Run to verify they fail**
@@ -1492,13 +1636,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Iterable
+import time
+from datetime import datetime, timedelta
 
 import frontmatter
 from langgraph.graph import END, START, StateGraph
 
 from compass.analysis import gap_aggregator
-from compass.config import MAX_CONCURRENT_JOBS
+from compass.config import MAX_CONCURRENT_JOBS, VAULT_PATH
 from compass.pipeline.nodes.extract import extract_node
 from compass.pipeline.nodes.hitl import hitl_node
 from compass.pipeline.nodes.intake import intake_node
@@ -1544,12 +1689,17 @@ def build_graph():
 
 
 def _vault_url_set() -> set[str]:
-    """Build the set of URLs already in the vault — ONCE per batch."""
+    """Build the set of URLs already in the vault — ONCE per batch.
+
+    A malformed frontmatter file is logged (NOT silently dropped from the set).
+    Without the log, a corrupt note silently causes a duplicate write next run.
+    """
     urls: set[str] = set()
     for path in list_job_notes():
         try:
             post = frontmatter.load(path)
-        except Exception:
+        except Exception as e:
+            logger.warning("dedup: failed to parse %s — %s", path.name, e)
             continue
         url = post.metadata.get("url")
         if isinstance(url, str):
@@ -1566,7 +1716,6 @@ def _initial_state(job: RawJob) -> CompassState:
         "human_approved": None,
         "human_feedback": None,
         "tailored_paragraph": None,
-        "tailored_paragraph": None,
         "vault_written": False,
         "jobs_processed": 0,
         "jobs_written": 0,
@@ -1574,17 +1723,45 @@ def _initial_state(job: RawJob) -> CompassState:
     }
 
 
+def _langfuse_config() -> dict:
+    """Return a LangGraph config dict with the Langfuse callback if usable.
+
+    Returns {} when Langfuse env is unset or langfuse fails to import — the
+    pipeline never blocks on observability. This wires traces from Phase 0.B
+    onward so by 2.B (public-trace polish) we have history to show.
+    """
+    from compass.config import LANGFUSE_HOST, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY
+
+    if not (LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY):
+        return {}
+    try:
+        from langfuse.langchain import CallbackHandler  # noqa: PLC0415
+
+        handler = CallbackHandler(
+            host=LANGFUSE_HOST,
+            public_key=LANGFUSE_PUBLIC_KEY,
+            secret_key=LANGFUSE_SECRET_KEY,
+        )
+        return {"callbacks": [handler]}
+    except Exception as e:
+        logger.warning("langfuse: failed to init callback, continuing without traces — %s", e)
+        return {}
+
+
 async def _process_one(graph, job: RawJob, sem: asyncio.Semaphore) -> CompassState:
     async with sem:
         try:
-            return await graph.ainvoke(_initial_state(job))
+            return await graph.ainvoke(_initial_state(job), config=_langfuse_config())
         except Exception as e:
-            logger.warning("pipeline: graph crashed on %s — %s", job.url, e)
-            return {**_initial_state(job), "errors": [f"graph: {e}"]}
+            # logger.exception preserves the traceback to stderr; the string version
+            # below is still aggregated into state for the run summary.
+            logger.exception("pipeline: graph crashed on %s", job.url)
+            return {**_initial_state(job), "errors": [f"graph: {type(e).__name__}: {e}"]}
 
 
 async def run_pipeline(raw_jobs: list[RawJob] | None = None) -> CompassState:
     """Scrape (or accept) jobs, dedup, run per-job graph, regenerate gap plan."""
+    start = time.monotonic()
     if raw_jobs is None:
         raw_jobs = await _scrape_all()
 
@@ -1615,11 +1792,53 @@ async def run_pipeline(raw_jobs: list[RawJob] | None = None) -> CompassState:
     if aggregate["jobs_written"] > 0:
         gap_aggregator.regenerate(write=True)
 
+    duration_s = time.monotonic() - start
+    _append_run_log(aggregate, duration_s)
+    unknown_count = _count_unknown_skills_seen_this_run(start)
     logger.info(
-        "pipeline: processed=%d written=%d errors=%d",
-        aggregate["jobs_processed"], aggregate["jobs_written"], len(aggregate["errors"]),
+        "pipeline: processed=%d written=%d errors=%d unknown_skills_seen=%d duration=%.1fs",
+        aggregate["jobs_processed"], aggregate["jobs_written"],
+        len(aggregate["errors"]), unknown_count, duration_s,
     )
     return aggregate
+
+
+def _count_unknown_skills_seen_this_run(start_monotonic: float) -> int:
+    """Count rows appended to the unknown-skills log since `start_monotonic`.
+
+    Cheap heuristic: count lines whose timestamp is >= the run start wall-clock.
+    Used only to surface a "review me" hint to the user; not a metric for scoring.
+    """
+    log_path = VAULT_PATH / "_meta" / "unknown-skills-log.md"
+    if not log_path.exists():
+        return 0
+    # Convert monotonic start to wall-clock approximation
+    approx_wall = datetime.now() - timedelta(seconds=time.monotonic() - start_monotonic)
+    cutoff = approx_wall.isoformat(timespec="seconds")
+    return sum(
+        1 for line in log_path.read_text(encoding="utf-8").splitlines()
+        if line.startswith("[") and line[1:20] >= cutoff[:19]
+    )
+
+
+def _append_run_log(state: CompassState, duration_s: float) -> None:
+    """Append one row per run to `_meta/pipeline-runs.md` — forensic trail + portfolio artifact."""
+    log_path = VAULT_PATH / "_meta" / "pipeline-runs.md"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    if not log_path.exists():
+        log_path.write_text(
+            "# Pipeline Run Log\n\n"
+            "| Timestamp | Processed | Written | Errors | Duration |\n"
+            "|---|---|---|---|---|\n",
+            encoding="utf-8",
+        )
+    ts = datetime.now().isoformat(timespec="seconds")
+    row = (
+        f"| {ts} | {state['jobs_processed']} | {state['jobs_written']} | "
+        f"{len(state['errors'])} | {duration_s:.1f}s |\n"
+    )
+    with log_path.open("a", encoding="utf-8") as f:
+        f.write(row)
 
 
 async def _scrape_all() -> list[RawJob]:
@@ -1782,7 +2001,7 @@ If all six are checked, Phase 0.B is done.
 | Regen gap plan only | `uv run python -m compass.analysis.gap_aggregator` |
 | Ruff + format | `uv run ruff check compass tests && uv run ruff format compass tests` |
 
-**Total expected LoC:** ~600 net new across 14 files (8 production + 6 test).
+**Total expected LoC:** ~750 net new across 14 files (8 production + 6 test). Increase from initial 600 LoC budget reflects the audit additions: Langfuse callback wiring, `_meta/pipeline-runs.md` log, unknown-skills review log, below-threshold integration test.
 
 **If a step fails:** stop, read the error, fix the smallest thing that addresses it, re-run. Do NOT modify tests to make them pass — that's a red flag the implementation is wrong, not the test.
 
@@ -1792,9 +2011,31 @@ If all six are checked, Phase 0.B is done.
 
 | Edge | How this plan handles it |
 |---|---|
-| `update_skill_note` "language" fallback for unknown skills | `extract_node._normalize_skill_list()` drops unknown skills before they reach `vault_write_node` — `update_skill_note` only sees canonical names |
-| O(N) URL-dedup scan per write | `run_pipeline._vault_url_set()` builds the set ONCE; `write_job_note`'s internal dedup loop now only fires on actual re-writes (rare) |
+| `update_skill_note` "language" fallback for unknown skills | `extract_node._normalize_skill_list()` drops unknown skills from requirements BUT records each to `_meta/unknown-skills-log.md` so the user can review and graduate/synonymize/ignore weekly |
+| O(N) URL-dedup scan per write | `run_pipeline._vault_url_set()` builds the set ONCE; logs warnings on malformed frontmatter instead of silent skip |
 | `taxonomy.py @lru_cache` brittleness | `compass/llm.py` does NOT cache — reads `EXTRACT_MODEL` / `SCORE_MODEL` / `OPENROUTER_API_KEY` at every `get_model_id()` / `_get_model()` call |
 | `_safe_segment` collisions | No new file-creation paths added — `vault_write_node` only calls `write_job_note` (idempotent on URL) + `update_skill_note` (idempotent on canonical name) + `write_company_note` (idempotent on company) |
 | In-graph fan-out vs external loop | `run_pipeline` loops over fresh jobs externally with `asyncio.Semaphore` for bounded concurrency; graph stays single-job |
 | HiTL auto-approve | `hitl_node` docstring is explicit; Phase 1.B will add real `interrupt()` + `AsyncSqliteSaver` |
+
+## Audit-pass additions (Phase 0.B-internal improvements)
+
+| Addition | Where | Rationale |
+|---|---|---|
+| Langfuse callback wiring with graceful degradation | `compass/pipeline/graph._langfuse_config()` | Resolves CLAUDE.md drift; accumulates trace history from day one for the 2.B public-trace polish |
+| `_meta/pipeline-runs.md` log | `compass/pipeline/graph._append_run_log()` | Forensic trail for Modal cron debugging + portfolio screenshot of "history of runs" |
+| `_meta/unknown-skills-log.md` (review queue) | `compass/pipeline/nodes/extract._record_unknown_skills()` | Don't lose JD-market signal about taxonomy gaps |
+| Below-threshold integration test | `tests/pipeline/test_graph_integration.py` | Verifies conditional `hitl → vault_write` edge (was only tested at unit level before) |
+| Explicit `make_agent` signature (no `**kwargs`) | `compass/llm.make_agent` | Typos surface at type-check time; reads as deliberate API not AI-generated |
+| `logger.exception` in `_process_one` | `compass/pipeline/graph._process_one` | Preserves tracebacks instead of stringifying them into state |
+| `_MAX_JD_CHARS_FOR_TAILOR = 6000` constant | `compass/pipeline/nodes/tailor.py` | Named magic number with rationale |
+| `# TODO(Phase 1.A)` on company `tier="unknown"` | `compass/pipeline/nodes/vault_write.py` | Explicit deferred-work marker so a code reader doesn't think it's broken |
+
+## Future-debt to track for Phase 1.A / 1.B
+
+| Issue | When it bites | Where to fix |
+|---|---|---|
+| `update_skill_note` re-reads + re-writes every skill file per increment (~500 file ops per 50-job batch) | Becomes hot at >100 jobs/run | Phase 1.A: batch increments before writing |
+| `_vault_url_set` parses every job file's frontmatter each run | Becomes the long-pole at >1000 vault notes | Phase 1.B: replace with a SQLite index alongside the HiTL state store |
+| Single-job graph + external loop will need `AsyncSqliteSaver` + per-job `thread_id` | When real HiTL `interrupt()` is wired | Phase 1.B per spec |
+| Company `tier=unknown` and `roles_seen=1` never update | Cosmetic noise in the vault | Phase 1.A application-tracking refactor (already TODO-tagged) |
