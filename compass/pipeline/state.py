@@ -2,9 +2,16 @@
 Compass pipeline state schema.
 All nodes receive the full state and return partial updates — only return keys you changed.
 """
-from typing import TypedDict, Optional
-from pydantic import BaseModel
+from __future__ import annotations
+
 from datetime import date
+from typing import Literal, TypedDict
+
+from pydantic import BaseModel
+
+Source = Literal["greenhouse", "lever", "ashby", "jobspy", "smoke", "manual"]
+Seniority = Literal["junior", "mid", "senior", "staff", "unknown"]
+RemotePolicy = Literal["remote", "hybrid", "onsite", "unknown"]
 
 
 class RawJob(BaseModel):
@@ -12,23 +19,23 @@ class RawJob(BaseModel):
     company: str
     title: str
     url: str
-    source: str  # greenhouse | lever | ashby | jobspy
-    location: Optional[str] = None
-    remote: Optional[bool] = None
-    salary_min: Optional[int] = None
-    salary_max: Optional[int] = None
+    source: Source
+    location: str | None = None
+    remote: bool | None = None
+    salary_min: int | None = None
+    salary_max: int | None = None
     description: str
-    date_posted: Optional[date] = None
+    date_posted: date | None = None
 
 
 class JobRequirements(BaseModel):
     """Structured extraction from a job description."""
     required_skills: list[str]
     nice_to_have_skills: list[str]
-    years_experience: Optional[int] = None
-    seniority: str  # junior | mid | senior | staff | unknown
-    remote_policy: str  # remote | hybrid | onsite | unknown
-    summary: str  # one paragraph
+    years_experience: int | None = None
+    seniority: Seniority
+    remote_policy: RemotePolicy
+    summary: str
 
 
 class JobScore(BaseModel):
@@ -42,22 +49,17 @@ class JobScore(BaseModel):
 
 class CompassState(TypedDict):
     """Full pipeline state passed between all LangGraph nodes."""
-    # Input
     raw_jobs: list[RawJob]
 
-    # Per-job processing (one job at a time)
-    current_job: Optional[RawJob]
-    extracted_requirements: Optional[JobRequirements]
-    score_result: Optional[JobScore]
+    current_job: RawJob | None
+    extracted_requirements: JobRequirements | None
+    score_result: JobScore | None
 
-    # Human-in-the-loop
-    human_approved: Optional[bool]
-    human_feedback: Optional[str]
+    human_approved: bool | None
+    human_feedback: str | None
 
-    # Output tracking
     vault_written: bool
     jobs_processed: int
     jobs_written: int
 
-    # Error accumulation
     errors: list[str]

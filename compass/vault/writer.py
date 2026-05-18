@@ -8,14 +8,19 @@ Rules:
 """
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
 
 import frontmatter
+from pydantic import BaseModel
 
 from compass.config import AGENT_LOG_PATH, VAULT_PATH
-from compass.vault.schemas import CompanyNote, JobNote, SkillNote
+from compass.vault.schemas import CompanyNote, JobNote, SkillCategory, SkillNote
+from compass.vault.taxonomy import category_for
+
+logger = logging.getLogger(__name__)
 
 
 _FILENAME_BAD = re.compile(r"[^\w\-.]+")
@@ -29,7 +34,7 @@ def _job_filename(note: JobNote) -> str:
     return f"{note.date_found.isoformat()}-{_safe_segment(note.company)}-{_safe_segment(note.title)}.md"
 
 
-def _to_metadata(model) -> dict:
+def _to_metadata(model: BaseModel) -> dict:
     """Serialize a Pydantic model to a frontmatter-safe dict.
 
     JSON mode converts dates/datetimes/enums to strings; everything else is YAML-friendly.
@@ -71,11 +76,13 @@ def update_skill_note(canonical_skill: str, job_url: str) -> Path:
         post = frontmatter.load(path)
         post.metadata["appears_in_jobs"] = int(post.metadata.get("appears_in_jobs", 0)) + 1
     else:
-        skill = SkillNote(
-            skill=canonical_skill,
-            category="agent-framework",  # placeholder; gap_aggregator/assessor can update later
-            appears_in_jobs=1,
-        )
+        category: SkillCategory = category_for(canonical_skill) or "language"  # type: ignore[assignment]
+        if category_for(canonical_skill) is None:
+            logger.warning(
+                "update_skill_note: %r not in canonical taxonomy; defaulting category=language",
+                canonical_skill,
+            )
+        skill = SkillNote(skill=canonical_skill, category=category, appears_in_jobs=1)
         post = frontmatter.Post(content=f"# {canonical_skill}\n")
         post.metadata = _to_metadata(skill)
 

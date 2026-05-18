@@ -55,8 +55,14 @@ def _norm_key(s: str) -> str:
 
 @lru_cache(maxsize=1)
 def load_taxonomy(path: Path | None = None) -> dict[str, CanonicalSkill]:
-    """Parse the taxonomy markdown into a {canonical_name: CanonicalSkill} dict."""
+    """Parse the taxonomy markdown into a {canonical_name: CanonicalSkill} dict.
+
+    Returns an empty dict if the taxonomy file is missing — callers should
+    handle a missing canonical gracefully (e.g., `category_for()` returning None).
+    """
     path = path or TAXONOMY_PATH
+    if not path.exists():
+        return {}
     text = path.read_text(encoding="utf-8")
 
     result: dict[str, CanonicalSkill] = {}

@@ -2,9 +2,12 @@
 Vault frontmatter schemas — Pydantic models for every note type.
 Always validate against these before writing to the vault.
 """
-from pydantic import BaseModel, Field
-from typing import Optional, Literal
+from __future__ import annotations
+
 from datetime import date, datetime
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 Tier = Literal["apply-now", "6-month", "stretch", "skip", "unknown"]
@@ -15,23 +18,24 @@ SkillCategory = Literal[
     "multi-agent", "hitl", "production", "cloud", "deployment",
     "browser-use", "voice", "fine-tuning",
 ]
+Source = Literal["greenhouse", "lever", "ashby", "jobspy", "smoke", "manual"]
 
 
 class JobNote(BaseModel):
     company: str
     title: str
     url: str
-    source: str
+    source: Source
     date_found: date
     status: str = "new"
     match_score: float
     score_reasoning: str = ""
-    salary_min: Optional[int] = None
-    salary_max: Optional[int] = None
-    location: Optional[str] = None
-    remote: Optional[str] = None
+    salary_min: int | None = None
+    salary_max: int | None = None
+    location: str | None = None
+    remote: str | None = None
     seniority: str = "unknown"
-    years_required: Optional[int] = None
+    years_required: int | None = None
     role_family: str = ""
     tier: Tier = "unknown"
     tags: list[str] = []
@@ -40,18 +44,17 @@ class JobNote(BaseModel):
     skills_matched: list[str] = []
     skills_missing: list[str] = []
     jd_summary: str = ""
-    hitl_decision: Optional[str] = None
-    hitl_at: Optional[datetime] = None
-    applied_at: Optional[datetime] = None
+    hitl_decision: str | None = None
+    hitl_at: datetime | None = None
+    applied_at: datetime | None = None
 
 
 class TierDemand(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     apply_now: int = Field(0, alias="apply-now")
     six_month: int = Field(0, alias="6-month")
     stretch: int = 0
-
-    class Config:
-        populate_by_name = True
 
 
 class SkillNote(BaseModel):
@@ -60,8 +63,8 @@ class SkillNote(BaseModel):
     category: SkillCategory
     synonyms: list[str] = []
     my_level: SkillLevel = 0
-    last_assessed: Optional[datetime] = None
-    grade_override: Optional[SkillLevel] = None
+    last_assessed: datetime | None = None
+    grade_override: SkillLevel | None = None
     appears_in_jobs: int = 0
     tier_demand: TierDemand = Field(default_factory=TierDemand)
     gap_score: float = 0.0
@@ -92,7 +95,7 @@ class ApplicationNote(BaseModel):
     status: str = "applied"
     contacts: list[str] = []
     next_action: str = ""
-    next_action_date: Optional[date] = None
+    next_action_date: date | None = None
     referral: bool = False
     tags: list[str] = []
 

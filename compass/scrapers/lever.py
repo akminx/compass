@@ -22,7 +22,9 @@ _USER_AGENT = "compass-job-scraper/0.1"
 
 
 def _ms_to_date(ms: int | None) -> date | None:
-    if ms is None:
+    """Convert a Lever createdAt (ms since epoch) to a date. Returns None for
+    null, zero, or out-of-range values."""
+    if ms is None or ms <= 0:
         return None
     try:
         return datetime.fromtimestamp(ms / 1000).date()
@@ -68,6 +70,7 @@ async def scrape_lever(company: str) -> list[RawJob]:
 
 
 async def scrape_lever_many(companies: list[str]) -> list[RawJob]:
+    """Scrape multiple Lever companies concurrently. Per-company errors are logged, not raised."""
     if not companies:
         return []
     results = await asyncio.gather(*[scrape_lever(c) for c in companies], return_exceptions=True)
@@ -75,4 +78,6 @@ async def scrape_lever_many(companies: list[str]) -> list[RawJob]:
     for r in results:
         if isinstance(r, list):
             out.extend(r)
+        else:
+            logger.warning("lever_many: unexpected exception: %s", r)
     return out
