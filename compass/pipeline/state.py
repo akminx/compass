@@ -62,6 +62,7 @@ class CompassState(TypedDict):
 
     human_approved: bool | None
     human_feedback: str | None
+    tailored_paragraph: str | None
 
     vault_written: bool
     jobs_processed: int

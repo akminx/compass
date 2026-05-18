@@ -58,6 +58,7 @@ class JobNote(BaseModel):
     skills_matched: list[str] = []
     skills_missing: list[str] = []
     jd_summary: str = ""
+    tailored_paragraph: str | None = None
     hitl_decision: str | None = None
     hitl_at: datetime | None = None
     applied_at: datetime | None = None
