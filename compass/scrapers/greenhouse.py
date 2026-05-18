@@ -49,6 +49,17 @@ def _parse_date(value: str | None) -> date | None:
 
 def _to_rawjob(board_token: str, raw: dict) -> RawJob | None:
     try:
+        description = _strip_html(raw.get("content", ""))
+        if not description:
+            # Empty content means the API contract changed (e.g. content=true
+            # dropped). Sending an empty JD downstream causes the extract LLM
+            # to hallucinate skills from the title alone — drop loudly instead.
+            logger.warning(
+                "greenhouse %s: empty content for %r — dropping (API may have changed)",
+                board_token,
+                raw.get("title", "?"),
+            )
+            return None
         return RawJob(
             company=board_token,
             title=raw["title"],
@@ -58,7 +69,7 @@ def _to_rawjob(board_token: str, raw: dict) -> RawJob | None:
             remote=None,
             salary_min=None,
             salary_max=None,
-            description=_strip_html(raw.get("content", "")),
+            description=description,
             date_posted=_parse_date(raw.get("updated_at")),
         )
     except (KeyError, TypeError) as e:
@@ -72,7 +83,10 @@ async def scrape_greenhouse(board_token: str) -> list[RawJob]:
     Returns [] on any HTTP error — never raises. Pipeline must keep running
     when one ATS source is unavailable.
     """
-    url = f"{GREENHOUSE_BASE}/{board_token}/jobs"
+    # `?content=true` is REQUIRED — without it the API returns job metadata only
+    # (no `content` field), and downstream LLM nodes silently hallucinate skills
+    # from the title alone.
+    url = f"{GREENHOUSE_BASE}/{board_token}/jobs?content=true"
     try:
         async with httpx.AsyncClient(
             timeout=_REQUEST_TIMEOUT, headers={"User-Agent": _USER_AGENT}

@@ -27,7 +27,7 @@ SAMPLE_RESPONSE = {
 
 async def test_scrape_greenhouse_returns_rawjob_list(httpx_mock):
     httpx_mock.add_response(
-        url=f"{GREENHOUSE_BASE}/sample/jobs",
+        url=f"{GREENHOUSE_BASE}/sample/jobs?content=true",
         json=SAMPLE_RESPONSE,
     )
     jobs = await scrape_greenhouse("sample")
@@ -44,7 +44,7 @@ async def test_scrape_greenhouse_returns_rawjob_list(httpx_mock):
 
 async def test_scrape_greenhouse_handles_missing_location(httpx_mock):
     httpx_mock.add_response(
-        url=f"{GREENHOUSE_BASE}/sample/jobs",
+        url=f"{GREENHOUSE_BASE}/sample/jobs?content=true",
         json={
             "jobs": [
                 {
@@ -64,7 +64,7 @@ async def test_scrape_greenhouse_handles_missing_location(httpx_mock):
 
 async def test_scrape_greenhouse_empty_board(httpx_mock):
     httpx_mock.add_response(
-        url=f"{GREENHOUSE_BASE}/sample/jobs",
+        url=f"{GREENHOUSE_BASE}/sample/jobs?content=true",
         json={"jobs": []},
     )
     jobs = await scrape_greenhouse("sample")
@@ -74,8 +74,28 @@ async def test_scrape_greenhouse_empty_board(httpx_mock):
 async def test_scrape_greenhouse_http_error_returns_empty(httpx_mock):
     """A 404 board should log and return [], not raise — pipeline must keep running."""
     httpx_mock.add_response(
-        url=f"{GREENHOUSE_BASE}/nonexistent/jobs",
+        url=f"{GREENHOUSE_BASE}/nonexistent/jobs?content=true",
         status_code=404,
     )
     jobs = await scrape_greenhouse("nonexistent")
     assert jobs == []
+
+
+async def test_scrape_greenhouse_rejects_empty_content(httpx_mock):
+    """Regression guard: silently-empty descriptions caused extract_node to
+    hallucinate skills from job titles alone. The scraper should drop jobs
+    whose content didn't come through (suggesting the API contract changed)
+    rather than send empty JDs downstream."""
+    httpx_mock.add_response(
+        url=f"{GREENHOUSE_BASE}/sample/jobs?content=true",
+        json={"jobs": [{
+            "id": 1,
+            "title": "Account Executive",
+            "absolute_url": "https://example.com/ae",
+            "location": {"name": "Remote"},
+            "updated_at": "2026-05-18T10:00:00-07:00",
+            "content": "",  # the broken state
+        }]},
+    )
+    jobs = await scrape_greenhouse("sample")
+    assert jobs == []  # empty content -> dropped, not silently passed
