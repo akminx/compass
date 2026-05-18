@@ -50,7 +50,7 @@ def _build_agent():
 async def _tailor(
     job_summary: str, profile_text: str, missing: list[str], matched: list[str]
 ) -> str:
-    """The LLM call. Tests monkeypatch this wrapper rather than the underlying Agent."""
+    # Tests patch this function; the underlying pydantic-ai Agent is harder to stub.
     agent = _build_agent()
     prompt = (
         f"CANDIDATE PROFILE\n{profile_text}\n\n"
@@ -81,7 +81,7 @@ async def tailor_node(state: CompassState) -> dict:
             score.matched_skills,
         )
     except Exception as e:
-        logger.warning("tailor_node: LLM call failed for %s — %s", job.url, e)
-        return {"errors": [*state.get("errors", []), f"tailor_node: {e}"]}
+        logger.exception("tailor_node: LLM call failed for %s", job.url)
+        return {"errors": [*state.get("errors", []), f"tailor_node: {type(e).__name__}: {e}"]}
 
     return {"tailored_paragraph": paragraph}

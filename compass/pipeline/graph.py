@@ -54,7 +54,6 @@ def _route_after_hitl(state: CompassState) -> str:
 
 
 def build_graph():
-    """Build and compile the single-job Compass graph."""
     builder = StateGraph(CompassState)
     builder.add_node("intake", intake_node)
     builder.add_node("extract", extract_node)
@@ -203,7 +202,7 @@ async def run_pipeline(raw_jobs: list[RawJob] | None = None) -> CompassState:
 
 
 def _append_run_log(state: CompassState, duration_s: float) -> None:
-    """Append one row per run to `_meta/pipeline-runs.md` — forensic trail + portfolio artifact."""
+    """Append one row per run to `_meta/pipeline-runs.md` for debugging cron failures."""
     log_path = VAULT_PATH / "_meta" / "pipeline-runs.md"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     if not log_path.exists():

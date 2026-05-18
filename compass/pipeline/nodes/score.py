@@ -64,7 +64,7 @@ def _format_prompt(req: JobRequirements, profile_text: str) -> str:
 
 
 async def _score(req: JobRequirements, profile_text: str) -> JobScore:
-    """The LLM call. Tests monkeypatch this wrapper rather than the underlying Agent."""
+    # Tests patch this function; the underlying pydantic-ai Agent is harder to stub.
     agent = _build_agent()
     result = await agent.run(_format_prompt(req, profile_text))
     return result.output
@@ -85,10 +85,10 @@ async def score_node(state: CompassState) -> dict:
     try:
         result = await _score(req, _profile_text())
     except Exception as e:
-        logger.warning("score_node: LLM call failed — %s", e)
+        logger.exception("score_node: LLM call failed")
         return {
             "score_result": None,
-            "errors": [*state.get("errors", []), f"score_node: {e}"],
+            "errors": [*state.get("errors", []), f"score_node: {type(e).__name__}: {e}"],
         }
 
     return {"score_result": _constrain_to_jd_skills(result, req)}

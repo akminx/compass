@@ -65,6 +65,7 @@ RULES:
 - For "5+ years" → years_experience=5. For "Bachelor's required" → years_experience=null.
 """
 
+
 # Gemini 2.5 Flash structured-output reliability degrades beyond ~10k input chars.
 # Trimming preserves the top of the JD (where requirements typically live) while
 # keeping calls predictable in cost and validation success rate.
@@ -86,7 +87,7 @@ def _build_agent():
 
 
 async def _extract(jd_text: str) -> JobRequirements:
-    """The LLM call. Tests monkeypatch this wrapper rather than the underlying Agent."""
+    # Tests patch this function; the underlying pydantic-ai Agent is harder to stub.
     agent = _build_agent()
     result = await agent.run(jd_text[:_MAX_JD_CHARS_FOR_EXTRACT])
     return result.output
@@ -139,7 +140,6 @@ def _record_unknown_skills(skills: list[str], job_url: str) -> None:
 
 
 async def extract_node(state: CompassState) -> dict:
-    """Extract JobRequirements from state.current_job.description."""
     job = state.get("current_job")
     if job is None:
         return {
@@ -150,10 +150,10 @@ async def extract_node(state: CompassState) -> dict:
     try:
         raw_req = await _extract(job.description)
     except Exception as e:
-        logger.warning("extract_node: LLM call failed for %s — %s", job.url, e)
+        logger.exception("extract_node: LLM call failed for %s", job.url)
         return {
             "extracted_requirements": None,
-            "errors": [*state.get("errors", []), f"extract_node: {e}"],
+            "errors": [*state.get("errors", []), f"extract_node: {type(e).__name__}: {e}"],
         }
 
     unknown: list[str] = []
