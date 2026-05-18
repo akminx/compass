@@ -231,12 +231,45 @@ The right filter is **role family** (agentic-eng vs sales/marketing/design), app
 
 ### Phase 1.A first-task ordering (do this before anything else)
 
-1. **Implement role-family gate** in a new `compass/pipeline/nodes/intake_filter.py` (or extend `intake_node`) that classifies each `RawJob.title` + JD first paragraph into one of: `agentic-eng`, `swe-adjacent`, `data/ml`, `pm`, `sales`, `marketing`, `design`, `ops`, `other`. Pre-sales / solution architecture / customer engineering are sales-adjacent. Drop everything outside an allow-list before extract_node runs.
+1. **Implement role-family gate** in a new `compass/pipeline/nodes/intake_filter.py` (or extend `intake_node`). Classifies each `RawJob.title` + JD first 500 chars into IN-SCOPE vs OUT. Runs **before** `extract_node` so out-of-scope JDs never burn an LLM call. Suggested architecture: cheap Gemini Flash classifier (one tool call per JD, ~$0.0005) with a title-keyword pre-filter for obvious cases.
 2. **Remove the `SCORE_THRESHOLD` gate from `vault_write_node`** (lines 50–66 of `compass/pipeline/nodes/vault_write.py`) — keep it only in `hitl_node` where it gates tailor-paragraph generation. Once role-family filtering removes the noise upstream, the threshold-on-write gate becomes harmful: it hides agentic-eng roles whose gaps you should be studying.
 3. **Populate `role_family`** on the JobNote (currently `''` on every note — dead field) from the gate's classification. Phase 1.A's Dataview dashboard groups by it.
 4. **Re-cleanup** the vault one more time after this change ships and re-run the pipeline so the master gap plan reflects all agentic-eng roles in the wild.
 
 Skipping step 2 means continuing to ship a gap plan that's biased toward easy wins instead of stretch targets — directly contrary to what Akash said he wants the tool to do.
+
+### Role-family scope definition (Akash, 2026-05-18)
+
+**IN-SCOPE — keep these in the vault, contribute to gap plan, eligible for tailoring:**
+
+The unifying criterion is **"engineering work that touches agentic AI or production AI systems"**. Specifically:
+
+- Software engineering: Backend / Frontend / Fullstack / Product / Platform / Mobile / Infrastructure / Founding
+- Applied AI / AI Engineer / ML Engineer / Machine Learning Engineer
+- Agent Engineer / Agentic Engineer / Agent Platform Engineer / Agent Orchestration / Agent Reliability
+- Forward Deployed Engineer / Deployed Engineer / AI Solutions Engineer **(when the JD body emphasizes technical implementation, not pre-sales)**
+- Research Engineer **(applied — building shipping systems, not pure research labs)**
+- Developer Experience / DevTools when the product is AI/agent infrastructure
+- AI Infrastructure / LLM Platform / Inference / Eval Engineer
+- Customer Engineer **(only when JD body shows real building, not sales support)**
+
+**OUT — drop at the gate, never score, never tailor:**
+
+- Sales: Account Executive, SDR, BDR, Account Manager, Enterprise Sales
+- Pre-sales: Solutions Architect (pre-sales), Sales Engineer (most), "Solution Architect (Presales)"
+- Customer Success: CSM, Customer Experience, Customer Support (even "Technical CSM" unless JD is heavy on building)
+- Product: Product Manager, Group PM, "Agent PM" **(borderline — keep only if JD explicitly says coding/prototyping is core)**
+- Conversational Designer / AI Designer / UX / Brand / Web Designer / Motion Graphics
+- Marketing / Content / Growth / Demand Gen / Lifecycle
+- Accounting / Finance / Operations / HR / People / Recruiting
+- Legal / Compliance / Trust & Safety policy-side
+- Internships (filter separately — most are out-of-scope for Akash's stage)
+
+**Borderline rule — when in doubt, classify IN and let HiTL filter:**
+
+The cost of one extra LLM extract+score (~$0.003) is far lower than the cost of silently filtering out a role Akash would have wanted to see. So the classifier should be biased toward inclusion, and the rejection prompt should require explicit evidence (job title in OUT list OR JD body shows zero engineering work) rather than the default.
+
+**Verification after implementing:** run the pipeline on `sierra,decagon,ramp,langchain,posthog,linear,gleanwork,cresta,databricks,anthropic`. Manually scan the resulting JobNotes — every one should be a role Akash would conceivably want. Any false negatives (an agentic-eng role that got dropped) is a worse bug than a false positive (a borderline role that got scored).
 
 ---
 
