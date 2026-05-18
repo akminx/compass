@@ -107,15 +107,31 @@ def update_skill_note(canonical_skill: str, job_url: str) -> Path:
 
 
 def write_company_note(note: CompanyNote) -> Path:
-    """Write or update a company note. Merges roles_seen if the file already exists."""
+    """Write or update a company note. Merges roles_seen with existing count
+    AND preserves any non-default fields the user edited in Obsidian (tier,
+    why_interesting, geo, etc.) — otherwise every pipeline run would clobber
+    human edits back to defaults."""
     companies_dir = VAULT_PATH / "companies"
     companies_dir.mkdir(parents=True, exist_ok=True)
     path = companies_dir / f"{_safe_segment(note.company)}.md"
 
     if path.exists():
-        existing = frontmatter.load(path)
-        existing_roles = int(existing.metadata.get("roles_seen", 0))
-        note = note.model_copy(update={"roles_seen": existing_roles + note.roles_seen})
+        existing = frontmatter.load(path).metadata
+        update: dict = {
+            "roles_seen": int(existing.get("roles_seen", 0)) + note.roles_seen,
+        }
+        # Preserve human-set fields when the incoming note has the default value.
+        if note.tier == "unknown" and existing.get("tier", "unknown") != "unknown":
+            update["tier"] = existing["tier"]
+        if not note.why_interesting and existing.get("why_interesting"):
+            update["why_interesting"] = existing["why_interesting"]
+        if not note.geo and existing.get("geo"):
+            update["geo"] = existing["geo"]
+        if not note.known_stack and existing.get("known_stack"):
+            update["known_stack"] = existing["known_stack"]
+        if not note.interview_format_notes and existing.get("interview_format_notes"):
+            update["interview_format_notes"] = existing["interview_format_notes"]
+        note = note.model_copy(update=update)
 
     post = frontmatter.Post(content=f"# {note.company}\n\n{note.why_interesting}\n")
     post.metadata = _to_metadata(note)

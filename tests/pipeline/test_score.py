@@ -145,3 +145,38 @@ async def test_score_node_keeps_only_jd_skills(monkeypatch, temp_vault):
     result = await score.score_node(_state(req))
     assert set(result["score_result"].matched_skills) == {"MCP", "Python"}
     assert set(result["score_result"].missing_skills) == {"LangGraph"}
+
+
+async def test_score_node_resolves_matched_missing_overlap(monkeypatch, temp_vault):
+    """Regression: when the LLM puts the same skill in both matched and missing
+    (Gemini Flash does this on borderline skills), the constraint filter should
+    keep it in matched and drop it from missing — otherwise gap_aggregator
+    would count a matched skill as a gap."""
+    from compass.pipeline.nodes import score
+
+    async def overlapping_score(req, profile_text):
+        return JobScore(
+            score=4.0,
+            reasoning="...",
+            matched_skills=["MCP", "Python"],
+            missing_skills=["Python", "LangGraph"],  # Python is in BOTH
+            tailoring_notes="",
+        )
+
+    monkeypatch.setattr(score, "_score", overlapping_score)
+    req = JobRequirements(
+        required_skills=["MCP", "Python", "LangGraph"],
+        nice_to_have_skills=[],
+        years_experience=2,
+        seniority="mid",
+        remote_policy="remote",
+        summary="...",
+    )
+    result = await score.score_node(_state(req))
+    assert set(result["score_result"].matched_skills) == {"MCP", "Python"}
+    assert set(result["score_result"].missing_skills) == {"LangGraph"}
+    # Python must NOT be in both lists:
+    overlap = set(result["score_result"].matched_skills) & set(
+        result["score_result"].missing_skills
+    )
+    assert overlap == set()

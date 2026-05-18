@@ -191,16 +191,11 @@ def list_canonical_skills() -> list[str]:
 # ── Tailoring / application ──────────────────────────────────────────────────
 
 
-@mcp.tool()
-async def tailor_resume(job_id: str) -> dict:
-    """Produce tailoring suggestions for a specific job using the candidate profile + role-clarifications."""
-    return {"todo": "wire to tailor_node — see compass/pipeline/nodes/tailor.py"}
-
-
-@mcp.tool()
-def add_application(job_id: str) -> dict:
-    """Create an applications/ note from a job note. Sets status=applied."""
-    return {"todo": "wire to vault writer with application template"}
+# NOTE: tailor_resume + add_application MCP tools ship in Phase 1.A
+# (Application Tracking + dashboard). Not exposed yet — returning stub
+# responses would lie to callers about what works. The tailor_node fires
+# in-pipeline today for high-score jobs; manual MCP invocation arrives
+# alongside the application-tracking workflow.
 
 
 if __name__ == "__main__":

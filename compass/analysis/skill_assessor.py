@@ -26,11 +26,9 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 import yaml
-from pydantic_ai import Agent
 
 from compass.config import (
     AGENT_LOG_PATH,
-    ASSESSOR_MODEL,
     SKILL_INVENTORY_PATH,
     VAULT_PATH,
 )
@@ -40,6 +38,8 @@ from compass.vault.taxonomy import all_canonicals
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from pydantic_ai import Agent
 
 SKEPTICAL_GRADER_SYSTEM_PROMPT = """\
 You are a senior hiring manager who has interviewed 500 engineering candidates for
@@ -104,18 +104,20 @@ def _log(line: str) -> None:
 
 # ── agent ────────────────────────────────────────────────────────────────────
 
-_assessor: Agent[None, SkillAssessment] | None = None
 
+def _get_agent() -> Agent:
+    """Build the assessor agent via the shared OpenRouter factory.
 
-def _get_agent() -> Agent[None, SkillAssessment]:
-    global _assessor
-    if _assessor is None:
-        _assessor = Agent(
-            model=ASSESSOR_MODEL,
-            result_type=SkillAssessment,
-            system_prompt=SKEPTICAL_GRADER_SYSTEM_PROMPT,
-        )
-    return _assessor
+    Reads ASSESSOR_MODEL at call time (matches the no-cache contract in
+    compass.llm — env changes pick up without restart).
+    """
+    from compass.llm import make_agent
+
+    return make_agent(
+        "assessor",
+        output_type=SkillAssessment,
+        system_prompt=SKEPTICAL_GRADER_SYSTEM_PROMPT,
+    )
 
 
 def _format_evidence_block(artifacts: list[EvidenceArtifact]) -> str:
@@ -167,7 +169,7 @@ async def assess_one(canonical: str) -> SkillAssessment | None:
     )
 
     result = await _get_agent().run(prompt)
-    assessment: SkillAssessment = result.data
+    assessment: SkillAssessment = result.output
 
     if abs(assessment.proposed_level - current_level) >= 2:
         assessment.requires_hitl = True

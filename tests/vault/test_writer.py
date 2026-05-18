@@ -160,3 +160,32 @@ def test_job_filenames_unique_per_url_even_with_identical_titles(temp_vault):
     assert p_a.exists()
     assert p_b.exists()
     assert len(list((temp_vault / "jobs").glob("*.md"))) == 2
+
+
+def test_write_company_note_preserves_human_edits(temp_vault):
+    """Regression: every pipeline run used to clobber companies/Co.md fields
+    (tier, geo, why_interesting) back to defaults, destroying human edits
+    made in Obsidian. Now the writer reads existing values and preserves
+    non-default fields when the incoming note has defaults."""
+    from compass.vault.schemas import CompanyNote
+    from compass.vault.writer import write_company_note
+
+    # First write: pipeline-default (unknown tier, empty fields)
+    write_company_note(CompanyNote(company="Sierra", tier="unknown", roles_seen=1))
+
+    # User edits the file in Obsidian to set tier + a why_interesting note
+    company_path = temp_vault / "companies" / "Sierra.md"
+    text = company_path.read_text()
+    text = text.replace("tier: unknown", "tier: apply-now")
+    text = text.replace("why_interesting: ''", "why_interesting: 'Top tier agentic startup'")
+    company_path.write_text(text)
+
+    # Pipeline runs again with default-shaped note — must NOT clobber human edits
+    write_company_note(CompanyNote(company="Sierra", tier="unknown", roles_seen=1))
+
+    import frontmatter
+
+    loaded = frontmatter.load(company_path).metadata
+    assert loaded["tier"] == "apply-now", "human-set tier was clobbered"
+    assert "Top tier" in loaded["why_interesting"], "human-set why_interesting was clobbered"
+    assert loaded["roles_seen"] == 2, "roles_seen should still increment"

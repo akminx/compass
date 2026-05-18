@@ -67,3 +67,29 @@ async def test_scrape_ashby_http_error_returns_empty(httpx_mock):
     )
     jobs = await scrape_ashby("nonexistent")
     assert jobs == []
+
+
+async def test_scrape_ashby_drops_empty_description(httpx_mock):
+    """Regression: same silent-empty bug pattern as Greenhouse and Lever.
+    Ashby postings using external HTML can leave descriptionPlain empty;
+    the scraper must drop them, not pass empty JDs to the extract LLM."""
+    httpx_mock.add_response(
+        url=f"{ASHBY_BASE}/sample?includeCompensation=true",
+        json={
+            "jobs": [
+                {
+                    "id": "x",
+                    "title": "Backend Engineer",
+                    "jobUrl": "https://jobs.ashbyhq.com/sample/x",
+                    "locationName": "Remote",
+                    "publishedAt": "2026-05-18T10:00:00.000Z",
+                    "descriptionPlain": "",
+                    "compensation": None,
+                    "employmentType": "FullTime",
+                    "shouldDisplayCompensationOnJobBoard": False,
+                }
+            ]
+        },
+    )
+    jobs = await scrape_ashby("sample")
+    assert jobs == []

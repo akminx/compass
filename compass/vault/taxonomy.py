@@ -57,12 +57,21 @@ def _norm_key(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", s.lower())
 
 
+_DEMAND_TOKENS = {"low", "medium", "high", "highest"}
+
+
 @lru_cache(maxsize=1)
 def load_taxonomy(path: Path | None = None) -> dict[str, CanonicalSkill]:
     """Parse the taxonomy markdown into a {canonical_name: CanonicalSkill} dict.
 
     Returns an empty dict if the taxonomy file is missing — callers should
     handle a missing canonical gracefully (e.g., `category_for()` returning None).
+
+    Some sections of skill-taxonomy.md use 3-column tables (Canonical | Tier-2 |
+    Tier-3) instead of 4 (Canonical | Synonyms | Tier-2 | Tier-3). The header
+    row sets `synonyms_col_index` per-section so we don't misread tier columns
+    as synonyms. Belt-and-suspenders: demand-level tokens are also filtered
+    from any synonyms list.
     """
     path = path or TAXONOMY_PATH
     if not path.exists():
@@ -71,26 +80,39 @@ def load_taxonomy(path: Path | None = None) -> dict[str, CanonicalSkill]:
 
     result: dict[str, CanonicalSkill] = {}
     current_category: str | None = None
+    synonyms_col_index: int | None = None  # set by each section's header row
 
     for line in text.splitlines():
         line_stripped = line.strip()
         if line_stripped.startswith("## "):
             header = line_stripped[3:].strip()
             current_category = _CATEGORY_HEADERS.get(header)
+            synonyms_col_index = None  # re-detected on next header row
             continue
         if current_category is None or not line_stripped.startswith("|"):
             continue
         # parse table row
         cells = [c.strip() for c in line_stripped.split("|")[1:-1]]
-        if not cells or cells[0].lower() in {"canonical", "---", ":---"}:
+        if not cells:
             continue
         if all(set(c) <= {"-", ":", " "} for c in cells):
             continue
+        # Header row — figure out which column (if any) holds synonyms
+        if cells[0].lower() == "canonical":
+            lowered = [c.lower() for c in cells]
+            synonyms_col_index = lowered.index("synonyms") if "synonyms" in lowered else None
+            continue
         canonical = cells[0]
-        synonyms_raw = cells[1] if len(cells) > 1 else ""
-        synonyms = [s.strip() for s in synonyms_raw.split(",") if s.strip()]
-        tier2 = cells[2] if len(cells) > 2 else "low"
-        tier3 = cells[3] if len(cells) > 3 else "low"
+        synonyms: list[str] = []
+        if synonyms_col_index is not None and len(cells) > synonyms_col_index:
+            raw_syn = cells[synonyms_col_index]
+            synonyms = [s.strip() for s in raw_syn.split(",") if s.strip()]
+            # Guard against demand-level tokens leaking into synonyms even when
+            # the header detection misfires.
+            synonyms = [s for s in synonyms if s.lower() not in _DEMAND_TOKENS]
+        # Tier columns: last two cells in the row (after canonical/synonyms)
+        tier2 = cells[-2] if len(cells) >= 3 else "low"
+        tier3 = cells[-1] if len(cells) >= 2 else "low"
         result[canonical] = CanonicalSkill(
             name=canonical,
             category=current_category,

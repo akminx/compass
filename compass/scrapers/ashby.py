@@ -64,6 +64,14 @@ def _parse_date(value: str | None) -> date | None:
 
 def _to_rawjob(slug: str, raw: dict) -> RawJob | None:
     try:
+        description = (raw.get("descriptionPlain") or "").strip()
+        if not description:
+            logger.warning(
+                "ashby %s: empty description for %r — dropping (posting may use external HTML)",
+                slug,
+                raw.get("title", "?"),
+            )
+            return None
         comp = (
             (raw.get("compensation") or {}).get("compensationTierSummary")
             if raw.get("shouldDisplayCompensationOnJobBoard")
@@ -79,7 +87,7 @@ def _to_rawjob(slug: str, raw: dict) -> RawJob | None:
             remote=None,
             salary_min=salary_min,
             salary_max=salary_max,
-            description=raw.get("descriptionPlain", ""),
+            description=description,
             date_posted=_parse_date(raw.get("publishedAt")),
         )
     except (KeyError, TypeError) as e:

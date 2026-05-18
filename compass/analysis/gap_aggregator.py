@@ -44,6 +44,7 @@ class JobSummary:
     match_score: float
     tier: str
     skills_required: list[str]
+    skills_nice_to_have: list[str]
     skills_missing: list[str]
 
 
@@ -75,6 +76,7 @@ def load_jobs() -> list[JobSummary]:
                 match_score=float(fm.get("match_score", 0)),
                 tier=fm.get("tier", "unknown"),
                 skills_required=fm.get("skills_required", []) or [],
+                skills_nice_to_have=fm.get("skills_nice_to_have", []) or [],
                 skills_missing=fm.get("skills_missing", []) or [],
             )
         )
@@ -127,14 +129,21 @@ def aggregate(
     for job in jobs:
         weight = tier_weights.get(job.tier, tier_weights.get("unknown", 0.5))
         score_factor = max(job.match_score / 5.0, 0.1)  # don't zero out low-match jobs entirely
-        for raw in job.skills_required:
+        # Required skills count at full weight; nice-to-haves at half (they're
+        # signal of market direction but not job-required gaps).
+        seen_for_this_job: set[str] = set()
+        for raw, source_weight in (
+            *((s, 1.0) for s in job.skills_required),
+            *((s, 0.5) for s in job.skills_nice_to_have),
+        ):
             canon = normalize(raw)
-            if not canon:
+            if not canon or canon in seen_for_this_job:
                 continue
+            seen_for_this_job.add(canon)
             appears[canon] += 1
             tier_breakdown[canon][job.tier] += 1
             if skill_levels.get(canon, 0) < 3:  # only count as gap if you're below "shipped"
-                gap_accum[canon] += weight * score_factor
+                gap_accum[canon] += weight * score_factor * source_weight
 
     entries: list[GapPlanEntry] = []
     for canon in all_canonicals():

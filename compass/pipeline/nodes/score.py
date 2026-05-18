@@ -95,16 +95,20 @@ async def score_node(state: CompassState) -> dict:
 
 
 def _constrain_to_jd_skills(score: JobScore, req: JobRequirements) -> JobScore:
-    """Defense in depth: drop matched/missing skills the JD didn't actually ask for.
+    """Defense in depth: drop matched/missing skills the JD didn't actually ask for,
+    AND remove any skill that appears in BOTH matched and missing (matched wins).
 
     The score prompt forbids the LLM from inventing matched/missing skills
-    outside the JD's required+nice_to_have lists. This is the post-hoc filter
-    that enforces the same constraint at code-level — so a prompt-following
-    failure can't pollute the gap_aggregator with skills the JD never required.
+    outside the JD's required+nice_to_have lists. This filter enforces the
+    same constraint at code-level. Gemini Flash also occasionally puts a
+    borderline skill in both lists — without dedup, gap_aggregator would
+    count the skill as a gap even though it's also "matched". We resolve
+    overlaps in favor of matched (the LLM is more likely to over-flag gaps
+    than over-claim matches).
     """
     jd_universe = set(req.required_skills) | set(req.nice_to_have_skills)
-    filtered_matched = [s for s in score.matched_skills if s in jd_universe]
-    filtered_missing = [s for s in score.missing_skills if s in jd_universe]
+    matched_set = {s for s in score.matched_skills if s in jd_universe}
+    missing_set = {s for s in score.missing_skills if s in jd_universe} - matched_set
     dropped = (set(score.matched_skills) | set(score.missing_skills)) - jd_universe
     if dropped:
         logger.info(
@@ -113,5 +117,8 @@ def _constrain_to_jd_skills(score: JobScore, req: JobRequirements) -> JobScore:
             sorted(dropped),
         )
     return score.model_copy(
-        update={"matched_skills": filtered_matched, "missing_skills": filtered_missing}
+        update={
+            "matched_skills": [s for s in score.matched_skills if s in matched_set],
+            "missing_skills": [s for s in score.missing_skills if s in missing_set],
+        }
     )
