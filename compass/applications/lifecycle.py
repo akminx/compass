@@ -1,0 +1,177 @@
+"""Application lifecycle — wraps ApplicationNote CRUD and JobNote status updates.
+
+Exposed via MCP server. Single-writer assumption: only the human (via MCP)
+mutates applications. The pipeline writes JobNotes; it never creates
+ApplicationNotes. Status transitions are validated (see VALID_TRANSITIONS).
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import date, datetime
+from typing import TYPE_CHECKING
+
+import frontmatter
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+import compass.config as cfg  # read VAULT_PATH at call time, not at import
+from compass.vault.schemas import ApplicationNote
+from compass.vault.writer import append_agent_log, write_application_note
+
+logger = logging.getLogger(__name__)
+
+# Sentinel for "caller didn't pass this argument" vs "caller passed None to clear it"
+_UNSET: object = object()
+
+
+VALID_TRANSITIONS: dict[str, set[str]] = {
+    "applied": {"screen", "rejected", "withdrawn", "ghosted"},
+    "screen": {"onsite", "rejected", "withdrawn", "ghosted"},
+    "onsite": {"offer", "rejected", "withdrawn", "ghosted"},
+    "offer": {"accepted", "declined", "withdrawn"},
+    "rejected": set(),
+    "withdrawn": set(),
+    "ghosted": {"rejected"},
+    "accepted": set(),
+    "declined": set(),
+}
+
+
+def find_jobnote(job_id: str) -> Path:
+    """Public: resolve a job_id (filename substring or url) to a JobNote path.
+    Used by add_application AND by the MCP tailor_resume tool."""
+    jobs_dir = cfg.VAULT_PATH / "jobs"
+    if not jobs_dir.exists():
+        raise LookupError(f"no jobs/ directory in vault at {cfg.VAULT_PATH}")
+    matches: list[Path] = []
+    for p in jobs_dir.glob("*.md"):
+        if job_id in p.name:
+            matches.append(p)
+            continue
+        try:
+            md = frontmatter.load(p).metadata
+        except Exception:
+            continue
+        if md.get("url") == job_id:
+            matches.append(p)
+    if not matches:
+        raise LookupError(f"no JobNote matched job_id={job_id!r}")
+    if len(matches) > 1:
+        names = ", ".join(p.name for p in matches)
+        raise LookupError(f"ambiguous job_id={job_id!r} — matches {names}")
+    return matches[0]
+
+
+def _find_application(app_id: str) -> Path:
+    apps_dir = cfg.VAULT_PATH / "applications"
+    matches = [p for p in apps_dir.glob("*.md") if app_id in p.name]
+    if not matches:
+        raise LookupError(f"no ApplicationNote matched app_id={app_id!r}")
+    if len(matches) > 1:
+        raise LookupError(f"ambiguous app_id={app_id!r}")
+    return matches[0]
+
+
+def _update_jobnote_status(jobnote_path: Path, status: str) -> None:
+    md = frontmatter.load(jobnote_path)
+    md["status"] = status
+    if status == "applied":
+        md["applied_at"] = datetime.now().isoformat()
+    jobnote_path.write_text(frontmatter.dumps(md) + "\n", encoding="utf-8")
+
+
+def add_application(
+    job_id: str,
+    *,
+    resume_variant: str = "resume.md",
+    referral: bool = False,
+) -> ApplicationNote:
+    """Create an ApplicationNote linked to a JobNote and mark the JobNote applied."""
+    job_path = find_jobnote(job_id)
+    job_md = frontmatter.load(job_path).metadata
+
+    note = ApplicationNote(
+        company=job_md["company"],
+        title=job_md["title"],
+        job_ref=job_md.get("url", str(job_path)),
+        applied_date=date.today(),
+        resume_variant=resume_variant,
+        status="applied",
+        referral=referral,
+    )
+    write_application_note(note)
+    _update_jobnote_status(job_path, "applied")
+    append_agent_log(f"application added {note.company} {note.title}")
+    return note
+
+
+def update_application_status(
+    app_id: str,
+    status: str,
+    *,
+    next_action: object = _UNSET,
+    next_action_date: object = _UNSET,
+    force: bool = False,
+) -> ApplicationNote:
+    """Transition an application's status.
+
+    next_action / next_action_date semantics:
+        omitted (sentinel) → existing value preserved
+        passed as None     → existing value cleared
+        passed as a value  → existing value replaced
+    """
+    path = _find_application(app_id)
+    md = frontmatter.load(path).metadata
+    current = md.get("status", "applied")
+
+    if not force:
+        allowed = VALID_TRANSITIONS.get(current, set())
+        if status not in allowed:
+            raise ValueError(
+                f"invalid transition {current!r} → {status!r} "
+                f"(allowed: {sorted(allowed) or '(terminal)'})"
+            )
+
+    note = ApplicationNote(**{**md, "status": status})
+    if next_action is not _UNSET:
+        note = note.model_copy(update={"next_action": next_action or ""})
+    if next_action_date is not _UNSET:
+        note = note.model_copy(update={"next_action_date": next_action_date})
+    write_application_note(note)
+
+    # Mirror status on the JobNote so dashboard queries reflect current state
+    job_id = note.job_ref
+    try:
+        job_path = find_jobnote(job_id)
+        _update_jobnote_status(job_path, status)
+    except LookupError:
+        logger.warning("update_status: could not find linked JobNote for %r", job_id)
+
+    append_agent_log(f"application status {note.company} {note.title} {current}→{status}")
+    return note
+
+
+def list_pending_actions(through_date: date | None = None) -> list[dict]:
+    cutoff = through_date or date.today()
+    out: list[dict] = []
+    apps_dir = cfg.VAULT_PATH / "applications"
+    if not apps_dir.exists():
+        return out
+    for p in apps_dir.glob("*.md"):
+        md = frontmatter.load(p).metadata
+        nad = md.get("next_action_date")
+        if nad is None:
+            continue
+        if isinstance(nad, str):
+            try:
+                nad = date.fromisoformat(nad)
+            except ValueError:
+                continue
+        if nad <= cutoff:
+            # Store the coerced date back so the sort key is always a date,
+            # not a mix of date/str depending on how frontmatter parsed YAML.
+            out.append({"file": p.name, **md, "next_action_date": nad})
+    out.sort(key=lambda r: r["next_action_date"])
+    return out
