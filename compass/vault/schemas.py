@@ -2,6 +2,7 @@
 Vault frontmatter schemas — Pydantic models for every note type.
 Always validate against these before writing to the vault.
 """
+
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -9,14 +10,27 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 Tier = Literal["apply-now", "6-month", "stretch", "skip", "unknown"]
 SkillLevel = Literal[0, 1, 2, 3, 4, 5]
 SkillCategory = Literal[
-    "language", "llm-api", "agent-framework", "mcp", "prompt",
-    "rag", "vector-db", "evals", "observability", "durable-execution",
-    "multi-agent", "hitl", "production", "cloud", "deployment",
-    "browser-use", "voice", "fine-tuning",
+    "language",
+    "llm-api",
+    "agent-framework",
+    "mcp",
+    "prompt",
+    "rag",
+    "vector-db",
+    "evals",
+    "observability",
+    "durable-execution",
+    "multi-agent",
+    "hitl",
+    "production",
+    "cloud",
+    "deployment",
+    "browser-use",
+    "voice",
+    "fine-tuning",
 ]
 Source = Literal["greenhouse", "lever", "ashby", "jobspy", "smoke", "manual"]
 
@@ -59,6 +73,7 @@ class TierDemand(BaseModel):
 
 class SkillNote(BaseModel):
     """Frontmatter schema for skills/ notes. Maintained by skill_assessor + gap_aggregator."""
+
     skill: str
     category: SkillCategory
     synonyms: list[str] = []
@@ -102,6 +117,7 @@ class ApplicationNote(BaseModel):
 
 class SkillAssessment(BaseModel):
     """Output of skill_assessor for one skill."""
+
     skill: str
     proposed_level: SkillLevel
     current_level: SkillLevel
@@ -114,6 +130,7 @@ class SkillAssessment(BaseModel):
 
 class GapPlanEntry(BaseModel):
     """One row in the master gap plan."""
+
     skill: str
     your_level: SkillLevel
     appears_in_jobs: int

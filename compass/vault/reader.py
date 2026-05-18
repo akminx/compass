@@ -1,13 +1,17 @@
 """
 Vault reader — reads structured notes from the Obsidian vault.
 """
+
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import frontmatter
 
 from compass.config import VAULT_PATH
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def read_profile_section(section: str) -> str:

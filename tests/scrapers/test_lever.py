@@ -1,6 +1,6 @@
 """Tests for compass.scrapers.lever."""
-import pytest
-from compass.scrapers.lever import scrape_lever, LEVER_BASE
+
+from compass.scrapers.lever import LEVER_BASE, scrape_lever
 
 SAMPLE_RESPONSE = [
     {
@@ -42,14 +42,16 @@ async def test_scrape_lever_returns_rawjob_list(httpx_mock):
 async def test_scrape_lever_handles_missing_categories(httpx_mock):
     httpx_mock.add_response(
         url=f"{LEVER_BASE}/sample?mode=json",
-        json=[{
-            "id": "x",
-            "text": "Y",
-            "hostedUrl": "https://example.com/x",
-            "categories": {},
-            "createdAt": 1715600000000,
-            "descriptionPlain": "z",
-        }],
+        json=[
+            {
+                "id": "x",
+                "text": "Y",
+                "hostedUrl": "https://example.com/x",
+                "categories": {},
+                "createdAt": 1715600000000,
+                "descriptionPlain": "z",
+            }
+        ],
     )
     jobs = await scrape_lever("sample")
     assert jobs[0].location is None

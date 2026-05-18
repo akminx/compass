@@ -1,12 +1,13 @@
 """Tests for compass.vault.writer."""
+
 from datetime import date
 
 import frontmatter
-import pytest
 
 
 def _make_job_note(**overrides):
     from compass.vault.schemas import JobNote
+
     defaults = dict(
         company="Sierra",
         title="Agent Engineer",
@@ -27,6 +28,7 @@ def _make_job_note(**overrides):
 
 def test_write_job_note_creates_file(temp_vault):
     from compass.vault.writer import write_job_note
+
     note = _make_job_note()
     path = write_job_note(note)
     assert path.exists()
@@ -37,6 +39,7 @@ def test_write_job_note_creates_file(temp_vault):
 
 def test_write_job_note_frontmatter_roundtrips(temp_vault):
     from compass.vault.writer import write_job_note
+
     note = _make_job_note()
     path = write_job_note(note)
     loaded = frontmatter.load(path)
@@ -48,6 +51,7 @@ def test_write_job_note_frontmatter_roundtrips(temp_vault):
 
 def test_write_job_note_sanitizes_filename(temp_vault):
     from compass.vault.writer import write_job_note
+
     note = _make_job_note(title="Senior Engineer / Slash & Special: Chars?")
     path = write_job_note(note)
     assert "/" not in path.name
@@ -58,6 +62,7 @@ def test_write_job_note_sanitizes_filename(temp_vault):
 def test_write_job_note_idempotent_on_duplicate_url(temp_vault):
     """Writing the same URL twice should overwrite the same file, not create a second."""
     from compass.vault.writer import write_job_note
+
     note = _make_job_note()
     p1 = write_job_note(note)
     p2 = write_job_note(_make_job_note(match_score=4.5))
@@ -69,6 +74,7 @@ def test_write_job_note_idempotent_on_duplicate_url(temp_vault):
 
 def test_update_skill_note_increments_counter(temp_vault):
     from compass.vault.writer import update_skill_note
+
     skill_path = temp_vault / "skills" / "LangGraph.md"
     skill_path.write_text(
         "---\ntype: skill\nskill: LangGraph\ncategory: agent-framework\nappears_in_jobs: 5\n---\n# LangGraph\n"
@@ -80,6 +86,7 @@ def test_update_skill_note_increments_counter(temp_vault):
 
 def test_update_skill_note_creates_if_missing(temp_vault):
     from compass.vault.writer import update_skill_note
+
     update_skill_note("Python", "https://example.com/jobs/x")
     skill_path = temp_vault / "skills" / "Python.md"
     assert skill_path.exists()
@@ -89,8 +96,9 @@ def test_update_skill_note_creates_if_missing(temp_vault):
 
 
 def test_write_company_note_creates_file(temp_vault):
-    from compass.vault.writer import write_company_note
     from compass.vault.schemas import CompanyNote
+    from compass.vault.writer import write_company_note
+
     note = CompanyNote(company="Sierra", tier="apply-now", roles_seen=1, geo=["NYC"])
     path = write_company_note(note)
     assert path.exists()
@@ -101,8 +109,9 @@ def test_write_company_note_creates_file(temp_vault):
 
 
 def test_write_company_note_increments_roles_seen(temp_vault):
-    from compass.vault.writer import write_company_note
     from compass.vault.schemas import CompanyNote
+    from compass.vault.writer import write_company_note
+
     write_company_note(CompanyNote(company="Sierra", tier="apply-now", roles_seen=1))
     write_company_note(CompanyNote(company="Sierra", tier="apply-now", roles_seen=1))
     loaded = frontmatter.load(temp_vault / "companies" / "Sierra.md")
@@ -111,6 +120,7 @@ def test_write_company_note_increments_roles_seen(temp_vault):
 
 def test_append_agent_log_writes_line(temp_vault):
     from compass.vault.writer import append_agent_log
+
     append_agent_log("test action")
     log_text = (temp_vault / "_meta" / "agent-log.md").read_text()
     assert "test action" in log_text
@@ -119,6 +129,7 @@ def test_append_agent_log_writes_line(temp_vault):
 
 def test_append_agent_log_preserves_existing_content(temp_vault):
     from compass.vault.writer import append_agent_log
+
     append_agent_log("first")
     append_agent_log("second")
     log_text = (temp_vault / "_meta" / "agent-log.md").read_text()

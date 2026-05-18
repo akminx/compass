@@ -7,12 +7,13 @@ skill_assessor can read evidence and the MCP server can expose it as a tool.
 URI format:
     learning-vault://<relative/path/to/file.md>[#<heading-anchor>]
 """
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path  # noqa: TC003 — dataclass field needs runtime type for introspection
 
 from compass.config import LEARNING_VAULT_PATH
 
@@ -32,7 +33,7 @@ class EvidenceArtifact:
 def _parse_uri(uri: str) -> tuple[Path, str | None]:
     if not uri.startswith(URI_PREFIX):
         raise ValueError(f"not a learning-vault URI: {uri}")
-    rest = uri[len(URI_PREFIX):]
+    rest = uri[len(URI_PREFIX) :]
     anchor: str | None = None
     if "#" in rest:
         rest, anchor = rest.split("#", 1)

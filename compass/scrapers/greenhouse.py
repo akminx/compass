@@ -4,6 +4,7 @@ Greenhouse public API scraper.
 Endpoint: GET https://boards-api.greenhouse.io/v1/boards/{board_token}/jobs
 No authentication required.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -73,14 +74,18 @@ async def scrape_greenhouse(board_token: str) -> list[RawJob]:
     """
     url = f"{GREENHOUSE_BASE}/{board_token}/jobs"
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT, headers={"User-Agent": _USER_AGENT}) as client:
+        async with httpx.AsyncClient(
+            timeout=_REQUEST_TIMEOUT, headers={"User-Agent": _USER_AGENT}
+        ) as client:
             resp = await client.get(url)
             resp.raise_for_status()
             data = resp.json()
     except (httpx.HTTPError, ValueError) as e:
         logger.warning("greenhouse %s: %s", board_token, e)
         return []
-    jobs = [j for j in (_to_rawjob(board_token, raw) for raw in data.get("jobs", [])) if j is not None]
+    jobs = [
+        j for j in (_to_rawjob(board_token, raw) for raw in data.get("jobs", [])) if j is not None
+    ]
     return jobs
 
 
@@ -88,7 +93,9 @@ async def scrape_greenhouse_many(board_tokens: list[str]) -> list[RawJob]:
     """Scrape multiple Greenhouse boards concurrently."""
     if not board_tokens:
         return []
-    results = await asyncio.gather(*[scrape_greenhouse(t) for t in board_tokens], return_exceptions=True)
+    results = await asyncio.gather(
+        *[scrape_greenhouse(t) for t in board_tokens], return_exceptions=True
+    )
     out: list[RawJob] = []
     for r in results:
         if isinstance(r, list):

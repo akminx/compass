@@ -4,6 +4,7 @@ Lever public API scraper.
 Endpoint: GET https://api.lever.co/v0/postings/{company}?mode=json
 No authentication required.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -56,7 +57,9 @@ async def scrape_lever(company: str) -> list[RawJob]:
     """Scrape all open postings from a Lever company."""
     url = f"{LEVER_BASE}/{company}?mode=json"
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT, headers={"User-Agent": _USER_AGENT}) as client:
+        async with httpx.AsyncClient(
+            timeout=_REQUEST_TIMEOUT, headers={"User-Agent": _USER_AGENT}
+        ) as client:
             resp = await client.get(url)
             resp.raise_for_status()
             data = resp.json()

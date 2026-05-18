@@ -8,6 +8,7 @@ Langfuse traces this call.
 
 TODO: implement
 """
+
 from compass.pipeline.state import CompassState
 
 

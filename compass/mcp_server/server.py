@@ -34,29 +34,29 @@ Tools exposed:
   Evidence helpers:
     suggest_evidence(skill, search_terms)   -> candidate learning-vault files
 """
-from __future__ import annotations
 
-import asyncio
-from pathlib import Path
+from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
 
 from compass.analysis import gap_aggregator, skill_assessor
 from compass.config import VAULT_PATH
 from compass.vault.learning_bridge import path_to_uri, resolve, scan_evidence
-from compass.vault.taxonomy import all_canonicals, load_taxonomy
+from compass.vault.taxonomy import all_canonicals
 
 mcp = FastMCP("compass")
 
 
 # ── Pipeline-side ────────────────────────────────────────────────────────────
 
+
 @mcp.tool()
 async def score_jd(jd_text: str) -> dict:
     """Score a pasted JD against the candidate profile. Does NOT write to the vault."""
+    from datetime import date
+
     from compass.pipeline.graph import build_graph
     from compass.pipeline.state import CompassState, RawJob
-    from datetime import date
 
     job = RawJob(
         company="(adhoc)",
@@ -86,10 +86,12 @@ async def score_jd(jd_text: str) -> dict:
 
 # ── Vault read ───────────────────────────────────────────────────────────────
 
+
 @mcp.tool()
 def search_jobs(query: str, limit: int = 10) -> list[dict]:
     """Substring/keyword search over vault job notes. Returns frontmatter dicts."""
     from compass.analysis.gap_aggregator import _parse_frontmatter
+
     hits = []
     for f in (VAULT_PATH / "jobs").glob("*.md"):
         fm = _parse_frontmatter(f)
@@ -104,6 +106,7 @@ def search_jobs(query: str, limit: int = 10) -> list[dict]:
 def get_skill_gaps(job_id: str) -> dict:
     """For a given job (filename or company-title), return matched + missing skills."""
     from compass.analysis.gap_aggregator import _parse_frontmatter
+
     for f in (VAULT_PATH / "jobs").glob("*.md"):
         if job_id in f.name:
             fm = _parse_frontmatter(f)
@@ -141,6 +144,7 @@ def read_learning_artifact(uri: str) -> dict:
 
 # ── Analysis ─────────────────────────────────────────────────────────────────
 
+
 @mcp.tool()
 async def assess_skills(scope: list[str] | None = None) -> list[dict]:
     """Regrade evidence-backed skills against the rubric. Pass scope=None for all."""
@@ -162,12 +166,14 @@ def regenerate_gap_plan() -> dict:
 def get_master_gap_plan() -> str:
     """Return the current master-gap-plan.md contents."""
     from compass.config import MASTER_GAP_PLAN_PATH
+
     if not MASTER_GAP_PLAN_PATH.exists():
         return "(no master-gap-plan yet — run regenerate_gap_plan first)"
     return MASTER_GAP_PLAN_PATH.read_text(encoding="utf-8")
 
 
 # ── Evidence helpers ─────────────────────────────────────────────────────────
+
 
 @mcp.tool()
 def suggest_evidence(skill: str, search_terms: list[str] | None = None) -> list[str]:
@@ -183,6 +189,7 @@ def list_canonical_skills() -> list[str]:
 
 
 # ── Tailoring / application ──────────────────────────────────────────────────
+
 
 @mcp.tool()
 async def tailor_resume(job_id: str) -> dict:

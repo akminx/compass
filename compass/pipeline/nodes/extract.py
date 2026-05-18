@@ -6,6 +6,7 @@ Langfuse traces this call — cost and tokens logged per extraction.
 
 TODO: implement using pydantic_ai.Agent with result_type=JobRequirements
 """
+
 from compass.pipeline.state import CompassState
 
 

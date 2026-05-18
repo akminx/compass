@@ -2,8 +2,10 @@
 Compass configuration — all settings loaded from .env.
 Import this module everywhere instead of reading os.environ directly.
 """
+
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -65,6 +67,4 @@ GREENHOUSE_BOARDS: list[str] = [
 LEVER_COMPANIES: list[str] = [
     c.strip() for c in os.getenv("LEVER_COMPANIES", "").split(",") if c.strip()
 ]
-ASHBY_BOARDS: list[str] = [
-    b.strip() for b in os.getenv("ASHBY_BOARDS", "").split(",") if b.strip()
-]
+ASHBY_BOARDS: list[str] = [b.strip() for b in os.getenv("ASHBY_BOARDS", "").split(",") if b.strip()]

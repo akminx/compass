@@ -7,6 +7,7 @@ Always design for graceful degradation: if LinkedIn returns 0 results, log and c
 Usage:
     jobs = await scrape_jobspy(search_term="agentic AI engineer", location="Austin, TX")
 """
+
 from compass.pipeline.state import RawJob
 
 

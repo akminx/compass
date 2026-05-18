@@ -9,6 +9,7 @@ Responsibilities:
 
 TODO: implement
 """
+
 from compass.pipeline.state import CompassState
 
 

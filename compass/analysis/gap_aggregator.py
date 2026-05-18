@@ -12,13 +12,14 @@ Writes:
 
 Run after every pipeline batch. Also exposed as MCP tool `regenerate_gap_plan`.
 """
+
 from __future__ import annotations
 
 import re
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 
@@ -29,7 +30,10 @@ from compass.config import (
     VAULT_PATH,
 )
 from compass.vault.schemas import GapPlanEntry, SkillLevel, TierDemand
-from compass.vault.taxonomy import all_canonicals, load_taxonomy
+from compass.vault.taxonomy import all_canonicals
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @dataclass
@@ -44,6 +48,7 @@ class JobSummary:
 
 
 # ── loaders ──────────────────────────────────────────────────────────────────
+
 
 def _parse_frontmatter(path: Path) -> dict:
     text = path.read_text(encoding="utf-8")
@@ -62,15 +67,17 @@ def load_jobs() -> list[JobSummary]:
         fm = _parse_frontmatter(f)
         if not fm:
             continue
-        out.append(JobSummary(
-            file=f,
-            company=fm.get("company", ""),
-            title=fm.get("title", ""),
-            match_score=float(fm.get("match_score", 0)),
-            tier=fm.get("tier", "unknown"),
-            skills_required=fm.get("skills_required", []) or [],
-            skills_missing=fm.get("skills_missing", []) or [],
-        ))
+        out.append(
+            JobSummary(
+                file=f,
+                company=fm.get("company", ""),
+                title=fm.get("title", ""),
+                match_score=float(fm.get("match_score", 0)),
+                tier=fm.get("tier", "unknown"),
+                skills_required=fm.get("skills_required", []) or [],
+                skills_missing=fm.get("skills_missing", []) or [],
+            )
+        )
     return out
 
 
@@ -104,6 +111,7 @@ def load_tier_weights() -> dict[str, float]:
 
 
 # ── aggregation ──────────────────────────────────────────────────────────────
+
 
 def aggregate(
     jobs: list[JobSummary],
@@ -139,15 +147,17 @@ def aggregate(
                 "stretch": tier_breakdown[canon].get("stretch", 0),
             }
         )
-        entries.append(GapPlanEntry(
-            skill=canon,
-            your_level=skill_levels.get(canon, 0),  # type: ignore[arg-type]
-            appears_in_jobs=appears[canon],
-            tier_demand=td,
-            gap_score=round(gap_accum[canon], 2),
-            suggested_next_step=_suggest_next_step(canon, skill_levels.get(canon, 0)),
-            cheap_win=_is_cheap_win(canon, skill_levels.get(canon, 0)),
-        ))
+        entries.append(
+            GapPlanEntry(
+                skill=canon,
+                your_level=skill_levels.get(canon, 0),  # type: ignore[arg-type]
+                appears_in_jobs=appears[canon],
+                tier_demand=td,
+                gap_score=round(gap_accum[canon], 2),
+                suggested_next_step=_suggest_next_step(canon, skill_levels.get(canon, 0)),
+                cheap_win=_is_cheap_win(canon, skill_levels.get(canon, 0)),
+            )
+        )
     entries.sort(key=lambda e: e.gap_score, reverse=True)
     return entries
 
@@ -155,8 +165,15 @@ def aggregate(
 # ── heuristics ───────────────────────────────────────────────────────────────
 
 _CHEAP_WIN_CANDIDATES = {
-    "Temporal", "Stagehand", "Playwright", "Guardrails", "Prompt caching",
-    "Response streaming", "Re-ranking", "pgvector", "BigQuery",
+    "Temporal",
+    "Stagehand",
+    "Playwright",
+    "Guardrails",
+    "Prompt caching",
+    "Response streaming",
+    "Re-ranking",
+    "pgvector",
+    "BigQuery",
 }
 
 
@@ -173,22 +190,28 @@ def _suggest_next_step(canonical: str, current_level: int) -> str:
         return f"Ship {canonical} usage somewhere observable (eval, trace, or external user)."
     if current_level == 3:
         return f"Add observability + a documented failure recovery for {canonical}."
-    return f"Maintained — keep evidence fresh."
+    return "Maintained — keep evidence fresh."
 
 
 # ── writer ───────────────────────────────────────────────────────────────────
+
 
 def render_master_plan(entries: list[GapPlanEntry], jobs_n: int) -> str:
     now = datetime.now().isoformat(timespec="seconds")
     top = entries[:10]
     cheap = [e for e in entries if e.cheap_win][:5]
     rows = "\n".join(
-        f"| {i+1} | {e.skill} | {e.your_level} | {e.gap_score} | {e.appears_in_jobs} | "
+        f"| {i + 1} | {e.skill} | {e.your_level} | {e.gap_score} | {e.appears_in_jobs} | "
         f"apply-now: {e.tier_demand.apply_now} · 6m: {e.tier_demand.six_month} · stretch: {e.tier_demand.stretch} "
         f"| {e.suggested_next_step} |"
         for i, e in enumerate(top)
     )
-    cheap_rows = "\n".join(f"- **{e.skill}** (level {e.your_level}) — {e.suggested_next_step}" for e in cheap) or "_none right now_"
+    cheap_rows = (
+        "\n".join(
+            f"- **{e.skill}** (level {e.your_level}) — {e.suggested_next_step}" for e in cheap
+        )
+        or "_none right now_"
+    )
     return f"""---
 type: study-plan
 scope: master
@@ -235,4 +258,6 @@ if __name__ == "__main__":
     entries, _ = regenerate()
     print(f"Wrote {MASTER_GAP_PLAN_PATH} with {len(entries)} skills, top 10 gaps:")
     for e in entries[:10]:
-        print(f"  {e.gap_score:>6.2f}  {e.skill} (level {e.your_level}, in {e.appears_in_jobs} JDs)")
+        print(
+            f"  {e.gap_score:>6.2f}  {e.skill} (level {e.your_level}, in {e.appears_in_jobs} JDs)"
+        )

@@ -1,6 +1,6 @@
 """Tests for compass.scrapers.ashby."""
-import pytest
-from compass.scrapers.ashby import scrape_ashby, ASHBY_BASE
+
+from compass.scrapers.ashby import ASHBY_BASE, scrape_ashby
 
 SAMPLE_RESPONSE = {
     "jobs": [

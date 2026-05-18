@@ -2,6 +2,7 @@
 Compass pipeline state schema.
 All nodes receive the full state and return partial updates — only return keys you changed.
 """
+
 from __future__ import annotations
 
 from datetime import date
@@ -16,6 +17,7 @@ RemotePolicy = Literal["remote", "hybrid", "onsite", "unknown"]
 
 class RawJob(BaseModel):
     """Normalized job posting from any ATS source."""
+
     company: str
     title: str
     url: str
@@ -30,6 +32,7 @@ class RawJob(BaseModel):
 
 class JobRequirements(BaseModel):
     """Structured extraction from a job description."""
+
     required_skills: list[str]
     nice_to_have_skills: list[str]
     years_experience: int | None = None
@@ -40,6 +43,7 @@ class JobRequirements(BaseModel):
 
 class JobScore(BaseModel):
     """LLM-generated match score for a job against the candidate profile."""
+
     score: float  # 0.0 – 5.0
     reasoning: str
     matched_skills: list[str]
@@ -49,6 +53,7 @@ class JobScore(BaseModel):
 
 class CompassState(TypedDict):
     """Full pipeline state passed between all LangGraph nodes."""
+
     raw_jobs: list[RawJob]
 
     current_job: RawJob | None

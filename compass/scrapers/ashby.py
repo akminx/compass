@@ -4,6 +4,7 @@ Ashby public API scraper.
 Endpoint: GET https://api.ashbyhq.com/posting-api/job-board/{slug}?includeCompensation=true
 No authentication required. Covers Sierra, Decagon, Cognition, Ramp, OpenAI, Cursor, and many more.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -94,7 +95,9 @@ async def scrape_ashby(slug: str) -> list[RawJob]:
     """
     url = f"{ASHBY_BASE}/{slug}?includeCompensation=true"
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT, headers={"User-Agent": _USER_AGENT}) as client:
+        async with httpx.AsyncClient(
+            timeout=_REQUEST_TIMEOUT, headers={"User-Agent": _USER_AGENT}
+        ) as client:
             resp = await client.get(url)
             resp.raise_for_status()
             data = resp.json()

@@ -31,15 +31,90 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-httpx>=0.30",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "pre-commit>=3.7",
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# ── Pytest ───────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = "--strict-markers -ra"
+
+# ── Ruff ─────────────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["docs", "scripts/seed_skills.py"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "TCH",  # flake8-type-checking
+    "N",    # pep8-naming
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",   # line length — formatter handles
+    "B008",   # function call in default arg (Path defaults are intentional)
+    "SIM117", # combine nested with statements (less readable for httpx clients)
+    "RUF001", # ambiguous unicode in strings (en-dash, ×, etc. are intentional)
+    "RUF002", # ambiguous unicode in docstrings
+    "RUF003", # ambiguous unicode in comments
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]  # conftest sets env before imports — intentional
+
+[tool.ruff.lint.isort]
+known-first-party = ["compass"]
+
+[tool.ruff.lint.flake8-type-checking]
+# Pydantic / TypedDict need types at runtime for validation, so don't move
+# their referenced types into TYPE_CHECKING blocks.
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
+runtime-evaluated-decorators = ["pydantic.dataclasses.dataclass"]
+
+# ── Mypy ─────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.12"
+strict = false
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+# ── Coverage ─────────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source = ["compass"]
+omit = [
+    "compass/mcp_server/*",
+    "compass/pipeline/nodes/*",  # implemented in Phase 0.B
+    "compass/analysis/*",  # has separate coverage in Phase 2.A eval harness
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["compass"]

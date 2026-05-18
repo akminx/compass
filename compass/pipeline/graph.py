@@ -10,18 +10,19 @@ Nodes live in compass/pipeline/nodes/.
 State schema is in compass/pipeline/state.py.
 All LLM calls are traced via Langfuse — set LANGFUSE_* env vars.
 """
-from langgraph.graph import StateGraph, START, END
-from langfuse.callback import CallbackHandler
 
-from compass.pipeline.state import CompassState
-from compass.pipeline.nodes.intake import intake_node
+from langfuse.callback import CallbackHandler
+from langgraph.graph import END, START, StateGraph
+
+from compass.config import SCORE_THRESHOLD
 from compass.pipeline.nodes.extract import extract_node
-from compass.pipeline.nodes.score import score_node
-from compass.pipeline.nodes.reflect import reflect_node
 from compass.pipeline.nodes.hitl import hitl_node
+from compass.pipeline.nodes.intake import intake_node
+from compass.pipeline.nodes.reflect import reflect_node
+from compass.pipeline.nodes.score import score_node
 from compass.pipeline.nodes.tailor import tailor_node
 from compass.pipeline.nodes.vault_write import vault_write_node
-from compass.config import SCORE_THRESHOLD
+from compass.pipeline.state import CompassState
 
 
 def should_reflect(state: CompassState) -> str:
@@ -68,19 +69,31 @@ def build_graph() -> StateGraph:
     builder.add_edge(START, "intake")
     builder.add_edge("intake", "extract")
     builder.add_edge("extract", "score")
-    builder.add_conditional_edges("score", should_reflect, {
-        "reflect": "reflect",
-        "hitl": "hitl",
-        "vault_write": "vault_write",
-    })
-    builder.add_conditional_edges("reflect", should_proceed_after_reflect, {
-        "hitl": "hitl",
-        "vault_write": "vault_write",
-    })
-    builder.add_conditional_edges("hitl", should_tailor, {
-        "tailor": "tailor",
-        "vault_write": "vault_write",
-    })
+    builder.add_conditional_edges(
+        "score",
+        should_reflect,
+        {
+            "reflect": "reflect",
+            "hitl": "hitl",
+            "vault_write": "vault_write",
+        },
+    )
+    builder.add_conditional_edges(
+        "reflect",
+        should_proceed_after_reflect,
+        {
+            "hitl": "hitl",
+            "vault_write": "vault_write",
+        },
+    )
+    builder.add_conditional_edges(
+        "hitl",
+        should_tailor,
+        {
+            "tailor": "tailor",
+            "vault_write": "vault_write",
+        },
+    )
     builder.add_edge("tailor", "vault_write")
     builder.add_edge("vault_write", END)
 
@@ -92,11 +105,12 @@ graph = build_graph()
 
 async def run_pipeline(raw_jobs=None) -> CompassState:
     """Run the full pipeline. If raw_jobs is None, scrapes fresh from all ATS sources."""
+    import asyncio
+
+    from compass.config import ASHBY_BOARDS, GREENHOUSE_BOARDS, LEVER_COMPANIES
+    from compass.scrapers.ashby import scrape_ashby_many
     from compass.scrapers.greenhouse import scrape_greenhouse_many
     from compass.scrapers.lever import scrape_lever_many
-    from compass.scrapers.ashby import scrape_ashby_many
-    from compass.config import GREENHOUSE_BOARDS, LEVER_COMPANIES, ASHBY_BOARDS
-    import asyncio
 
     if raw_jobs is None:
         gh, lv, ash = await asyncio.gather(
@@ -129,5 +143,8 @@ async def run_pipeline(raw_jobs=None) -> CompassState:
 
 if __name__ == "__main__":
     import asyncio
+
     result = asyncio.run(run_pipeline())
-    print(f"Processed: {result['jobs_processed']} | Written: {result['jobs_written']} | Errors: {len(result['errors'])}")
+    print(
+        f"Processed: {result['jobs_processed']} | Written: {result['jobs_written']} | Errors: {len(result['errors'])}"
+    )

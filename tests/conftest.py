@@ -5,6 +5,7 @@ via `os.environ[...]` at import time — that raises KeyError on missing values.
 We set sane defaults BEFORE any `compass.*` import so `uv run pytest` works
 without requiring the executor to export envs on every invocation.
 """
+
 import os
 
 # MUST happen before any compass import below.
@@ -24,13 +25,20 @@ def temp_vault(tmp_path: Path, monkeypatch):
     for sub in ["_profile", "_meta", "jobs", "skills", "companies", "applications", "study-plans"]:
         (vault / sub).mkdir(parents=True, exist_ok=True)
     # Seed minimal _profile files so reader tests can find them.
-    (vault / "_profile" / "resume.md").write_text("---\ntype: profile\n---\n# Resume\n\nFake resume body.\n")
-    (vault / "_profile" / "skill-inventory.md").write_text("---\ntype: profile\n---\n# Skills\n\nPython: 3\n")
-    (vault / "_profile" / "preferences.md").write_text("---\ntype: profile\n---\nPreferences body.\n")
+    (vault / "_profile" / "resume.md").write_text(
+        "---\ntype: profile\n---\n# Resume\n\nFake resume body.\n"
+    )
+    (vault / "_profile" / "skill-inventory.md").write_text(
+        "---\ntype: profile\n---\n# Skills\n\nPython: 3\n"
+    )
+    (vault / "_profile" / "preferences.md").write_text(
+        "---\ntype: profile\n---\nPreferences body.\n"
+    )
     (vault / "_meta" / "agent-log.md").write_text("# Agent Log\n")
 
     # Patch the config module's attributes.
     import compass.config as cfg
+
     monkeypatch.setattr(cfg, "VAULT_PATH", vault)
     monkeypatch.setattr(cfg, "AGENT_LOG_PATH", vault / "_meta" / "agent-log.md")
     monkeypatch.setattr(cfg, "SKILL_INVENTORY_PATH", vault / "_profile" / "skill-inventory.md")
@@ -41,10 +49,12 @@ def temp_vault(tmp_path: Path, monkeypatch):
     # AGENT_LOG_PATH import — reader tests in Task 5 don't touch the writer module's
     # AGENT_LOG_PATH so the guard keeps that test wave green.
     import compass.vault.reader as reader_mod
+
     if hasattr(reader_mod, "VAULT_PATH"):
         monkeypatch.setattr(reader_mod, "VAULT_PATH", vault)
 
     import compass.vault.writer as writer_mod
+
     if hasattr(writer_mod, "VAULT_PATH"):
         monkeypatch.setattr(writer_mod, "VAULT_PATH", vault)
     if hasattr(writer_mod, "AGENT_LOG_PATH"):

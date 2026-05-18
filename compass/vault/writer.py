@@ -6,19 +6,24 @@ Rules:
 - Every write validates frontmatter against compass.vault.schemas.
 - Every mutation appends a one-line entry to _meta/agent-log.md.
 """
+
 from __future__ import annotations
 
 import logging
 import re
 from datetime import datetime
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import frontmatter
-from pydantic import BaseModel
 
 from compass.config import AGENT_LOG_PATH, VAULT_PATH
 from compass.vault.schemas import CompanyNote, JobNote, SkillCategory, SkillNote
 from compass.vault.taxonomy import category_for
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 

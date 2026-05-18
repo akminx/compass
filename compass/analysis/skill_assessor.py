@@ -17,13 +17,13 @@ Writes:
 - compass-vault/_profile/skill-inventory.md (regenerated table)
 - compass-vault/_meta/agent-log.md     (one line per regrade)
 """
+
 from __future__ import annotations
 
 import asyncio
 import re
-from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 from pydantic_ai import Agent
@@ -36,8 +36,10 @@ from compass.config import (
 )
 from compass.vault.learning_bridge import EvidenceArtifact, resolve_many
 from compass.vault.schemas import SkillAssessment, SkillLevel
-from compass.vault.taxonomy import all_canonicals, load_taxonomy
+from compass.vault.taxonomy import all_canonicals
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SKEPTICAL_GRADER_SYSTEM_PROMPT = """\
 You are a senior hiring manager who has interviewed 500 engineering candidates for
@@ -71,6 +73,7 @@ Output a SkillAssessment object.
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
 
 def _parse_frontmatter(path: Path) -> tuple[dict, str]:
     text = path.read_text(encoding="utf-8")
@@ -131,12 +134,13 @@ def _format_evidence_block(artifacts: list[EvidenceArtifact]) -> str:
 
 # ── main entrypoint ──────────────────────────────────────────────────────────
 
+
 async def assess_one(canonical: str) -> SkillAssessment | None:
     """Assess a single skill. Returns None if skill note doesn't exist."""
     loaded = _load_skill_note(canonical)
     if loaded is None:
         return None
-    path, fm, body = loaded
+    _path, fm, _body = loaded
 
     # Human-locked grade — short-circuit.
     if fm.get("grade_override") is not None:

@@ -15,4 +15,5 @@ A summary is printed to stdout and written to compass/evals/results.json.
 This is what you show in interviews when asked about eval methodology.
 The chart of precision vs cost across model configs is generated here.
 """
+
 raise NotImplementedError("eval runner not yet implemented — build this in Phase 3")

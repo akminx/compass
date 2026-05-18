@@ -1,6 +1,6 @@
 """Tests for compass.scrapers.greenhouse."""
-import pytest
-from compass.scrapers.greenhouse import scrape_greenhouse, GREENHOUSE_BASE
+
+from compass.scrapers.greenhouse import GREENHOUSE_BASE, scrape_greenhouse
 
 SAMPLE_RESPONSE = {
     "jobs": [
@@ -45,14 +45,18 @@ async def test_scrape_greenhouse_returns_rawjob_list(httpx_mock):
 async def test_scrape_greenhouse_handles_missing_location(httpx_mock):
     httpx_mock.add_response(
         url=f"{GREENHOUSE_BASE}/sample/jobs",
-        json={"jobs": [{
-            "id": 1,
-            "title": "X",
-            "absolute_url": "https://example.com/x",
-            "location": None,
-            "updated_at": "2026-05-15T10:00:00-07:00",
-            "content": "<p>y</p>",
-        }]},
+        json={
+            "jobs": [
+                {
+                    "id": 1,
+                    "title": "X",
+                    "absolute_url": "https://example.com/x",
+                    "location": None,
+                    "updated_at": "2026-05-15T10:00:00-07:00",
+                    "content": "<p>y</p>",
+                }
+            ]
+        },
     )
     jobs = await scrape_greenhouse("sample")
     assert jobs[0].location is None

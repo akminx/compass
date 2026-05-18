@@ -8,14 +8,18 @@ function that maps any string (from JD extraction) to a canonical skill or None.
 The taxonomy is the spine of every downstream module — extract_node, score_node,
 gap_aggregator, and skill_assessor all normalize through here.
 """
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 from functools import lru_cache
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from compass.config import TAXONOMY_PATH
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @dataclass
@@ -23,7 +27,7 @@ class CanonicalSkill:
     name: str
     category: str
     synonyms: list[str] = field(default_factory=list)
-    tier2_demand: str = "low"   # high | medium | low | highest
+    tier2_demand: str = "low"  # high | medium | low | highest
     tier3_demand: str = "low"
 
 
