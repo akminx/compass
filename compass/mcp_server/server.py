@@ -17,8 +17,6 @@ Add to Claude Code MCP config:
 Tools exposed:
   Pipeline:
     score_jd(jd_text)                       -> JobScore for a pasted JD
-    tailor_resume(job_id)                   -> tailoring suggestions
-    add_application(job_id)                 -> mark job as applied
 
   Vault:
     search_jobs(query, limit)               -> matching job notes
@@ -33,6 +31,13 @@ Tools exposed:
 
   Evidence helpers:
     suggest_evidence(skill, search_terms)   -> candidate learning-vault files
+    list_canonical_skills()                 -> all skills from taxonomy
+
+  Application lifecycle:
+    add_application(job_id)                 -> create ApplicationNote, mark job applied
+    update_application_status(app_id, ...)  -> transition status with optional next-action fields
+    list_pending_actions(through_date)      -> ApplicationNotes with due next_action_date
+    tailor_resume(job_id)                   -> tailoring suggestions from JobNote frontmatter
 """
 
 from __future__ import annotations
@@ -211,11 +216,103 @@ def list_canonical_skills() -> list[str]:
 # ── Tailoring / application ──────────────────────────────────────────────────
 
 
-# NOTE: tailor_resume + add_application MCP tools ship in Phase 1.A
-# (Application Tracking + dashboard). Not exposed yet — returning stub
-# responses would lie to callers about what works. The tailor_node fires
-# in-pipeline today for high-score jobs; manual MCP invocation arrives
-# alongside the application-tracking workflow.
+@mcp.tool()
+def add_application(job_id: str, resume_variant: str = "resume.md", referral: bool = False) -> dict:
+    """Create an ApplicationNote linked to a JobNote. Marks the JobNote as applied.
+
+    job_id: substring of the JobNote filename (e.g. 'Sierra-Agent_Engineer') or
+            the JobNote's url field. Returns an error dict if zero or >1 match.
+    """
+    from compass.applications.lifecycle import add_application as _add
+
+    try:
+        note = _add(job_id, resume_variant=resume_variant, referral=referral)
+    except LookupError as e:
+        return {"error": str(e)}
+    return note.model_dump(mode="json")
+
+
+@mcp.tool()
+def update_application_status(
+    app_id: str,
+    status: str,
+    next_action: str | None = None,
+    next_action_date: str | None = None,
+    clear_next_action: bool = False,
+    clear_next_action_date: bool = False,
+    force: bool = False,
+) -> dict:
+    """Transition an application's status. Refuses invalid transitions unless force=True.
+
+    Next-action fields use explicit clear flags because MCP can't transmit a
+    Python sentinel. To CLEAR an existing next_action or next_action_date,
+    pass clear_next_action=True or clear_next_action_date=True. Passing the
+    bare arg with no value (None) preserves the existing field.
+    """
+    from datetime import date as _date
+
+    from compass.applications.lifecycle import _UNSET
+    from compass.applications.lifecycle import update_application_status as _upd
+
+    if clear_next_action:
+        na: object = None
+    elif next_action is not None:
+        na = next_action
+    else:
+        na = _UNSET
+
+    if clear_next_action_date:
+        nad: object = None
+    elif next_action_date is not None:
+        try:
+            nad = _date.fromisoformat(next_action_date)
+        except ValueError as e:
+            return {"error": f"invalid next_action_date: {e}"}
+    else:
+        nad = _UNSET
+
+    try:
+        note = _upd(app_id, status, next_action=na, next_action_date=nad, force=force)
+    except (LookupError, ValueError) as e:
+        return {"error": str(e)}
+    return note.model_dump(mode="json")
+
+
+@mcp.tool()
+def list_pending_actions(through_date: str | None = None) -> list[dict]:
+    """Return ApplicationNotes whose next_action_date <= through_date (default: today)."""
+    from datetime import date as _date
+
+    from compass.applications.lifecycle import list_pending_actions as _pending
+
+    cutoff = _date.fromisoformat(through_date) if through_date else None
+    return _pending(cutoff)
+
+
+@mcp.tool()
+async def tailor_resume(job_id: str) -> dict:
+    """Return tailoring suggestions for a specific JobNote. Reads existing
+    tailored_paragraph if present, otherwise indicates the job hasn't been tailored.
+
+    This is a read-only tool — re-running the tailor LLM on demand is deferred
+    to a later phase (force-tailor MCP tool)."""
+    import frontmatter
+
+    from compass.applications.lifecycle import find_jobnote
+
+    try:
+        path = find_jobnote(job_id)
+    except LookupError as e:
+        return {"error": str(e)}
+    md = frontmatter.load(path).metadata
+    return {
+        "company": md["company"],
+        "title": md["title"],
+        "tailored_paragraph": md.get("tailored_paragraph")
+        or "(not yet tailored — re-run pipeline with score >= threshold)",
+        "skills_matched": md.get("skills_matched", []),
+        "skills_missing": md.get("skills_missing", []),
+    }
 
 
 if __name__ == "__main__":

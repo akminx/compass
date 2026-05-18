@@ -75,16 +75,28 @@ def test_search_jobs_filters_by_query(temp_vault, monkeypatch):
     from compass.vault.schemas import JobNote
     from compass.vault.writer import write_job_note
 
-    write_job_note(JobNote(
-        company="acme", title="Agent Engineer", url="https://x/1",
-        source="manual", date_found=date(2026, 5, 18), match_score=4.2,
-        jd_summary="LangGraph + MCP role",
-    ))
-    write_job_note(JobNote(
-        company="other", title="Frontend Engineer", url="https://x/2",
-        source="manual", date_found=date(2026, 5, 18), match_score=2.0,
-        jd_summary="React + TypeScript role",
-    ))
+    write_job_note(
+        JobNote(
+            company="acme",
+            title="Agent Engineer",
+            url="https://x/1",
+            source="manual",
+            date_found=date(2026, 5, 18),
+            match_score=4.2,
+            jd_summary="LangGraph + MCP role",
+        )
+    )
+    write_job_note(
+        JobNote(
+            company="other",
+            title="Frontend Engineer",
+            url="https://x/2",
+            source="manual",
+            date_found=date(2026, 5, 18),
+            match_score=2.0,
+            jd_summary="React + TypeScript role",
+        )
+    )
     hits = search_jobs("langgraph")
     assert len(hits) == 1
     assert hits[0]["company"] == "acme"
@@ -98,3 +110,168 @@ def test_list_canonical_skills_includes_llms(temp_vault):
     assert "LLMs" in skills
     assert "Machine Learning" in skills
     assert "Python" in skills
+
+
+from datetime import date
+
+
+def _seed_sierra_jobnote(vault):
+    from compass.vault.schemas import JobNote
+    from compass.vault.writer import write_job_note
+
+    write_job_note(
+        JobNote(
+            company="Sierra",
+            title="Agent Engineer",
+            url="https://x/sierra-agent",
+            source="manual",
+            date_found=date(2026, 5, 10),
+            match_score=4.5,
+        )
+    )
+
+
+def test_mcp_add_application_creates_note(temp_vault):
+    """The MCP tool wraps lifecycle.add_application — exercising it end-to-end
+    via the MCP registration confirms wiring."""
+    from compass.mcp_server.server import add_application
+
+    _seed_sierra_jobnote(temp_vault)
+    result = add_application(job_id="Sierra-Agent_Engineer")
+
+    assert "error" not in result
+    assert result["company"] == "Sierra"
+    assert result["status"] == "applied"
+    assert any((temp_vault / "applications").glob("*Sierra*.md"))
+
+
+def test_mcp_add_application_unknown_job_returns_error(temp_vault):
+    from compass.mcp_server.server import add_application
+
+    result = add_application(job_id="not-a-real-job")
+    assert "error" in result
+    assert "no JobNote matched" in result["error"]
+
+
+def test_mcp_update_application_status_valid_transition(temp_vault):
+    from compass.mcp_server.server import add_application, update_application_status
+
+    _seed_sierra_jobnote(temp_vault)
+    add_application(job_id="Sierra")
+    today_iso = date.today().isoformat()
+
+    result = update_application_status(
+        app_id=f"{today_iso}-Sierra",
+        status="screen",
+        next_action="prep recruiter call",
+        next_action_date="2026-05-25",
+    )
+    assert "error" not in result
+    assert result["status"] == "screen"
+    assert result["next_action"] == "prep recruiter call"
+
+
+def test_mcp_update_application_status_invalid_transition(temp_vault):
+    from compass.mcp_server.server import add_application, update_application_status
+
+    _seed_sierra_jobnote(temp_vault)
+    add_application(job_id="Sierra")
+    today_iso = date.today().isoformat()
+
+    result = update_application_status(app_id=f"{today_iso}-Sierra", status="offer")
+    assert "error" in result
+    assert "invalid transition" in result["error"]
+
+
+def test_mcp_update_application_status_clear_flag_clears_field(temp_vault):
+    """clear_next_action=True must clear the existing next_action."""
+    from compass.mcp_server.server import add_application, update_application_status
+
+    _seed_sierra_jobnote(temp_vault)
+    add_application(job_id="Sierra")
+    today_iso = date.today().isoformat()
+
+    # Set a next_action
+    update_application_status(
+        app_id=f"{today_iso}-Sierra",
+        status="screen",
+        next_action="prep call",
+    )
+    # Clear it via flag
+    result = update_application_status(
+        app_id=f"{today_iso}-Sierra",
+        status="onsite",
+        clear_next_action=True,
+    )
+    assert result["next_action"] == ""
+
+
+def test_mcp_list_pending_actions_returns_due_rows(temp_vault):
+    from compass.mcp_server.server import (
+        add_application,
+        list_pending_actions,
+        update_application_status,
+    )
+
+    _seed_sierra_jobnote(temp_vault)
+    add_application(job_id="Sierra")
+    today_iso = date.today().isoformat()
+    update_application_status(
+        app_id=f"{today_iso}-Sierra",
+        status="screen",
+        next_action="follow up",
+        next_action_date=today_iso,
+    )
+
+    pending = list_pending_actions(through_date=today_iso)
+    assert len(pending) == 1
+    assert pending[0]["company"] == "Sierra"
+
+    # Regression: result must be JSON-serializable end-to-end (no raw `date`
+    # objects), since FastMCP transmits this list over the wire.
+    import json
+
+    json.dumps(pending)  # raises if any field is non-serializable
+
+
+def test_mcp_list_pending_filters_future_dates(temp_vault):
+    from compass.mcp_server.server import (
+        add_application,
+        list_pending_actions,
+        update_application_status,
+    )
+
+    _seed_sierra_jobnote(temp_vault)
+    add_application(job_id="Sierra")
+    today_iso = date.today().isoformat()
+    update_application_status(
+        app_id=f"{today_iso}-Sierra",
+        status="screen",
+        next_action_date="2099-01-01",
+    )
+
+    pending = list_pending_actions(through_date=today_iso)
+    assert pending == []
+
+
+async def test_mcp_tailor_resume_reads_existing_paragraph(temp_vault):
+    """tailor_resume returns the already-computed tailored_paragraph from the
+    JobNote frontmatter. It does NOT re-run the LLM."""
+    from compass.mcp_server.server import tailor_resume
+    from compass.vault.schemas import JobNote
+    from compass.vault.writer import write_job_note
+
+    write_job_note(
+        JobNote(
+            company="Sierra",
+            title="Agent Engineer",
+            url="https://x/sierra-agent",
+            source="manual",
+            date_found=date(2026, 5, 10),
+            match_score=4.5,
+            tailored_paragraph="Lead with MCP project at Cisco.",
+        )
+    )
+    result = await tailor_resume(job_id="Sierra-Agent_Engineer")
+    assert "error" not in result
+    assert result["tailored_paragraph"] == "Lead with MCP project at Cisco."

@@ -154,24 +154,38 @@ def update_application_status(
 
 
 def list_pending_actions(through_date: date | None = None) -> list[dict]:
+    """Return application rows with next_action_date <= cutoff, sorted ascending.
+
+    Each row is JSON-serializable: dates are emitted as ISO strings (via the
+    ApplicationNote schema's model_dump). The MCP server returns this directly
+    over the wire, so raw `date` objects in the dict would fail JSON encoding.
+    """
     cutoff = through_date or date.today()
-    out: list[dict] = []
+    rows: list[tuple[date, dict]] = []  # keep a typed sort key separately
     apps_dir = cfg.VAULT_PATH / "applications"
     if not apps_dir.exists():
-        return out
+        return []
     for p in apps_dir.glob("*.md"):
         md = frontmatter.load(p).metadata
-        nad = md.get("next_action_date")
-        if nad is None:
+        nad_raw = md.get("next_action_date")
+        if nad_raw is None:
             continue
-        if isinstance(nad, str):
+        if isinstance(nad_raw, str):
             try:
-                nad = date.fromisoformat(nad)
+                nad = date.fromisoformat(nad_raw)
             except ValueError:
                 continue
-        if nad <= cutoff:
-            # Store the coerced date back so the sort key is always a date,
-            # not a mix of date/str depending on how frontmatter parsed YAML.
-            out.append({"file": p.name, **md, "next_action_date": nad})
-    out.sort(key=lambda r: r["next_action_date"])
-    return out
+        else:
+            nad = nad_raw  # already a date (YAML auto-parsed)
+        if nad > cutoff:
+            continue
+        # Serialize via the schema so every field is JSON-safe (dates → ISO strings).
+        try:
+            note = ApplicationNote(**md)
+        except Exception:
+            logger.warning("list_pending: skipping malformed note %s", p.name)
+            continue
+        row = {"file": p.name, **note.model_dump(mode="json")}
+        rows.append((nad, row))
+    rows.sort(key=lambda r: r[0])
+    return [row for _, row in rows]
