@@ -7,9 +7,11 @@ graph invocations bounded by MAX_CONCURRENT_JOBS, post-batch gap-plan
 regeneration, and a per-run forensic log row.
 
 Graph flow (per job):
-    START -> intake -> extract -> score -> reflect -> hitl ->
-        (approved) -> tailor -> vault_write -> END
-        (rejected) -> vault_write -> END   (low-score jobs still written for analysis)
+    START -> intake -> intake_filter ->
+        (out-of-scope) -> END   (logged to _meta/filtered-jobs.md by intake_filter_node)
+        (in-scope)     -> extract -> score -> reflect -> hitl ->
+            (approved) -> tailor -> vault_write -> END
+            (rejected) -> vault_write -> END   (low-score jobs still written for analysis)
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ from compass.config import MAX_CONCURRENT_JOBS, VAULT_PATH
 from compass.pipeline.nodes.extract import extract_node
 from compass.pipeline.nodes.hitl import hitl_node
 from compass.pipeline.nodes.intake import intake_node
+from compass.pipeline.nodes.intake_filter import intake_filter_node
 from compass.pipeline.nodes.reflect import reflect_node
 from compass.pipeline.nodes.score import score_node
 from compass.pipeline.nodes.tailor import tailor_node
@@ -35,6 +38,11 @@ from compass.pipeline.state import CompassState, RawJob
 from compass.vault.reader import list_job_notes
 
 logger = logging.getLogger(__name__)
+
+
+def _route_after_filter(state: CompassState) -> str:
+    """Out-of-scope JDs short-circuit to END; in-scope continue to extract."""
+    return "extract" if state.get("in_scope") is True else "end"
 
 
 def _route_after_hitl(state: CompassState) -> str:
@@ -56,6 +64,7 @@ def _route_after_hitl(state: CompassState) -> str:
 def build_graph():
     builder = StateGraph(CompassState)
     builder.add_node("intake", intake_node)
+    builder.add_node("intake_filter", intake_filter_node)
     builder.add_node("extract", extract_node)
     builder.add_node("score", score_node)
     builder.add_node("reflect", reflect_node)
@@ -64,7 +73,12 @@ def build_graph():
     builder.add_node("vault_write", vault_write_node)
 
     builder.add_edge(START, "intake")
-    builder.add_edge("intake", "extract")
+    builder.add_edge("intake", "intake_filter")
+    builder.add_conditional_edges(
+        "intake_filter",
+        _route_after_filter,
+        {"extract": "extract", "end": END},
+    )
     builder.add_edge("extract", "score")
     builder.add_edge("score", "reflect")
     builder.add_edge("reflect", "hitl")
