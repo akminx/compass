@@ -6,12 +6,16 @@ This is INTENTIONALLY auto-approve for 0.B. Real LangGraph `interrupt()` +
 Phase 1.B per the spec. Auto-approve unblocks the end-to-end pipeline so we
 can collect real eval data first.
 """
+
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from compass.config import SCORE_THRESHOLD
-from compass.pipeline.state import CompassState
+
+if TYPE_CHECKING:
+    from compass.pipeline.state import CompassState
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +32,9 @@ async def hitl_node(state: CompassState) -> dict:
     job_id = job.url if job else "(unknown)"
     logger.info(
         "hitl: auto-%s job %s (score=%.2f, threshold=%.2f)",
-        "approve" if approved else "reject", job_id, score.score, SCORE_THRESHOLD,
+        "approve" if approved else "reject",
+        job_id,
+        score.score,
+        SCORE_THRESHOLD,
     )
     return {"human_approved": approved}

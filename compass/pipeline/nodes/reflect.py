@@ -5,9 +5,13 @@ Future role (Phase 2): re-examine borderline scores (3.0–4.0) with a stricter
 rubric. For Phase 0.B we don't have eval data showing where reflection would
 help, so we wait. See spec section "Phase 0.B → 2.A" for the upgrade trigger.
 """
+
 from __future__ import annotations
 
-from compass.pipeline.state import CompassState
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from compass.pipeline.state import CompassState
 
 
 async def reflect_node(state: CompassState) -> dict:
