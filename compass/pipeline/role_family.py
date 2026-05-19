@@ -82,17 +82,36 @@ OUT_SUBSTRING_KEYWORDS: list[str] = [
     # pre-sales / solutions
     "presales",
     "pre-sales",
+    "solutions engineer",
+    "solution engineer",
+    # NOTE: "solutions architect" intentionally NOT in this list — that title
+    # straddles pre-sales and hands-on infra depending on company; the LLM
+    # body-check stage decides per-JD.
     # CS
     "customer success",
     "customer experience",
     "customer support",
     "technical csm",
-    # PM
+    # PM / product ops
     "product manager",
     "product management",
     "group pm",
     "agent pm",
-    # design (note: "designer", "motion graphics", etc. — substring is safe because they're distinctive)
+    "product operations",
+    "operations specialist",
+    "program manager",
+    # management track (Akash isn't pursuing management — per role-clarifications)
+    "engineering manager",
+    "engineering lead",
+    "director of engineering",
+    "head of engineering",
+    "vp of engineering",
+    "vp engineering",
+    # security (separate engineering discipline, not agentic-AI)
+    "security engineer",
+    "application security",
+    "infrastructure security",
+    # design (note: "designer" is distinctive enough for substring match)
     "designer",
     "motion graphics",
     "web designer",
