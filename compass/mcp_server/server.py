@@ -129,11 +129,16 @@ def search_jobs(query: str, limit: int = 10) -> list[dict]:
 
 @mcp.tool()
 def get_skill_gaps(job_id: str) -> dict:
-    """For a given job (filename or company-title), return matched + missing skills."""
+    """For a given job (filename substring), return matched + missing skills.
+
+    Case-insensitive match — scraper board_tokens are usually lowercase but
+    users naturally capitalize. See `find_jobnote` in compass.applications.
+    """
     from compass.analysis.gap_aggregator import _parse_frontmatter
 
+    job_id_lower = job_id.lower()
     for f in (VAULT_PATH / "jobs").glob("*.md"):
-        if job_id in f.name:
+        if job_id_lower in f.name.lower():
             fm = _parse_frontmatter(f)
             return {
                 "job": f.name,

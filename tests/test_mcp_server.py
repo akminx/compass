@@ -112,6 +112,39 @@ def test_list_canonical_skills_includes_llms(temp_vault):
     assert "Python" in skills
 
 
+def test_get_skill_gaps_case_insensitive(temp_vault, monkeypatch):
+    """Bug E regression: get_skill_gaps substring match must be case-insensitive
+    so capitalized user queries find lowercase-filename JobNotes."""
+    import compass.mcp_server.server as mcp_mod
+
+    monkeypatch.setattr(mcp_mod, "VAULT_PATH", temp_vault)
+    from datetime import date
+
+    from compass.mcp_server.server import get_skill_gaps
+    from compass.vault.schemas import JobNote
+    from compass.vault.writer import write_job_note
+
+    # Scraper-style lowercase company
+    write_job_note(
+        JobNote(
+            company="sierra",
+            title="Agent Engineer",
+            url="https://x/1",
+            source="manual",
+            date_found=date(2026, 5, 18),
+            match_score=4.2,
+            skills_required=["Python", "LangGraph"],
+            skills_matched=["Python"],
+            skills_missing=["LangGraph"],
+        )
+    )
+    # Human types capital S
+    result = get_skill_gaps("Sierra-Agent_Engineer")
+    assert "error" not in result
+    assert "Python" in result["skills_matched"]
+    assert "LangGraph" in result["skills_missing"]
+
+
 from datetime import date
 
 

@@ -73,8 +73,16 @@ def find_jobnote(job_id: str) -> Path:
 
 
 def _find_application(app_id: str) -> Path:
+    """Resolve an app_id (filename substring) to an ApplicationNote path.
+
+    Case-insensitive substring match for the same reason as `find_jobnote`:
+    filenames preserve the case of the company name from the source JobNote
+    (often lowercase from scraper board_tokens), but humans naturally type
+    capitalized company names.
+    """
     apps_dir = cfg.VAULT_PATH / "applications"
-    matches = [p for p in apps_dir.glob("*.md") if app_id in p.name]
+    app_id_lower = app_id.lower()
+    matches = [p for p in apps_dir.glob("*.md") if app_id_lower in p.name.lower()]
     if not matches:
         raise LookupError(f"no ApplicationNote matched app_id={app_id!r}")
     if len(matches) > 1:

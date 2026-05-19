@@ -89,6 +89,16 @@ class TestFindJobnoteCaseInsensitive:
         with pytest.raises(LookupError):
             find_jobnote("https://x/casesensitive")
 
+    def test_find_application_case_insensitive(self, temp_vault):
+        """Same case-sensitivity guard for _find_application (Bug E regression)."""
+        _seed_jobnote(temp_vault, company="sierra", title="Agent Engineer", url="https://x/s")
+        from compass.applications.lifecycle import _find_application, add_application
+
+        app = add_application(job_id="sierra-Agent_Engineer")
+        # Capital S in app_id must still match the lowercase filename
+        p = _find_application(f"{app.applied_date.isoformat()}-Sierra")
+        assert p.exists()
+
 
 class TestUpdateStatus:
     def test_valid_transition(self, temp_vault):
