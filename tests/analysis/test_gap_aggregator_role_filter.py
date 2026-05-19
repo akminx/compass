@@ -1,8 +1,13 @@
 """Regression test for B6 fix: out-of-scope JobNotes must not contribute to gap plan."""
+
 from __future__ import annotations
-from pathlib import Path
+
+from typing import TYPE_CHECKING
+
 import frontmatter
-import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _write_job(vault: Path, name: str, role_family: str, required: list[str], score: float) -> None:
