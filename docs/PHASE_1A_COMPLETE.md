@@ -2,7 +2,7 @@
 
 > **Read this first if you're picking up Compass in a new chat.** Everything that shipped in 1.A, every issue caught by the two-stage review loop, what's deferred to 1.B, and how to resume.
 
-**Final tag:** `phase-1a-application-tracking` · **Tests:** 178 passing · **Lint:** clean · **Date completed:** 2026-05-18
+**Final tag:** `phase-1a-application-tracking` (moved forward to include 7 post-tag patch commits) · **Tests:** 204 passing · **Lint:** clean · **Date completed:** 2026-05-18
 
 ---
 
@@ -64,7 +64,7 @@ Plus the **FDE-eng keyword reconciliation** in Task 1 (the original plan had `"f
 
 ## Post-tag adversarial passes (after `phase-1a-application-tracking` cut)
 
-Two further review passes on the cut tag turned up 5 more bugs that the in-loop reviews missed because they only fire on production-shaped data (real ATS board_tokens, real target-companies.md content, real re-apply scenarios). All landed as patch commits on top of the tag:
+Three review passes on the cut tag turned up 7 more bugs that the in-loop reviews missed because they only fire on production-shaped data (real ATS board_tokens, real target-companies.md content, real re-apply scenarios, manual Obsidian edits, parallel writes). All landed as patch commits on top of the tag; the tag was then moved forward to include them.
 
 | # | Bug | Commit | What |
 |---|---|---|---|
@@ -73,10 +73,12 @@ Two further review passes on the cut tag turned up 5 more bugs that the in-loop 
 | 3 | `find_jobnote` case-sensitive substring match — `"Sierra-..."` failed against `"sierra-..."` filenames | `330980d` | Lowercase both sides of filename match |
 | E | Same case-sensitivity bug in `_find_application` and `get_skill_gaps` | `5ce4418` | Same fix pattern |
 | F | `add_application` silently overwrote in-flight ApplicationNotes when called twice — destroyed status transitions, contacts, next_action history | `2a219ad` | Refuse overwrite unless `force=True`; raise `FileExistsError` |
+| #1 | `CompanyNote.roles_seen` race under `MAX_CONCURRENT_JOBS=5` — 5 parallel writers all read `roles_seen=0`, all incremented to 1, last writer won → lost 4 increments. Dashboard sort by `roles_seen` lied. | `be1fa91` | Stop incrementing in `write_company_note`; derive from `len(JobNotes for company)` in new `gap_aggregator._sync_company_counters` (same pattern as bug-#12 skill-counter fix) |
+| #2 | Invalid manual `tier` value in Obsidian (typo like `tier: applynow` or `tier: favorite`) crashed `write_company_note` with `ValidationError` on the next pipeline run — `CompanyNote.tier` is a `Literal`, `model_copy(update={"tier": "favorite"})` rejects. | `d40f36e` | Validate `existing.tier` against the Literal value set; log+ignore invalid values so the pipeline-computed tier wins |
 
-Plus a vault cleanup: deleted 18 pre-Phase-1A JobNotes with empty `role_family`, backfilled CompanyNote tiers (decagon/glean/ramp → apply-now, cresta → 6-month), and deleted 1 JobNote mis-labeled by the pre-fix `upgrade_family`. Re-ran pipeline; all 7 surviving JobNotes now have classifications consistent with current code.
+Plus a vault cleanup: deleted 18 pre-Phase-1A JobNotes with empty `role_family`, backfilled CompanyNote tiers (decagon/glean/ramp → apply-now, cresta → 6-month), and deleted 1 JobNote mis-labeled by the pre-fix `upgrade_family`. Re-ran pipeline; all 8 surviving JobNotes have classifications consistent with current code.
 
-**Total committed bugs across in-loop + post-tag reviews: 18.** None silent-shipped to production use.
+**Total committed bugs across in-loop + post-tag reviews: 20.** None silent-shipped to production use.
 
 ---
 
@@ -268,15 +270,15 @@ worked in 1.A:
 
 | Metric | Value | Δ since Phase 0.B |
 |---|---|---|
-| JobNotes in vault | 21 | +3 (this run only; some pre-Phase-1A entries persist) |
+| JobNotes in vault | 8 | After cleanup of 18 pre-Phase-1A stale entries; all surviving notes correctly classified |
 | SkillNotes | 99 | +4 (LLMs, Large Language Models, Machine Learning, Deep Learning from Phase 0.B retro) |
-| CompanyNotes | ~9 | (unchanged) |
-| Pipeline runs logged | 18 | +5 |
-| Filtered-jobs log entries | ~17 | NEW (didn't exist before 1.A) |
-| Master gap plan top-3 | LangGraph · LLMs · TypeScript | Stretch-role weighting working |
-| Total commits Phase 0.B → 1.A | 13 | — |
-| Test count | 178 | +93 |
-| LoC delta | +2,785 / −195 | — |
+| CompanyNotes | 9 | tier resolution working: sierra/decagon/glean/ramp → apply-now; anthropic/cresta → 6-month |
+| Pipeline runs logged | 19 | +6 |
+| Filtered-jobs log entries | ~30 | NEW (didn't exist before 1.A) |
+| Master gap plan top-3 | TypeScript · Go · RAG (all apply-now demand) | Stretch-role weighting working |
+| Total commits Phase 0.B → 1.A | 22 | — |
+| Test count | 204 | +119 |
+| LoC delta | +3,100 / −210 | — |
 
 ---
 
