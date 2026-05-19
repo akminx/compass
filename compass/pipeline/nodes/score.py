@@ -76,7 +76,7 @@ def _reasoning_complete(text: str) -> bool:
     schema doesn't catch this because any non-empty string is valid. Cheap check:
     require at least 20 chars and a terminal punctuation mark."""
     t = (text or "").strip()
-    return len(t) >= 20 and t[-1] in ".!?\""
+    return len(t) >= 20 and t[-1] in '.!?"'
 
 
 async def _score_with_retry(req: JobRequirements, profile_text: str) -> JobScore:
