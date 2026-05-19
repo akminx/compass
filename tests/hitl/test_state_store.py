@@ -110,3 +110,15 @@ async def test_list_timed_out_returns_only_old_pending(frozen_now):
 
 async def test_get_pending_unknown_returns_none():
     assert await state_store.get_pending("nope") is None
+
+
+async def test_mark_resolved_rejects_already_resolved_row():
+    """Concurrent resolvers race: second one must see ValueError, not silent overwrite."""
+    await _add_one()
+    await state_store.mark_resolved("tid-1", status="approved", feedback="first")
+    with pytest.raises(ValueError, match="already resolved"):
+        await state_store.mark_resolved("tid-1", status="timed_out")
+    # Confirm the first resolution stuck — no silent overwrite
+    row = await state_store.get_pending("tid-1")
+    assert row["status"] == "approved"
+    assert row["feedback"] == "first"

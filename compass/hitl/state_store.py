@@ -96,7 +96,7 @@ async def add_pending(
     """Insert a new pending row. INSERT OR IGNORE — re-pausing the same thread_id is a no-op."""
     conn = await _connect()
     try:
-        await conn.execute(
+        cursor = await conn.execute(
             """
             INSERT OR IGNORE INTO pending_approvals
               (thread_id, job_url, company, title, score, score_reasoning,
@@ -116,6 +116,8 @@ async def add_pending(
             ),
         )
         await conn.commit()
+        if cursor.rowcount == 0:
+            logger.info("hitl: re-pause ignored for thread_id=%s (already pending)", thread_id)
     finally:
         await conn.close()
 
@@ -168,19 +170,29 @@ async def mark_resolved(
 ) -> None:
     if status not in _VALID_STATUSES or status == "pending":
         raise ValueError(f"invalid resolve status: {status!r}")
+
     conn = await _connect()
     try:
-        async with conn.execute(
-            "SELECT 1 FROM pending_approvals WHERE thread_id = ?", (thread_id,)
-        ) as cur:
-            if not await cur.fetchone():
-                raise LookupError(f"no pending row for thread_id {thread_id!r}")
-        await conn.execute(
+        # Atomic guarded UPDATE: only transitions rows that are still pending.
+        cursor = await conn.execute(
             "UPDATE pending_approvals "
             "SET status = ?, feedback = ?, resolved_at = ? "
-            "WHERE thread_id = ?",
+            "WHERE thread_id = ? AND status = 'pending'",
             (status, feedback, _now().isoformat(), thread_id),
         )
         await conn.commit()
+
+        if cursor.rowcount == 0:
+            # Distinguish "no such thread" from "already resolved" for the caller.
+            async with conn.execute(
+                "SELECT status FROM pending_approvals WHERE thread_id = ?",
+                (thread_id,),
+            ) as cur:
+                existing = await cur.fetchone()
+            if existing is None:
+                raise LookupError(f"no pending row for thread_id {thread_id!r}")
+            raise ValueError(f"thread {thread_id!r} already resolved ({existing['status']!r})")
     finally:
         await conn.close()
+
+    logger.info("hitl: thread %s resolved as %s", thread_id, status)

@@ -31,11 +31,6 @@ def frozen_now(monkeypatch: pytest.MonkeyPatch) -> _dt.datetime:
     """Freeze the wall clock the state store uses."""
     fixed = _dt.datetime(2026, 5, 19, 12, 0, 0, tzinfo=_dt.UTC)
 
-    class _FrozenDT(_dt.datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return fixed if tz is None else fixed.astimezone(tz)
-
     import compass.hitl.state_store as ss
 
     monkeypatch.setattr(ss, "_now", lambda: fixed)
