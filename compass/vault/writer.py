@@ -19,13 +19,13 @@ from typing import TYPE_CHECKING
 import frontmatter
 
 from compass.config import AGENT_LOG_PATH, VAULT_PATH
-from compass.vault.schemas import ApplicationNote, CompanyNote, JobNote, SkillCategory, SkillNote
-from compass.vault.taxonomy import category_for
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from pydantic import BaseModel
+
+    from compass.vault.schemas import ApplicationNote, CompanyNote, JobNote
 
 logger = logging.getLogger(__name__)
 
@@ -153,31 +153,6 @@ def write_job_note(note: JobNote, full_description: str | None = None) -> Path:
     target.write_text(frontmatter.dumps(post) + "\n", encoding="utf-8")
     append_agent_log(f"vault_write job {note.company} {note.title} score={note.match_score}")
     return target
-
-
-def update_skill_note(canonical_skill: str, job_url: str) -> Path:
-    """Increment appears_in_jobs on a skill note. Creates a minimal note if missing."""
-    skills_dir = VAULT_PATH / "skills"
-    skills_dir.mkdir(parents=True, exist_ok=True)
-    path = skills_dir / f"{_safe_segment(canonical_skill)}.md"
-
-    if path.exists():
-        post = frontmatter.load(path)
-        post.metadata["appears_in_jobs"] = int(post.metadata.get("appears_in_jobs", 0)) + 1
-    else:
-        category: SkillCategory = category_for(canonical_skill) or "language"  # type: ignore[assignment]
-        if category_for(canonical_skill) is None:
-            logger.warning(
-                "update_skill_note: %r not in canonical taxonomy; defaulting category=language",
-                canonical_skill,
-            )
-        skill = SkillNote(skill=canonical_skill, category=category, appears_in_jobs=1)
-        post = frontmatter.Post(content=f"# {canonical_skill}\n")
-        post.metadata = _to_metadata(skill)
-
-    path.write_text(frontmatter.dumps(post) + "\n", encoding="utf-8")
-    append_agent_log(f"vault_write skill {canonical_skill} += 1 (from {job_url})")
-    return path
 
 
 def write_company_note(note: CompanyNote) -> Path:

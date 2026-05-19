@@ -193,29 +193,6 @@ def test_write_job_note_idempotent_on_duplicate_url(temp_vault):
     assert loaded.metadata["match_score"] == 4.5
 
 
-def test_update_skill_note_increments_counter(temp_vault):
-    from compass.vault.writer import update_skill_note
-
-    skill_path = temp_vault / "skills" / "LangGraph.md"
-    skill_path.write_text(
-        "---\ntype: skill\nskill: LangGraph\ncategory: agent-framework\nappears_in_jobs: 5\n---\n# LangGraph\n"
-    )
-    update_skill_note("LangGraph", "https://example.com/jobs/x")
-    loaded = frontmatter.load(skill_path)
-    assert loaded.metadata["appears_in_jobs"] == 6
-
-
-def test_update_skill_note_creates_if_missing(temp_vault):
-    from compass.vault.writer import update_skill_note
-
-    update_skill_note("Python", "https://example.com/jobs/x")
-    skill_path = temp_vault / "skills" / "Python.md"
-    assert skill_path.exists()
-    loaded = frontmatter.load(skill_path)
-    assert loaded.metadata["skill"] == "Python"
-    assert loaded.metadata["appears_in_jobs"] == 1
-
-
 def test_write_company_note_creates_file(temp_vault):
     from compass.vault.schemas import CompanyNote
     from compass.vault.writer import write_company_note

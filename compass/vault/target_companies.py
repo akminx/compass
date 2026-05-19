@@ -115,15 +115,19 @@ _MIN_FUZZY_LEN = 4
 def get_tier(company: str) -> Tier:
     """Resolve a tier for a company name.
 
-    Lookup strategy:
-      1. Exact normalized match.
-      2. Bidirectional substring fallback — handles the common case where a
-         scraper board_token is a single word (e.g. "gleanwork", "nvidia") but
-         target-companies.md uses a longer descriptive name in one cell
-         (e.g. "Glean", "NVIDIA Agentic AI", "Vapi, Retell, Wispr Flow").
-         Either direction (query ⊂ key OR key ⊂ query) counts as a match.
-      3. If multiple bidirectional matches with different tiers, the highest
-         tier (apply-now > 6-month > stretch > skip) wins.
+    Lookup precedence (highest first):
+      1. YAML exact match — `target-companies.yaml` is the 3-month-pivot source
+         of truth and carries newer entries (banks/consulting/manual-provider)
+         that the legacy markdown hasn't been updated to reflect.
+      2. Markdown exact match — legacy lookup; still useful for entries that
+         exist only in `target-companies.md`.
+      3. Bidirectional substring fallback against the markdown (handles the
+         common case where a scraper board_token is a single word but the
+         markdown uses a longer descriptive name).
+      4. If multiple substring matches with different tiers, the highest tier
+         (apply-now > opportunistic > backend-prep > ... > skip) wins.
+
+    Returns "unknown" when no source resolves the company.
     """
     if _company_to_tier is None:
         refresh()
@@ -133,12 +137,19 @@ def get_tier(company: str) -> Tier:
     if not query:
         return "unknown"
 
-    # Exact match
+    # 1. YAML exact match — newest source of truth.
+    yaml_meta = get_company_meta(company)
+    if yaml_meta is not None:
+        yaml_tier = yaml_meta.get("tier")
+        if yaml_tier in TIER_ORDER:
+            return yaml_tier  # type: ignore[return-value]
+
+    # 2. Markdown exact match.
     direct = _company_to_tier.get(query)
     if direct is not None:
         return direct
 
-    # Bidirectional substring fallback (guarded by min-length to avoid noise)
+    # 3. Bidirectional substring fallback (guarded by min-length to avoid noise).
     if len(query) < _MIN_FUZZY_LEN:
         return "unknown"
 
