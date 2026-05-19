@@ -68,6 +68,11 @@ def load_jobs() -> list[JobSummary]:
         fm = _parse_frontmatter(f)
         if not fm:
             continue
+        # Skip out-of-scope JobNotes — they shouldn't influence the gap plan.
+        # role_family is set once at intake; if a stale entry's title would
+        # now classify as out-of-scope, the migration script handles that.
+        if fm.get("role_family") == "out-of-scope":
+            continue
         out.append(
             JobSummary(
                 file=f,
