@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from compass.hitl import state_store
+from compass.hitl import HITL_TIMEOUT_FEEDBACK_PREFIX, state_store
 from compass.hitl.resume import resume_pending
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ async def check_and_resume_timeouts(*, timeout_hours: int | None = None) -> int:
                 tid,
                 decision={
                     "approved": False,
-                    "feedback": f"auto-cancelled after {hrs}h timeout",
+                    "feedback": f"{HITL_TIMEOUT_FEEDBACK_PREFIX} {hrs}h timeout",
                 },
                 status_override="timed_out",
             )

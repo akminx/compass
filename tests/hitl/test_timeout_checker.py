@@ -179,3 +179,13 @@ async def test_timeout_checker_continues_after_one_resume_failure(monkeypatch):
     assert n == 1  # one succeeded, one failed
     row_broken = await state_store.get_pending("tid-broken")
     assert row_broken["status"] == "error"
+
+
+async def test_timeout_feedback_string_matches_vault_write_prefix():
+    """Lock the contract: timeout_checker's feedback string MUST be matchable by
+    vault_write._derive_hitl_decision's startswith() check. Otherwise the
+    JobNote.hitl_decision='timed_out' mapping silently breaks."""
+    from compass.hitl import HITL_TIMEOUT_FEEDBACK_PREFIX
+
+    feedback = f"{HITL_TIMEOUT_FEEDBACK_PREFIX} 4h timeout"
+    assert feedback.lower().startswith(HITL_TIMEOUT_FEEDBACK_PREFIX.lower())

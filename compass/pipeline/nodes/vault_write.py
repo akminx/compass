@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 def _derive_hitl_decision(state: CompassState) -> tuple[str | None, datetime | None]:
     """Map state -> (hitl_decision, hitl_at). Returns (None, None) if hitl never ran."""
     from compass.config import SCORE_THRESHOLD
+    from compass.hitl import HITL_TIMEOUT_FEEDBACK_PREFIX
 
     approved = state.get("human_approved")
     if approved is None:
@@ -48,7 +49,7 @@ def _derive_hitl_decision(state: CompassState) -> tuple[str | None, datetime | N
 
     if approved is True:
         decision = "approved"
-    elif feedback.startswith("auto-cancelled after"):
+    elif feedback.startswith(HITL_TIMEOUT_FEEDBACK_PREFIX):
         decision = "timed_out"
     elif score_value < SCORE_THRESHOLD:
         decision = "auto_rejected"
