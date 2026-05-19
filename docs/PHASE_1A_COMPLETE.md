@@ -62,6 +62,24 @@ Plus the **FDE-eng keyword reconciliation** in Task 1 (the original plan had `"f
 
 ---
 
+## Post-tag adversarial passes (after `phase-1a-application-tracking` cut)
+
+Two further review passes on the cut tag turned up 5 more bugs that the in-loop reviews missed because they only fire on production-shaped data (real ATS board_tokens, real target-companies.md content, real re-apply scenarios). All landed as patch commits on top of the tag:
+
+| # | Bug | Commit | What |
+|---|---|---|---|
+| A | `target_companies.get_tier` failed for 8 of 9 vault companies because scraper board_tokens (`gleanwork`, `nvidia`, `apple`, `vapi`, `anduril`) don't equal target-companies.md descriptive names (`Glean`, `NVIDIA Agentic AI`, `Vapi, Retell, Wispr Flow`, etc.) | `c2e01a9` | Bidirectional substring match with 4-char min-length floor |
+| B | `upgrade_family` over-promoted plain backend roles to `agent-engineer` whenever a JD body mentioned `"agentic AI"` once — `"agent"` ⊂ `"agentic"` ⊂ `"agentic ai"` triple-counted | `bcd2478` | Longest-first word-bounded regex with distinct-phrase dedup |
+| 3 | `find_jobnote` case-sensitive substring match — `"Sierra-..."` failed against `"sierra-..."` filenames | `330980d` | Lowercase both sides of filename match |
+| E | Same case-sensitivity bug in `_find_application` and `get_skill_gaps` | `5ce4418` | Same fix pattern |
+| F | `add_application` silently overwrote in-flight ApplicationNotes when called twice — destroyed status transitions, contacts, next_action history | `2a219ad` | Refuse overwrite unless `force=True`; raise `FileExistsError` |
+
+Plus a vault cleanup: deleted 18 pre-Phase-1A JobNotes with empty `role_family`, backfilled CompanyNote tiers (decagon/glean/ramp → apply-now, cresta → 6-month), and deleted 1 JobNote mis-labeled by the pre-fix `upgrade_family`. Re-ran pipeline; all 7 surviving JobNotes now have classifications consistent with current code.
+
+**Total committed bugs across in-loop + post-tag reviews: 18.** None silent-shipped to production use.
+
+---
+
 ## What we know works (verified empirically on real data)
 
 Live pipeline run on 2026-05-18T15:48 against `anthropic,hebbia,gleanwork,cresta` (Greenhouse) + `sierra,decagon,ramp` (Ashby), `MAX_JOBS_PER_RUN=20`:
@@ -112,6 +130,7 @@ Carryover from the Phase 1.A spec's "Out of scope" section plus issues surfaced 
 | Blog post on the skill_assessor loop | Portfolio claim | **2.C** | Requires assessor running live via Modal cron (1.B) |
 | Workday / Apple / Google / AWS / Microsoft scrapers | Coverage | **3+** | Long-tail per master spec |
 | Cleanup of pre-Phase-1A stale JobNotes (entries with `role_family=''` from earlier today's runs before tasks merged) | Cosmetic | now (human-run) | One-shot: `uv run python -m scripts.cleanup_stale_jobnotes --apply` |
+| **URL dedup for `intake_filter`-rejected JDs** — out-of-scope JDs short-circuit before `vault_write`, so the batch URL dedup set never knows about them. Every pipeline run re-classifies the same sales/PM/CS roles. Borderline-OUTs hit the LLM each time (~$0.0005 × N borderlines/run). `_meta/filtered-jobs.md` grows linearly. Trivial cost today but worth fixing alongside Modal cron. | Cost + log growth | **1.B** | Natural fit for the caching/observability layer 1.B brings |
 
 ---
 
