@@ -69,6 +69,81 @@ Resolved at this tag: added `engineering manager`, `engineering lead`, `director
 
 ---
 
+---
+
+## B6. Derived-field staleness asymmetry — `role_family` is set once and never reconciled
+
+**Symptom:** when the keyword OUT list expands (as in commit `3828d8f`), existing JobNotes that should now be classified out-of-scope keep their old `role_family`. `gap_aggregator.regenerate()` reads ALL JobNotes regardless of `role_family`, so stale entries keep contributing to the master gap plan.
+
+**Evidence:**
+- `jobs/2026-03-17-ramp-AI_Operations_Specialist_Agentic_Workflows-f489c32b.md` has `role_family: agent-engineer` but `keyword_classify()` now correctly returns `out-of-scope` for that title. The JobNote was written before "operations specialist" was in the OUT list. Its skills still feed gap-plan weights.
+
+**Pattern:** counters (`appears_in_jobs`, `roles_seen`) are derived at every gap_aggregator run — Phase 0 bug #12 / Phase 1.A bug #1 enforced this discipline. But `role_family` is treated as ground truth once written. **Same asymmetry could repeat for any future "set-once classification" field** (e.g. `tier`, `seniority`).
+
+**Phase 2.A fix surface:**
+- Either: `gap_aggregator.load_jobs()` re-runs `keyword_classify` on each JobNote and skips out-of-scope.
+- Or: a one-time migration script that re-classifies and updates `role_family` in place (similar to the Phase 1.A `cleanup_stale_jobnotes.py` pattern).
+- Either way: add a regression test that asserts "no JobNote in the vault has a `role_family` that current code would classify as `out-of-scope`."
+
+---
+
+## B7. `gap_aggregator` includes `auto_rejected` / `timed_out` / `null hitl_decision` jobs at full weight
+
+**Symptom:** the gap plan is computed from all 23 JobNotes — currently 1 approved, 10 auto_rejected, 8 null (pre-1.B.1), 4 timed_out — with no `hitl_decision` filter. A `timed_out` job with score 4.0 contributes the same gap signal as an `approved` job.
+
+**Trade-off:** the original spec rationale was "JD-market signal is independent of personal action" — even rejected jobs reveal what skills the market wants. Defensible. But it conflates:
+- "Skills the market demands generally" (all in-scope JDs)
+- "Skills I should study to convert near-misses to applies" (high-score auto_rejected = stretch signals)
+- "Skills the human is committed to pursuing" (approved only)
+
+**Phase 2.A fix surface:**
+- Add an optional filter mode to `gap_aggregator.regenerate(filter_decision=None | "approved_or_above_threshold")`.
+- Document the chosen weighting decision in `_profile/preferences.md` so the user can tune.
+
+---
+
+## B8. `tailor_node` has no programmatic constraint against hallucination
+
+**Symptom:** unlike `score_node`'s `_constrain_to_jd_skills`, `tailor_node`'s prompt says "Mention real projects and concrete numbers when the profile provides them" but enforces nothing. The agent could invent project names and they'd ship to the JobNote.
+
+**Evidence:** the one tailored paragraph in the vault (Cognition Special Projects) was spot-checked — every concrete claim verified against `_profile/resume.md`. **No hallucination in this sample**, but n=1 with no code-level defense.
+
+**Risk:** Sonnet on a sparse JD ("Founder mindset, 2+ years exp") with a longer profile could easily invent specifics.
+
+**Phase 2.A fix surface:**
+- Post-generation regex pass that flags proper-noun project mentions not present in `resume.md` (similar to extract's JD-substring validation in Phase 0).
+- Eval coverage: hand-label 5 generated tailoring paragraphs against ground-truth resume facts; assert zero unsupported claims.
+
+---
+
+## Portfolio-claim risks (operational, not code bugs)
+
+These are NOT data-quality bugs but portfolio narrative risks: the spec advertises features whose code is built but real data is empty.
+
+### PR1. Skill assessor loop is theoretical — zero evidence URIs
+
+`grep '^evidence:' ~/Documents/compass-vault/skills/*.md` returns 95/95 `evidence: []`. The "unique angle" — the agent that grades candidate skills against `learning-vault://` evidence — has never operated on real input. The MCP `assess_skills` tool returns immediately with no work.
+
+**The README narrative says:** "an agent inside it that grades my skills against the live job market and tells me what to study next." Currently it can't, because no evidence is wired up. The infrastructure exists; the demo isn't recorded.
+
+**Mitigation paths:**
+- Manually wire 3-5 `learning-vault://` URIs to a sample of skills (e.g. MCP, LangGraph, RAG) — proves the loop end-to-end.
+- Record one assessor run with grade-change output as a portfolio screenshot.
+
+### PR2. Application lifecycle has never been used
+
+`~/Documents/compass-vault/applications/` is empty. All 23 JobNotes have `applied_at: null`. The Dashboard panels "In-flight applications" and "Today's next actions" will both always be empty until someone runs `add_application(job_id)`.
+
+**Mitigation:** apply to one job for real, exercise the full lifecycle (`add_application` → `update_application_status` → next-action reminder). Provides a portfolio screenshot.
+
+### PR3. Concurrent pipeline runs not protected
+
+Two parallel `run_pipeline()` invocations share `HITL_CHECKPOINT_DB`. SQLite raises `database is locked` and one process may leave a thread without a saved checkpoint. Also two parallel `gap_aggregator.regenerate()` calls race on `MASTER_GAP_PLAN_PATH.write_text()` — atomic per call but last-writer-wins across processes.
+
+**Phase 1.B.3 fix surface:** Modal cron + human-MCP race is the real-world trigger. Use SQLite advisory lock or `flock` on a sentinel file.
+
+---
+
 ## What's working correctly (positive findings)
 
 These were spot-checked and are NOT a problem:
