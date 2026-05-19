@@ -46,6 +46,8 @@ Tools exposed:
 
 from __future__ import annotations
 
+import logging
+
 from mcp.server.fastmcp import FastMCP
 
 from compass.analysis import gap_aggregator, skill_assessor
@@ -54,6 +56,8 @@ from compass.hitl import state_store as _state_store
 from compass.hitl.resume import resume_pending as _resume_pending
 from compass.vault.learning_bridge import path_to_uri, resolve, scan_evidence
 from compass.vault.taxonomy import all_canonicals
+
+logger = logging.getLogger(__name__)
 
 mcp = FastMCP("compass")
 
@@ -114,6 +118,162 @@ async def score_jd(jd_text: str) -> dict:
     return {
         "score": score.model_dump(),
         "requirements": req.model_dump() if req else None,
+    }
+
+
+@mcp.tool()
+async def add_job_from_url(
+    url: str,
+    company: str | None = None,
+    title: str | None = None,
+) -> dict:
+    """Fetch a JD by URL, run the full Compass pipeline, write a JobNote.
+
+    Unlocks every site Compass's auto-scrapers can't reach: JPM Oracle
+    Cloud, Capital One, iCIMS, LinkedIn, custom careers pages. The user
+    finds the role manually and pastes the URL — Compass scores it.
+
+    Strategy:
+      1. If the URL matches a known ATS pattern (greenhouse/lever/ashby/
+         workday public JSON), use the structured scraper for clean data.
+      2. Otherwise, static-fetch the page + strip HTML. Many corporate
+         careers pages (Oracle Cloud, LinkedIn) are JS-rendered and will
+         return a near-empty body — in that case the caller should use
+         `add_job_from_text` and paste the JD body explicitly.
+
+    Returns {"path": str, "score": float, "title": str, "company": str} on
+    success, {"error": str} on failure. Does NOT call tailor (skip Sonnet
+    cost on this codepath — caller can re-invoke tailor explicitly later).
+    """
+    from compass.pipeline.add_url import fetch_rawjob_from_url
+
+    try:
+        job = await fetch_rawjob_from_url(url, company=company, title=title)
+    except Exception as e:
+        return {"error": f"fetch failed: {type(e).__name__}: {e}"}
+    if job is None:
+        return {"error": "could not extract JD from URL — try add_job_from_text"}
+    return await _run_partial_pipeline_and_write(job)
+
+
+@mcp.tool()
+async def add_job_from_text(
+    company: str,
+    title: str,
+    url: str,
+    jd_text: str,
+) -> dict:
+    """Run the Compass pipeline on a pasted JD (for sites we can't fetch).
+
+    Use when `add_job_from_url` returns "could not extract" — typical for
+    JPM Oracle Cloud, LinkedIn JS-rendered pages, Workday tenants not in
+    the YAML. Paste the JD body from the browser; Compass scores it and
+    writes a JobNote with the original URL.
+
+    Returns {"path": str, "score": float, ...} on success.
+    """
+    from datetime import date
+
+    from compass.pipeline.state import RawJob
+
+    job = RawJob(
+        company=company,
+        title=title,
+        url=url,
+        source="manual",
+        description=jd_text,
+        date_posted=date.today(),
+    )
+    return await _run_partial_pipeline_and_write(job)
+
+
+async def _run_partial_pipeline_and_write(job) -> dict:
+    """Shared helper: intake_filter → extract → score → vault_write.
+
+    Skips tailor (Sonnet cost) and HiTL (the user already chose to add this
+    JD by URL — they've implicitly approved). gap_aggregator NOT run inline;
+    the next batch run picks up the new JobNote.
+    """
+    from compass.pipeline.nodes.extract import extract_node
+    from compass.pipeline.nodes.intake_filter import intake_filter_node
+    from compass.pipeline.nodes.score import score_node
+    from compass.pipeline.nodes.vault_write import vault_write_node
+    from compass.pipeline.state import CompassState  # noqa: TC001
+
+    state: CompassState = {
+        "raw_jobs": [],
+        "current_job": job,
+        "extracted_requirements": None,
+        "score_result": None,
+        "in_scope": None,
+        "role_family": None,
+        "agent_signal_count": None,
+        "human_approved": True,  # implicit approval by adding via URL
+        "human_feedback": None,
+        "tailored_paragraph": None,
+        "vault_written": False,
+        "jobs_processed": 0,
+        "jobs_written": 0,
+        "errors": [],
+        "thread_id": None,
+        "score_threshold": None,
+    }
+    for node in (intake_filter_node, extract_node, score_node, vault_write_node):
+        update = await node(state)
+        state = {**state, **update}  # type: ignore[typeddict-item]
+        if state.get("errors"):
+            return {"error": state["errors"][-1]}
+        if state.get("in_scope") is False:
+            return {
+                "error": "intake_filter dropped the JD — see _meta/filtered-jobs.md",
+                "role_family": state.get("role_family"),
+            }
+    score = state.get("score_result")
+    if score is None:
+        return {"error": "score node returned None"}
+    return {
+        "path": "vault/jobs/" + (job.company + "-" + job.title),
+        "company": job.company,
+        "title": job.title,
+        "score": score.score,
+        "score_reasoning": score.reasoning,
+        "matched_skills": score.matched_skills,
+        "missing_skills": score.missing_skills,
+        "role_family": state.get("role_family"),
+        "agent_signal_count": state.get("agent_signal_count"),
+    }
+
+
+@mcp.tool()
+async def generate_cover_letter(job_filename: str) -> dict:
+    """Draft a cover letter for a JobNote in the vault.
+
+    `job_filename` is the base name of a file in `compass-vault/jobs/`
+    (e.g. `2026-05-19-databricks-AI_Engineer-abcdef12.md`). The tool reads
+    the JobNote's frontmatter (company / title / skills / JD summary),
+    pulls the company's targeting notes from YAML if available, and writes
+    a structured 250-400 word cover letter to
+    `compass-vault/cover-letters/`.
+
+    Use this AFTER you decide to apply to a role — it's a Sonnet call so
+    don't burn it on the whole vault.
+
+    Returns {"path": str, "preview": str (first 300 chars)} on success.
+    """
+    from compass.config import VAULT_PATH
+    from compass.pipeline.cover_letter import generate_cover_letter_from_jobnote
+
+    job_path = VAULT_PATH / "jobs" / job_filename
+    if not job_path.exists():
+        return {"error": f"JobNote not found: {job_filename}"}
+    try:
+        out_path, body = await generate_cover_letter_from_jobnote(job_path)
+    except Exception as e:
+        logger.exception("generate_cover_letter: failed")
+        return {"error": f"{type(e).__name__}: {e}"}
+    return {
+        "path": str(out_path.relative_to(VAULT_PATH)),
+        "preview": body[:300] + ("…" if len(body) > 300 else ""),
     }
 
 
