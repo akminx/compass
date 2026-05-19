@@ -166,25 +166,42 @@ def _initial_state(job: RawJob, thread_id: str | None = None) -> CompassState:
     }
 
 
+_langfuse_client_initialized = False
+
+
 def _langfuse_config() -> dict:
     """Return a LangGraph config dict with the Langfuse callback if usable.
 
+    Langfuse 4.x split credentials away from `CallbackHandler.__init__` — the
+    callback now reads from a process-global `Langfuse(...)` singleton (or
+    LANGFUSE_* env vars). Earlier code passed `host=`/`secret_key=` directly
+    to `CallbackHandler`, which raises TypeError on 4.x and silently disabled
+    all tracing.
+
+    Pattern:
+      1. Initialize the Langfuse client once (idempotent — singleton).
+      2. Construct a CallbackHandler that picks up the singleton's config.
+
     Returns {} when Langfuse env is unset or langfuse fails to import — the
-    pipeline never blocks on observability. This wires traces from Phase 0.B
-    onward so by 2.B (public-trace polish) we have history to show.
+    pipeline never blocks on observability.
     """
+    global _langfuse_client_initialized
     from compass.config import LANGFUSE_HOST, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY
 
     if not (LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY):
         return {}
     try:
+        from langfuse import Langfuse
         from langfuse.langchain import CallbackHandler
 
-        handler = CallbackHandler(
-            host=LANGFUSE_HOST,
-            public_key=LANGFUSE_PUBLIC_KEY,
-            secret_key=LANGFUSE_SECRET_KEY,
-        )
+        if not _langfuse_client_initialized:
+            Langfuse(
+                host=LANGFUSE_HOST,
+                public_key=LANGFUSE_PUBLIC_KEY,
+                secret_key=LANGFUSE_SECRET_KEY,
+            )
+            _langfuse_client_initialized = True
+        handler = CallbackHandler()
         return {"callbacks": [handler]}
     except Exception as e:
         logger.warning("langfuse: failed to init callback, continuing without traces — %s", e)

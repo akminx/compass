@@ -60,7 +60,9 @@ async def intake_filter_node(state: CompassState) -> dict:
             _log_filtered(job.company, job.title, f"title rejects: {needle!r}")
             logger.info(
                 "intake_filter: dropped %s — %s (title rule: %r)",
-                job.company, job.title, needle,
+                job.company,
+                job.title,
+                needle,
             )
             return {"in_scope": False, "role_family": "out-of-scope"}
     for needle in rules["jd"]:
@@ -68,7 +70,9 @@ async def intake_filter_node(state: CompassState) -> dict:
             _log_filtered(job.company, job.title, f"jd rejects: {needle!r}")
             logger.info(
                 "intake_filter: dropped %s — %s (jd rule: %r)",
-                job.company, job.title, needle,
+                job.company,
+                job.title,
+                needle,
             )
             return {"in_scope": False, "role_family": "out-of-scope"}
 

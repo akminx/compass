@@ -33,15 +33,26 @@ def _to_company_note(entry: dict) -> CompanyNote:
     collapse to safe defaults — write_company_note + Pydantic will validate."""
     tier = entry.get("tier") or "unknown"
     if tier not in {
-        "apply-now", "opportunistic", "backend-prep", "6-month",
-        "stretch", "skip", "unknown",
+        "apply-now",
+        "opportunistic",
+        "backend-prep",
+        "6-month",
+        "stretch",
+        "skip",
+        "unknown",
     }:
         tier = "unknown"
 
     difficulty = str(entry.get("interview_difficulty") or "unknown").strip().lower()
     if difficulty not in {
-        "hackerrank", "case", "lc-easy", "lc-medium", "lc-medium-hard",
-        "lc-hard", "takehome", "unknown",
+        "hackerrank",
+        "case",
+        "lc-easy",
+        "lc-medium",
+        "lc-medium-hard",
+        "lc-hard",
+        "takehome",
+        "unknown",
     }:
         difficulty = "unknown"
 
@@ -73,7 +84,9 @@ def main() -> int:
     notes = [_to_company_note(e) for e in entries]
     print(f"Will seed {len(notes)} CompanyNote(s):\n")
     for n in notes:
-        print(f"  {n.company:25s}  tier={n.tier:14s}  diff={n.interview_difficulty:14s}  cisco={n.cisco_adjacency}")
+        print(
+            f"  {n.company:25s}  tier={n.tier:14s}  diff={n.interview_difficulty:14s}  cisco={n.cisco_adjacency}"
+        )
 
     if not args.apply:
         print(f"\nDry-run. Pass --apply to write {len(notes)} files.")

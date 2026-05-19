@@ -59,6 +59,39 @@ def test_write_job_note_sanitizes_filename(temp_vault):
     assert "?" not in path.name
 
 
+def test_write_job_note_strips_html_from_full_jd(temp_vault):
+    """Belt-and-suspenders: if a scraper leaks HTML, the writer normalizes it
+    before persisting. Archived JobNotes showed `</span></strong></p></div>`
+    cruft from a historical scrape path that bypassed `_strip_html` — this
+    guards the writer-side boundary regardless of upstream behavior."""
+    from compass.vault.writer import write_job_note
+
+    leaky = (
+        "<p><strong>About Databricks</strong></p>"
+        '<p><span style="font-family: arial;">Databricks is the data and AI company.</span></p>'
+        "</div>"
+    )
+    path = write_job_note(_make_job_note(), full_description=leaky)
+    body = path.read_text()
+    assert "<p>" not in body
+    assert "</span>" not in body
+    assert "</div>" not in body
+    assert "Databricks is the data and AI company." in body
+    assert "About Databricks" in body
+
+
+def test_write_job_note_preserves_plain_text_with_angle_brackets(temp_vault):
+    """A JD containing literal `<` (e.g. `<200ms latency`) must pass through
+    untouched — only visibly-HTML inputs get stripped."""
+    from compass.vault.writer import write_job_note
+
+    plain = "Build agents with <200ms latency. Use Python 3.12 (>=3.12 OK)."
+    path = write_job_note(_make_job_note(), full_description=plain)
+    body = path.read_text()
+    assert "<200ms latency" in body
+    assert ">=3.12" in body
+
+
 def test_write_job_note_persists_full_jd_when_provided(temp_vault):
     """Regression: pre-fix JobNotes only carried the LLM-generated summary; the
     raw JD was discarded after extract+score. Humans then couldn't verify what

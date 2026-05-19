@@ -28,7 +28,12 @@ Tier = Literal[
 # Order: most-preferred first. Used by `get_tier` to break bidirectional-match
 # ties (prefer the strongest tier when a company name matches multiple entries).
 TIER_ORDER: list[Tier] = [
-    "apply-now", "opportunistic", "backend-prep", "6-month", "stretch", "skip"
+    "apply-now",
+    "opportunistic",
+    "backend-prep",
+    "6-month",
+    "stretch",
+    "skip",
 ]
 
 # NOTE: _TIER_HEADING is intentionally un-anchored so "Tier `apply-now` (in range)"
@@ -225,8 +230,14 @@ def get_company_meta(company: str) -> dict | None:
 
 
 _VALID_DIFFICULTIES = {
-    "hackerrank", "case", "lc-easy", "lc-medium", "lc-medium-hard",
-    "lc-hard", "takehome", "unknown",
+    "hackerrank",
+    "case",
+    "lc-easy",
+    "lc-medium",
+    "lc-medium-hard",
+    "lc-hard",
+    "takehome",
+    "unknown",
 }
 _VALID_ADJACENCIES = {"none", "low", "medium", "high"}
 

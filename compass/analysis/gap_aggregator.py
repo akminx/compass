@@ -277,9 +277,7 @@ def regenerate(write: bool = True) -> tuple[list[GapPlanEntry], str]:
 
 
 _SKILL_BACKLINKS_HEADING = "## Jobs requiring this skill"
-_SKILL_BACKLINKS_BLOCK = re.compile(
-    r"(?ms)^## Jobs requiring this skill\s*\n.*?(?=^## |\Z)"
-)
+_SKILL_BACKLINKS_BLOCK = re.compile(r"(?ms)^## Jobs requiring this skill\s*\n.*?(?=^## |\Z)")
 
 
 def _sync_skill_backlinks(jobs: list[JobSummary]) -> None:

@@ -70,12 +70,20 @@ def test_skill_backlinks_block_added_to_skillnote(temp_vault):
 
     _seed_skill(temp_vault, "Python", "language", body_extra="_Category: language_\n")
     _seed_job(
-        temp_vault, "sierra", company="Sierra", title="Agent Eng",
-        required=["Python"], score=4.0,
+        temp_vault,
+        "sierra",
+        company="Sierra",
+        title="Agent Eng",
+        required=["Python"],
+        score=4.0,
     )
     _seed_job(
-        temp_vault, "decagon", company="Decagon", title="MTS",
-        required=["Python"], score=3.0,
+        temp_vault,
+        "decagon",
+        company="Decagon",
+        title="MTS",
+        required=["Python"],
+        score=3.0,
     )
 
     gap_aggregator.regenerate(write=True)
@@ -100,8 +108,12 @@ def test_skill_backlinks_idempotent_on_rerun(temp_vault):
 
     _seed_skill(temp_vault, "Python", "language")
     _seed_job(
-        temp_vault, "sierra", company="Sierra", title="Agent Eng",
-        required=["Python"], score=4.0,
+        temp_vault,
+        "sierra",
+        company="Sierra",
+        title="Agent Eng",
+        required=["Python"],
+        score=4.0,
     )
     gap_aggregator.regenerate(write=True)
     body1 = (temp_vault / "skills" / "Python.md").read_text()
@@ -118,8 +130,12 @@ def test_skill_backlinks_removed_when_no_jobs_reference_skill(temp_vault):
 
     _seed_skill(temp_vault, "Python", "language")
     _seed_job(
-        temp_vault, "sierra", company="Sierra", title="Agent Eng",
-        required=["Python"], score=4.0,
+        temp_vault,
+        "sierra",
+        company="Sierra",
+        title="Agent Eng",
+        required=["Python"],
+        score=4.0,
     )
     gap_aggregator.regenerate(write=True)
     assert "## Jobs requiring this skill" in (temp_vault / "skills" / "Python.md").read_text()

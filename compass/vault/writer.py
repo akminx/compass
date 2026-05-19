@@ -10,6 +10,7 @@ Rules:
 from __future__ import annotations
 
 import hashlib
+import html
 import logging
 import re
 from datetime import datetime
@@ -30,10 +31,40 @@ logger = logging.getLogger(__name__)
 
 
 _FILENAME_BAD = re.compile(r"[^\w\-.]+")
+_SCRIPT_STYLE_RE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE)
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 
 def _safe_segment(s: str) -> str:
     return _FILENAME_BAD.sub("_", s).strip("_")
+
+
+def _looks_like_html(text: str) -> bool:
+    """Cheap detector — `<p>`, `</div>`, `<span ...>` style tags. Avoids the
+    rare case where a JD contains a literal `<` (e.g. ASCII art, code snippet)."""
+    return bool(
+        re.search(r"</[a-z]+>|<[a-z]+ [^>]*>|<(p|div|span|strong|br|h\d)\b", text, re.IGNORECASE)
+    )
+
+
+def _normalize_full_jd(text: str) -> str:
+    """Safety-net HTML strip applied to JD bodies at vault-write time.
+
+    Each ATS scraper already strips HTML at its boundary (greenhouse/lever
+    via `_strip_html`, ashby via `descriptionPlain`). This is belt-and-
+    suspenders: if a future scraper or a hand-built RawJob bypasses that,
+    the vault still gets clean text instead of `</span></strong></p>` cruft.
+
+    Only fires when the input visibly looks like HTML — JDs containing
+    literal `<` (code snippets, ASCII art) pass through untouched.
+    """
+    if not _looks_like_html(text):
+        return text
+    out = _SCRIPT_STYLE_RE.sub(" ", text)
+    out = _HTML_TAG_RE.sub(" ", out)
+    out = html.unescape(out)
+    out = re.sub(r"\s+", " ", out).strip()
+    return out
 
 
 def _job_filename(note: JobNote) -> str:
@@ -116,7 +147,7 @@ def write_job_note(note: JobNote, full_description: str | None = None) -> Path:
     if skills_block:
         body += f"\n{skills_block}"
     if full_description:
-        body += f"\n## Full JD\n\n{full_description.strip()}\n"
+        body += f"\n## Full JD\n\n{_normalize_full_jd(full_description).strip()}\n"
     post = frontmatter.Post(content=body)
     post.metadata = _to_metadata(note)
     target.write_text(frontmatter.dumps(post) + "\n", encoding="utf-8")
@@ -180,8 +211,13 @@ def write_company_note(note: CompanyNote) -> Path:
         # whatever the pipeline computed).
         existing_tier = existing.get("tier", "unknown")
         _valid_tiers = {
-            "apply-now", "opportunistic", "backend-prep", "6-month",
-            "stretch", "skip", "unknown",
+            "apply-now",
+            "opportunistic",
+            "backend-prep",
+            "6-month",
+            "stretch",
+            "skip",
+            "unknown",
         }
         if existing_tier not in _valid_tiers:
             logger.warning(
