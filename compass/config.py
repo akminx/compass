@@ -57,7 +57,9 @@ MAX_CONCURRENT_JOBS: int = int(os.getenv("MAX_CONCURRENT_JOBS", "5"))
 # ── Tier weights (gap_aggregator) — overrides from preferences.md at runtime ─
 DEFAULT_TIER_WEIGHTS: dict[str, float] = {
     "apply-now": 1.0,
-    "6-month": 0.7,
+    "opportunistic": 0.85,
+    "backend-prep": 0.5,
+    "6-month": 0.7,  # legacy — pre-3-month-pivot
     "stretch": 0.3,
     "skip": 0.0,
     "unknown": 0.5,

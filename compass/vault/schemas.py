@@ -56,7 +56,6 @@ InterviewDifficulty = Literal[
     "takehome",
     "unknown",
 ]
-CiscoAdjacency = Literal["none", "low", "medium", "high"]
 
 
 class JobNote(BaseModel):
@@ -77,7 +76,6 @@ class JobNote(BaseModel):
     role_family: str = ""
     tier: Tier = "unknown"
     interview_difficulty: InterviewDifficulty = "unknown"
-    cisco_adjacency: CiscoAdjacency = "none"
     tags: list[str] = []
     skills_required: list[str] = []
     skills_nice_to_have: list[str] = []
@@ -126,7 +124,6 @@ class CompanyNote(BaseModel):
     known_stack: list[str] = []
     interview_format_notes: str = ""
     interview_difficulty: InterviewDifficulty = "unknown"
-    cisco_adjacency: CiscoAdjacency = "none"
     tags: list[str] = []
 
 

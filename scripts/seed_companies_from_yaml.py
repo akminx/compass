@@ -56,17 +56,12 @@ def _to_company_note(entry: dict) -> CompanyNote:
     }:
         difficulty = "unknown"
 
-    adjacency = str(entry.get("cisco_adjacency") or "none").strip().lower()
-    if adjacency not in {"none", "low", "medium", "high"}:
-        adjacency = "none"
-
     return CompanyNote(
         company=entry["company"],
         tier=tier,  # type: ignore[arg-type]
         geo=list(entry.get("geos") or []),
         why_interesting=str(entry.get("notes") or ""),
         interview_difficulty=difficulty,  # type: ignore[arg-type]
-        cisco_adjacency=adjacency,  # type: ignore[arg-type]
     )
 
 
@@ -84,9 +79,7 @@ def main() -> int:
     notes = [_to_company_note(e) for e in entries]
     print(f"Will seed {len(notes)} CompanyNote(s):\n")
     for n in notes:
-        print(
-            f"  {n.company:25s}  tier={n.tier:14s}  diff={n.interview_difficulty:14s}  cisco={n.cisco_adjacency}"
-        )
+        print(f"  {n.company:25s}  tier={n.tier:14s}  diff={n.interview_difficulty}")
 
     if not args.apply:
         print(f"\nDry-run. Pass --apply to write {len(notes)} files.")

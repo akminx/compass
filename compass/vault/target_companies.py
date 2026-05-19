@@ -5,7 +5,7 @@ Two files cooperate:
 - target-companies.md — human-readable narrative + tier tables. Source of truth
   for `get_tier` lookups (legacy, tested).
 - target-companies.yaml — machine-readable per-company metadata: ATS coords,
-  geos, interview_difficulty, cisco_adjacency, role_family_hints, notes.
+  geos, interview_difficulty, role_family_hints, notes.
   Source of truth for `get_company_meta` lookups (added 2026-05-19).
 
 Both are kept in sync by hand. Eventually the YAML may absorb the md tier
@@ -239,7 +239,6 @@ _VALID_DIFFICULTIES = {
     "takehome",
     "unknown",
 }
-_VALID_ADJACENCIES = {"none", "low", "medium", "high"}
 
 
 def get_interview_difficulty(company: str) -> str:
@@ -250,15 +249,6 @@ def get_interview_difficulty(company: str) -> str:
         return "unknown"
     raw = str(meta.get("interview_difficulty") or "unknown").strip().lower()
     return raw if raw in _VALID_DIFFICULTIES else "unknown"
-
-
-def get_cisco_adjacency(company: str) -> str:
-    """Return one of `_VALID_ADJACENCIES`. YAML typos collapse to "none"."""
-    meta = get_company_meta(company)
-    if meta is None:
-        return "none"
-    raw = str(meta.get("cisco_adjacency") or "none").strip().lower()
-    return raw if raw in _VALID_ADJACENCIES else "none"
 
 
 def get_ats(company: str) -> tuple[str, str] | None:

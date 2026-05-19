@@ -14,7 +14,6 @@ companies:
     ats: {provider: greenhouse, slug: databricks}
     geos: [NYC, SF]
     interview_difficulty: lc-medium-hard
-    cisco_adjacency: low
     notes: "Mosaic AI Agent Framework"
 
   - company: New Relic
@@ -23,14 +22,12 @@ companies:
     ats: {provider: greenhouse, slug: newrelic}
     geos: [SF, Remote]
     interview_difficulty: lc-medium
-    cisco_adjacency: high
     notes: "AI observability"
 
   - company: TypoCo
     tier: apply-now
     ats: {provider: greenhouse, slug: typoco}
     interview_difficulty: super-easy   # invalid Literal — must collapse to "unknown"
-    cisco_adjacency: very-high         # invalid — must collapse to "none"
 """
 
 
@@ -74,25 +71,6 @@ def test_get_interview_difficulty_unknown_company(yaml_vault):
     from compass.vault.target_companies import get_interview_difficulty
 
     assert get_interview_difficulty("CompanyNotInYAML") == "unknown"
-
-
-def test_get_cisco_adjacency_known_value(yaml_vault):
-    from compass.vault.target_companies import get_cisco_adjacency
-
-    assert get_cisco_adjacency("New Relic") == "high"
-    assert get_cisco_adjacency("Databricks") == "low"
-
-
-def test_get_cisco_adjacency_invalid_collapses_to_none(yaml_vault):
-    from compass.vault.target_companies import get_cisco_adjacency
-
-    assert get_cisco_adjacency("TypoCo") == "none"
-
-
-def test_get_cisco_adjacency_unknown_company_defaults_to_none(yaml_vault):
-    from compass.vault.target_companies import get_cisco_adjacency
-
-    assert get_cisco_adjacency("RandomCo") == "none"
 
 
 def test_get_ats_returns_tuple(yaml_vault):

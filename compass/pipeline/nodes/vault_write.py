@@ -128,7 +128,6 @@ async def vault_write_node(state: CompassState) -> dict:
     # lets stretch-role gaps drive the master gap plan — see spec § 2.
 
     from compass.vault.target_companies import (
-        get_cisco_adjacency,
         get_interview_difficulty,
         get_tier,
     )
@@ -138,7 +137,6 @@ async def vault_write_node(state: CompassState) -> dict:
     # what the snapshot said when the job was first seen.
     company_tier = get_tier(job.company)
     interview_difficulty = get_interview_difficulty(job.company)
-    cisco_adjacency = get_cisco_adjacency(job.company)
 
     # CompanyNote.tier — read-before-write to preserve human edits in Obsidian.
     # If an existing CompanyNote has a non-default tier, pass "unknown" on
@@ -188,7 +186,6 @@ async def vault_write_node(state: CompassState) -> dict:
         role_family=role_family,
         tier=company_tier,
         interview_difficulty=interview_difficulty,  # type: ignore[arg-type]
-        cisco_adjacency=cisco_adjacency,  # type: ignore[arg-type]
         tags=auto_tags,
         skills_required=req.required_skills,
         skills_nice_to_have=req.nice_to_have_skills,

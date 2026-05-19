@@ -154,6 +154,7 @@ def _initial_state(job: RawJob, thread_id: str | None = None) -> CompassState:
         "score_result": None,
         "in_scope": None,
         "role_family": None,
+        "agent_signal_count": None,
         "human_approved": None,
         "human_feedback": None,
         "tailored_paragraph": None,
