@@ -89,6 +89,60 @@ def test_sync_company_counters_zeroes_orphan_companies(temp_vault):
     assert _company_roles_seen(temp_vault, "orphan") == 0
 
 
+def test_invalid_tier_in_existing_file_does_not_crash(temp_vault, caplog):
+    """Regression: if Akash types `tier: favorite` (typo, not a valid Tier value)
+    in Obsidian, the next pipeline run used to crash with Pydantic ValidationError
+    when write_company_note tried to model_copy the invalid string into a Tier
+    Literal field. Now the invalid value is logged and ignored — pipeline
+    continues with whatever tier the pipeline computed."""
+    import logging
+
+    path = temp_vault / "companies" / "sierra.md"
+    path.write_text(
+        "---\n"
+        "company: sierra\n"
+        "tier: favorite\n"  # ← user typo
+        "roles_seen: 5\n"
+        "hiring_signal: unknown\n"
+        "geo: []\n"
+        "why_interesting: ''\n"
+        "known_stack: []\n"
+        "interview_format_notes: ''\n"
+        "tags: []\n"
+        "---\n# sierra\n"
+    )
+
+    # Pipeline tries to write — must NOT raise
+    with caplog.at_level(logging.WARNING):
+        write_company_note(CompanyNote(company="sierra", tier="apply-now", roles_seen=0))
+
+    assert any("invalid tier" in r.message for r in caplog.records), (
+        "warning should mention the invalid tier"
+    )
+    # File still readable; tier was reset by the pipeline
+    md = frontmatter.load(path).metadata
+    assert md["tier"] == "apply-now"  # pipeline-computed value wins
+
+
+def test_invalid_tier_with_unknown_incoming_resets_to_unknown(temp_vault, caplog):
+    """If existing.tier is invalid AND incoming.tier is the default 'unknown',
+    we can't preserve the bad value — log and use 'unknown'."""
+    import logging
+
+    path = temp_vault / "companies" / "sierra.md"
+    path.write_text(
+        "---\ncompany: sierra\ntier: applynow\nroles_seen: 0\nhiring_signal: unknown\n"
+        "geo: []\nwhy_interesting: ''\nknown_stack: []\n"
+        "interview_format_notes: ''\ntags: []\n---\n# sierra\n"
+    )
+
+    with caplog.at_level(logging.WARNING):
+        write_company_note(CompanyNote(company="sierra", tier="unknown", roles_seen=0))
+
+    md = frontmatter.load(path).metadata
+    assert md["tier"] == "unknown"
+
+
 def test_human_edits_preserved_through_resync(temp_vault):
     """Resync only touches roles_seen — human edits to tier/why_interesting stay."""
     # Seed with human edits

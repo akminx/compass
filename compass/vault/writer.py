@@ -139,8 +139,20 @@ def write_company_note(note: CompanyNote) -> Path:
             "roles_seen": int(existing.get("roles_seen", 0)),
         }
         # Preserve human-set fields when the incoming note has the default value.
-        if note.tier == "unknown" and existing.get("tier", "unknown") != "unknown":
-            update["tier"] = existing["tier"]
+        # CompanyNote.tier is a Literal — a typo in Obsidian (e.g. `tier: applynow`
+        # or `tier: favorite`) would crash model_copy with ValidationError. Guard
+        # against that by ignoring invalid tier values (they get reset to
+        # whatever the pipeline computed).
+        existing_tier = existing.get("tier", "unknown")
+        _valid_tiers = {"apply-now", "6-month", "stretch", "skip", "unknown"}
+        if existing_tier not in _valid_tiers:
+            logger.warning(
+                "write_company_note: %s has invalid tier=%r (expected one of %s); "
+                "ignoring existing value and using incoming tier=%r",
+                note.company, existing_tier, sorted(_valid_tiers), note.tier,
+            )
+        elif note.tier == "unknown" and existing_tier != "unknown":
+            update["tier"] = existing_tier
         if (
             note.hiring_signal == "unknown"
             and existing.get("hiring_signal", "unknown") != "unknown"
