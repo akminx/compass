@@ -33,6 +33,37 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _build_auto_tags(
+    *,
+    tier: str,
+    match_score: float,
+    role_family: str,
+    hitl_decision: str | None,
+) -> list[str]:
+    """Generate Obsidian tag-pane-filterable tags from JobNote fields.
+
+    Tag taxonomy is intentionally shallow (one slash) so Obsidian's nested-tag
+    view groups them. Composed filters like `#fit/strong AND #role/agent-engineer`
+    happen naturally in the tag pane and in Dataview `contains(tags, "...")` calls.
+    """
+    tags: list[str] = []
+    if tier:
+        tags.append(f"#tier/{tier}")
+    if match_score >= 4.0:
+        tags.append("#fit/strong")
+    elif match_score >= 3.0:
+        tags.append("#fit/decent")
+    elif match_score >= 2.0:
+        tags.append("#fit/stretch")
+    else:
+        tags.append("#fit/weak")
+    if role_family:
+        tags.append(f"#role/{role_family}")
+    if hitl_decision:
+        tags.append(f"#decision/{hitl_decision}")
+    return tags
+
+
 def _derive_hitl_decision(state: CompassState) -> tuple[str | None, datetime | None]:
     """Map state -> (hitl_decision, hitl_at). Returns (None, None) if hitl never ran."""
     from compass.config import SCORE_THRESHOLD
@@ -117,6 +148,13 @@ async def vault_write_node(state: CompassState) -> dict:
                 break
 
     hitl_decision, hitl_at = _derive_hitl_decision(state)
+    role_family = state.get("role_family") or ""
+    auto_tags = _build_auto_tags(
+        tier=company_tier,
+        match_score=score.score,
+        role_family=role_family,
+        hitl_decision=hitl_decision,
+    )
     note = JobNote(
         company=job.company,
         title=job.title,
@@ -131,8 +169,9 @@ async def vault_write_node(state: CompassState) -> dict:
         remote=("remote" if job.remote else None),
         seniority=req.seniority,
         years_required=req.years_experience,
-        role_family=state.get("role_family") or "",
+        role_family=role_family,
         tier=company_tier,
+        tags=auto_tags,
         skills_required=req.required_skills,
         skills_nice_to_have=req.nice_to_have_skills,
         skills_matched=score.matched_skills,
