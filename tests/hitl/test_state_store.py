@@ -59,15 +59,14 @@ async def test_list_pending_only_returns_pending_status():
     assert [r["thread_id"] for r in rows] == ["tid-pending"]
 
 
-async def test_list_pending_orders_oldest_first():
+async def test_list_pending_orders_oldest_first(monkeypatch):
     """The MCP UI shows the queue oldest-first so things don't get lost."""
     import compass.hitl.state_store as ss
 
-    # First insertion at frozen_now
     fixed = _dt.datetime(2026, 5, 19, 12, 0, 0, tzinfo=_dt.UTC)
-    ss._now = lambda: fixed
+    monkeypatch.setattr(ss, "_now", lambda: fixed)
     await _add_one(thread_id="tid-old")
-    ss._now = lambda: fixed + _dt.timedelta(minutes=5)
+    monkeypatch.setattr(ss, "_now", lambda: fixed + _dt.timedelta(minutes=5))
     await _add_one(thread_id="tid-new")
     rows = await state_store.list_pending()
     assert [r["thread_id"] for r in rows] == ["tid-old", "tid-new"]
@@ -93,17 +92,16 @@ async def test_mark_resolved_unknown_thread_raises():
         await state_store.mark_resolved("tid-missing", status="approved")
 
 
-async def test_list_timed_out_returns_only_old_pending(frozen_now):
+async def test_list_timed_out_returns_only_old_pending(frozen_now, monkeypatch):
     import compass.hitl.state_store as ss
 
-    # Insert one row "5 hours ago", one "1 hour ago"
     old = frozen_now - _dt.timedelta(hours=5)
     young = frozen_now - _dt.timedelta(hours=1)
-    ss._now = lambda: old
+    monkeypatch.setattr(ss, "_now", lambda: old)
     await _add_one(thread_id="tid-old")
-    ss._now = lambda: young
+    monkeypatch.setattr(ss, "_now", lambda: young)
     await _add_one(thread_id="tid-young")
-    ss._now = lambda: frozen_now
+    monkeypatch.setattr(ss, "_now", lambda: frozen_now)
     rows = await state_store.list_timed_out(timeout_hours=4)
     assert [r["thread_id"] for r in rows] == ["tid-old"]
 
