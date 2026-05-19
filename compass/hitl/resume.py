@@ -40,10 +40,11 @@ async def resume_pending(
         raise ValueError(f"thread {thread_id!r} already resolved ({row['status']!r})")
 
     # Late import to avoid potential circular import: graph.py imports state_store
-    from compass.pipeline.graph import build_graph
+    from compass.pipeline.graph import _build_checkpoint_serde, build_graph
 
     config = {"configurable": {"thread_id": thread_id}}
     async with AsyncSqliteSaver.from_conn_string(str(HITL_CHECKPOINT_DB)) as checkpointer:
+        checkpointer.serde = _build_checkpoint_serde()
         graph = build_graph(checkpointer=checkpointer)
         final = await graph.ainvoke(Command(resume=decision), config=config)
 

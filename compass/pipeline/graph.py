@@ -23,6 +23,7 @@ import time
 from datetime import datetime
 
 import frontmatter
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, START, StateGraph
 
@@ -62,6 +63,21 @@ def _route_after_hitl(state: CompassState) -> str:
     if state.get("human_approved") is True:
         return "tailor"
     return "vault_write"
+
+
+def _build_checkpoint_serde() -> JsonPlusSerializer:
+    """Allow our Pydantic state classes on the msgpack allowlist.
+
+    Must be set at construction — `with_msgpack_allowlist` is a no-op when the
+    default `allowed_msgpack_modules=True` (langgraph's non-STRICT default).
+    """
+    return JsonPlusSerializer(
+        allowed_msgpack_modules=[
+            ("compass.pipeline.state", "RawJob"),
+            ("compass.pipeline.state", "JobRequirements"),
+            ("compass.pipeline.state", "JobScore"),
+        ]
+    )
 
 
 def build_graph(checkpointer=None):
@@ -254,6 +270,7 @@ async def run_pipeline(raw_jobs: list[RawJob] | None = None) -> CompassState:
 
     HITL_CHECKPOINT_DB.parent.mkdir(parents=True, exist_ok=True)
     async with AsyncSqliteSaver.from_conn_string(str(HITL_CHECKPOINT_DB)) as checkpointer:
+        checkpointer.serde = _build_checkpoint_serde()
         # Enable WAL on the checkpoint DB once per process. Cheap if already set.
         # See state_store._connect for the rationale.
         try:
