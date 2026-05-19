@@ -245,6 +245,39 @@ async def _run_partial_pipeline_and_write(job) -> dict:
 
 
 @mcp.tool()
+async def run_evals(mode: str = "labels", limit: int | None = None) -> dict:
+    """Run the Compass eval harness — measures extract + score accuracy.
+
+    `mode`:
+      "labels" (default) — compare against EvalRecord.expected_* hand-labels
+                            in compass/evals/labeled_dataset.json.
+      "judge"            — LLM-as-judge mode, no hand labels needed. Use for
+                            first-pass sanity checks.
+
+    `limit`: optionally sample N records instead of the full dataset.
+
+    Returns metrics summary + path to per-record results JSON.
+    """
+    from compass.evals.runner import run_evals as _run
+
+    result = await _run(mode=mode, limit=limit)
+    if "error" in result:
+        return {"error": result["error"]}
+    m = result["metrics"]
+    return {
+        "mode": mode,
+        "n_records": m.n,
+        "score_mae": round(m.score_mae, 3),
+        "score_rmse": round(m.score_rmse, 3),
+        "score_bias": round(m.score_bias, 3),
+        "extract_skill_recall": round(m.extract_skill_recall, 3),
+        "extract_skill_precision": round(m.extract_skill_precision, 3),
+        "match_skill_recall": round(m.match_skill_recall, 3),
+        "results_path": result["results_path"],
+    }
+
+
+@mcp.tool()
 async def generate_cover_letter(job_filename: str) -> dict:
     """Draft a cover letter for a JobNote in the vault.
 
