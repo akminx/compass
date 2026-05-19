@@ -103,7 +103,7 @@ async def test_run_pipeline_skips_dedup_urls(temp_vault, mocked_llms):
             title="Agent Engineer",
             url="https://jobs.ashbyhq.com/sierra/test-uuid",
             source="ashby",
-            description="...",
+            description="Build LangGraph agents with MCP tool calling.",
             date_posted=date(2026, 5, 17),
         ),
     ]
@@ -122,7 +122,7 @@ async def test_run_pipeline_regenerates_gap_plan(temp_vault, mocked_llms, auto_a
             title="Agent Engineer",
             url="https://jobs.ashbyhq.com/sierra/test-uuid",
             source="ashby",
-            description="...",
+            description="Build LangGraph agents with MCP tool calling.",
             date_posted=date(2026, 5, 17),
         ),
     ]

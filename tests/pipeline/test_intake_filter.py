@@ -144,8 +144,12 @@ class TestIntakeFilter:
 
         monkeypatch.setattr(mod, "llm_classify", fake_llm)
 
+        # `Solutions Architect` is borderline — the keyword classifier returns
+        # None (LLM stage decides). MTS used to be borderline but as of the
+        # 3-month-pivot title expansion routes directly to agent-engineer, so
+        # it no longer exercises the LLM-failure code path.
         out = await mod.intake_filter_node(
-            _state("Member of Technical Staff", "writes Python systems code")
+            _state("Solutions Architect", "writes Python systems code")
         )
         assert out["in_scope"] is True
         assert out["role_family"] == "other-eng"
@@ -220,3 +224,68 @@ class TestRejectRules:
         out = await mod.intake_filter_node(_state("Agent Engineer"))
         assert out["in_scope"] is True
         assert out["role_family"] == "agent-engineer"
+
+
+class TestAgentSignalGate:
+    """JD-body agent-signal check: AI-oriented title with ZERO agent terms in
+    the body is dropped. Other role families pass through unfiltered."""
+
+    async def test_agent_title_with_no_body_signal_dropped(self, temp_vault):
+        from compass.pipeline.nodes import intake_filter as mod
+
+        out = await mod.intake_filter_node(
+            _state("AI Engineer", "We build dashboards using React and Postgres.")
+        )
+        assert out["in_scope"] is False
+        assert out["role_family"] == "out-of-scope"
+        assert out["agent_signal_count"] == 0
+        log = (temp_vault / "_meta" / "filtered-jobs.md").read_text()
+        assert "no-agent-signal" in log
+
+    async def test_agent_title_with_body_signal_kept(self, temp_vault):
+        from compass.pipeline.nodes import intake_filter as mod
+
+        out = await mod.intake_filter_node(
+            _state(
+                "AI Engineer",
+                "Build LangGraph agents with MCP tool calling for production users.",
+            )
+        )
+        assert out["in_scope"] is True
+        assert out["agent_signal_count"] >= 3  # langgraph + agents + mcp + tool calling
+
+    async def test_swe_backend_passes_through_without_body_signal(self, temp_vault):
+        """Generic SWE titles at AI-native companies sometimes describe agent
+        work — don't gate them on body signal. The score node sees it later."""
+        from compass.pipeline.nodes import intake_filter as mod
+
+        out = await mod.intake_filter_node(
+            _state("Backend Engineer", "Build distributed systems with Postgres.")
+        )
+        assert out["in_scope"] is True
+        assert out["role_family"] == "swe-backend"
+        assert out["agent_signal_count"] == 0  # tracked but not gating
+
+    async def test_agent_engineer_title_with_one_signal_kept(self, temp_vault):
+        from compass.pipeline.nodes import intake_filter as mod
+
+        out = await mod.intake_filter_node(
+            _state("Agent Engineer", "Build and ship multi-agent systems.")
+        )
+        assert out["in_scope"] is True
+        assert out["agent_signal_count"] >= 1
+
+
+def test_agent_signal_count_helper():
+    """Counts distinct term hits, case-insensitive, word-boundary safe."""
+    from compass.pipeline.nodes.intake_filter import _agent_signal_count
+
+    assert _agent_signal_count("") == 0
+    assert _agent_signal_count("This role is about React and dashboards.") == 0
+    assert _agent_signal_count("Build LangGraph agents.") == 2  # langgraph + agents
+    # repeated terms count once
+    assert _agent_signal_count("agents agents agents") == 1
+    # word-boundary: "agenda" should not match "agent"
+    assert _agent_signal_count("Your daily agenda includes meetings.") == 0
+    # "agentic" matches its own pattern, not "agent"
+    assert _agent_signal_count("We are an agentic AI company.") == 1

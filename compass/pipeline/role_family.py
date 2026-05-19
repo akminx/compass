@@ -28,21 +28,42 @@ logger = logging.getLogger(__name__)
 IN_TITLE_KEYWORDS: dict[str, list[str]] = {
     "agent-engineer": [
         "agent engineer",
+        "ai agent engineer",
         "agentic engineer",
+        "agentic ai engineer",
         "agent platform",
         "agent orchestration",
         "agent reliability",
+        "software engineer, agents",
+        "software engineer - agents",
+        "software engineer - agentic",
+        "software engineer, agentic",
+        "ai native engineer",
+        # MTS = Member of Technical Staff. Frontier-startup flat-hierarchy
+        # signal, not literal seniority. Sierra / Decagon / Cognition / Cursor
+        # / Mistral / xAI all use it for agent-eng ICs. The MTS title alone
+        # routes to agent-engineer; if the JD body is research-flavored the
+        # body-signal upgrader can move it elsewhere.
+        "member of technical staff",
+        "mts - agents",
+        "mts, agents",
     ],
     "applied-ai": [
         "applied ai",
         "applied ml",
         "ai engineer",
+        "ai/ml engineer",
         "ml engineer",
         "machine learning engineer",
+        "genai engineer",
+        # AI Enablement = Cognition (Devin/Windsurf), Cursor — FDE-lite path
+        # explicitly named in target-roles.md as in-range.
+        "ai enablement engineer",
     ],
     "infra-llm": [
         "llm platform",
         "ai infrastructure",
+        "ai platform engineer",
         "inference engineer",
         "eval engineer",
         "evaluation engineer",

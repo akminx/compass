@@ -39,6 +39,7 @@ def _build_auto_tags(
     match_score: float,
     role_family: str,
     hitl_decision: str | None,
+    agent_signal_count: int | None = None,
 ) -> list[str]:
     """Generate Obsidian tag-pane-filterable tags from JobNote fields.
 
@@ -61,6 +62,14 @@ def _build_auto_tags(
         tags.append(f"#role/{role_family}")
     if hitl_decision:
         tags.append(f"#decision/{hitl_decision}")
+    # Body-level agentic signal (computed by intake_filter from JD body keyword
+    # scan). Distinguishes "AI Engineer role at a real agent-eng team" from
+    # "AI Engineer role that means RAG-and-prompts."
+    if agent_signal_count is not None:
+        if agent_signal_count >= 3:
+            tags.append("#signal/agent-strong")
+        elif agent_signal_count >= 1:
+            tags.append("#signal/agent-mention")
     return tags
 
 
@@ -160,6 +169,7 @@ async def vault_write_node(state: CompassState) -> dict:
         match_score=score.score,
         role_family=role_family,
         hitl_decision=hitl_decision,
+        agent_signal_count=state.get("agent_signal_count"),
     )
     note = JobNote(
         company=job.company,

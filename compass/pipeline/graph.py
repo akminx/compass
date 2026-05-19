@@ -430,6 +430,11 @@ async def _scrape_all() -> list[RawJob]:
     """Scrape all configured sources concurrently, drop stale postings, sort
     each board by recency, then interleave round-robin and cap.
 
+    Targeting source of truth: `_profile/target-companies.yaml`. The YAML
+    drives which boards get hit — the legacy static `ASHBY_BOARDS` /
+    `GREENHOUSE_BOARDS` / `LEVER_COMPANIES` config lists are used only when
+    the YAML is missing or empty (fallback for tests + safety net).
+
     Order matters:
     1. Drop postings with `date_posted` older than MAX_POSTING_AGE_DAYS — stale
        roles aren't worth LLM cost or vault clutter.
@@ -444,10 +449,23 @@ async def _scrape_all() -> list[RawJob]:
     from compass.scrapers.greenhouse import scrape_greenhouse_many
     from compass.scrapers.lever import scrape_lever_many
 
+    yaml_slugs = _yaml_scraper_slugs()
+    gh_slugs = yaml_slugs.get("greenhouse") or list(GREENHOUSE_BOARDS)
+    lv_slugs = yaml_slugs.get("lever") or list(LEVER_COMPANIES)
+    ash_slugs = yaml_slugs.get("ashby") or list(ASHBY_BOARDS)
+
+    if yaml_slugs:
+        logger.info(
+            "scrape: YAML-driven targeting — greenhouse=%d lever=%d ashby=%d boards",
+            len(gh_slugs),
+            len(lv_slugs),
+            len(ash_slugs),
+        )
+
     gh, lv, ash = await asyncio.gather(
-        scrape_greenhouse_many(GREENHOUSE_BOARDS),
-        scrape_lever_many(LEVER_COMPANIES),
-        scrape_ashby_many(ASHBY_BOARDS),
+        scrape_greenhouse_many(gh_slugs),
+        scrape_lever_many(lv_slugs),
+        scrape_ashby_many(ash_slugs),
     )
 
     gh = _filter_and_sort_by_recency(gh)
@@ -479,6 +497,30 @@ def _filter_and_sort_by_recency(jobs: list[RawJob]) -> list[RawJob]:
     kept = [j for j in jobs if j.date_posted is None or j.date_posted >= cutoff]
     kept.sort(key=lambda j: (j.date_posted is None, -_date_to_ordinal(j.date_posted)))
     return kept
+
+
+def _yaml_scraper_slugs() -> dict[str, list[str]]:
+    """Read `_profile/target-companies.yaml` and group apply-now + opportunistic
+    boards by ATS provider. Returns {} when the YAML is missing — caller falls
+    back to the static config lists.
+
+    Tiers below `opportunistic` (backend-prep, stretch) are NOT scraped: the
+    3-month pivot defers those companies, and scraping them wastes LLM cost.
+    """
+    from compass.vault.target_companies import list_yaml_companies, refresh_yaml
+
+    refresh_yaml()
+    by_provider: dict[str, list[str]] = {"greenhouse": [], "lever": [], "ashby": []}
+    for tier in ("apply-now", "opportunistic"):
+        for entry in list_yaml_companies(tier_filter=tier):
+            ats = entry.get("ats") or {}
+            provider = (ats.get("provider") or "").lower()
+            slug = ats.get("slug")
+            if provider not in by_provider or not slug:
+                continue
+            if slug not in by_provider[provider]:
+                by_provider[provider].append(slug)
+    return {k: v for k, v in by_provider.items() if v}
 
 
 def _date_to_ordinal(d: object) -> int:

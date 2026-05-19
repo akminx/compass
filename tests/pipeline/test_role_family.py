@@ -40,8 +40,39 @@ class TestKeywordClassify:
     def test_borderline_fde_is_none(self):
         assert keyword_classify("Forward Deployed Engineer")[0] is None
 
-    def test_borderline_random_title(self):
-        assert keyword_classify("Member of Technical Staff")[0] is None
+    def test_master_boolean_agent_titles_route_to_agent_engineer(self):
+        """Titles named in _profile/target-roles.md::JD-master-boolean should
+        all classify as in-scope agent-engineer without hitting the LLM."""
+        for title in [
+            "AI Agent Engineer",
+            "Agentic AI Engineer",
+            "Software Engineer, Agents",
+            "Software Engineer - Agentic",
+            "AI Native Engineer",
+        ]:
+            in_scope, family = keyword_classify(title)
+            assert in_scope is True, f"{title!r} should be IN"
+            assert family == "agent-engineer", f"{title!r} → {family!r}"
+
+    def test_master_boolean_applied_ai_titles_route_to_applied_ai(self):
+        for title in [
+            "GenAI Engineer",
+            "AI Enablement Engineer",
+            "AI/ML Engineer",
+        ]:
+            in_scope, family = keyword_classify(title)
+            assert in_scope is True, f"{title!r} should be IN"
+            assert family == "applied-ai", f"{title!r} → {family!r}"
+
+    def test_member_of_technical_staff_routes_to_agent_engineer(self):
+        """MTS is a frontier-startup flat-hierarchy signal — Sierra / Decagon /
+        Cognition / Cursor / xAI / Mistral all use it for agent-eng ICs.
+        Per _profile/target-roles.md it's in-range, so the keyword classifier
+        routes it to agent-engineer; the body-signal upgrader can move it
+        elsewhere if the JD is research-flavored."""
+        in_scope, family = keyword_classify("Member of Technical Staff")
+        assert in_scope is True
+        assert family == "agent-engineer"
 
     def test_out_keyword_beats_in_keyword(self):
         in_scope, family = keyword_classify("Sales Engineer")
