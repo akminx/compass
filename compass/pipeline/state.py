@@ -72,3 +72,5 @@ class CompassState(TypedDict):
     jobs_written: int
 
     errors: list[str]
+
+    thread_id: str | None

@@ -40,7 +40,19 @@ def mocked_llms(monkeypatch):
     monkeypatch.setattr(tailor, "_tailor", fake_tailor)
 
 
-async def test_run_pipeline_end_to_end(temp_vault, mocked_llms):
+@pytest.fixture
+def auto_approve_hitl(monkeypatch):
+    """Stub the `interrupt()` call in hitl_node so the integration tests can
+    exercise the full extract -> score -> hitl -> tailor -> vault_write path
+    without needing a real human resume."""
+
+    def fake_interrupt(_payload):
+        return {"approved": True, "feedback": None}
+
+    monkeypatch.setattr("compass.pipeline.nodes.hitl.interrupt", fake_interrupt)
+
+
+async def test_run_pipeline_end_to_end(temp_vault, mocked_llms, auto_approve_hitl):
     """Run a single fake job through the full graph; verify vault state."""
     from compass.pipeline.graph import run_pipeline
 
@@ -100,7 +112,7 @@ async def test_run_pipeline_skips_dedup_urls(temp_vault, mocked_llms):
     assert state["jobs_written"] == 0
 
 
-async def test_run_pipeline_regenerates_gap_plan(temp_vault, mocked_llms):
+async def test_run_pipeline_regenerates_gap_plan(temp_vault, mocked_llms, auto_approve_hitl):
     """After processing, master-gap-plan.md should be regenerated."""
     from compass.pipeline.graph import run_pipeline
 
@@ -177,7 +189,7 @@ async def test_run_pipeline_skips_tailor_when_below_threshold_but_still_writes(
     assert tailor_calls["count"] == 0
 
 
-async def test_run_pipeline_appends_to_run_log(temp_vault, mocked_llms):
+async def test_run_pipeline_appends_to_run_log(temp_vault, mocked_llms, auto_approve_hitl):
     """Every run_pipeline invocation appends a row to _meta/pipeline-runs.md."""
     from compass.pipeline.graph import run_pipeline
 

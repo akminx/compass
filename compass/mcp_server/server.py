@@ -90,6 +90,7 @@ async def score_jd(jd_text: str) -> dict:
         "jobs_processed": 0,
         "jobs_written": 0,
         "errors": [],
+        "thread_id": None,
     }
     extract_result = await extract_node(state)
     if extract_result.get("errors"):

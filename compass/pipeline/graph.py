@@ -130,6 +130,7 @@ def _initial_state(job: RawJob) -> CompassState:
         "jobs_processed": 0,
         "jobs_written": 0,
         "errors": [],
+        "thread_id": None,
     }
 
 
@@ -200,6 +201,7 @@ async def run_pipeline(raw_jobs: list[RawJob] | None = None) -> CompassState:
         "errors": [e for r in results for e in r.get("errors", [])],
         "in_scope": None,
         "role_family": None,
+        "thread_id": None,
     }
 
     if aggregate["jobs_written"] > 0:

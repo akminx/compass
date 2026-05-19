@@ -1,8 +1,7 @@
-"""Tests for reflect_node + hitl_node — control-flow nodes (no LLM in 0.B)."""
+"""Tests for reflect_node — control-flow nodes (no LLM)."""
 
 from datetime import date
 
-from compass.config import SCORE_THRESHOLD
 from compass.pipeline.state import CompassState, JobScore, RawJob
 
 
@@ -41,29 +40,6 @@ async def test_reflect_node_is_passthrough():
     state = _state(3.2)
     result = await reflect_node(state)
     assert result == {}
-
-
-async def test_hitl_node_approves_when_score_meets_threshold():
-    from compass.pipeline.nodes.hitl import hitl_node
-
-    result = await hitl_node(_state(SCORE_THRESHOLD))
-    assert result["human_approved"] is True
-
-
-async def test_hitl_node_rejects_when_score_below_threshold():
-    from compass.pipeline.nodes.hitl import hitl_node
-
-    result = await hitl_node(_state(SCORE_THRESHOLD - 0.5))
-    assert result["human_approved"] is False
-
-
-async def test_hitl_node_handles_missing_score():
-    from compass.pipeline.nodes.hitl import hitl_node
-
-    state = _state(0.0)
-    state["score_result"] = None
-    result = await hitl_node(state)
-    assert result["human_approved"] is False
 
 
 class TestIntakeFilterRouting:
