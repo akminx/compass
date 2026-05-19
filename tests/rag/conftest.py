@@ -38,11 +38,3 @@ def tiny_inventory(temp_vault) -> Path:
         encoding="utf-8",
     )
     return inv
-
-
-@pytest.fixture(scope="session")
-def embedding_model_cached():
-    """Pre-load sentence-transformers once per test session. ~90MB on first run."""
-    from sentence_transformers import SentenceTransformer
-
-    SentenceTransformer("all-MiniLM-L6-v2")

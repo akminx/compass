@@ -39,6 +39,14 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture(scope="session")
+def embedding_model_cached():
+    """Pre-load sentence-transformers once per test session. ~90MB on first run."""
+    from sentence_transformers import SentenceTransformer
+
+    SentenceTransformer("all-MiniLM-L6-v2")
+
+
 @pytest.fixture
 def temp_hitl_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Point HITL_STATE_DB at a fresh per-test SQLite file.

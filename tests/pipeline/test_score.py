@@ -64,8 +64,9 @@ async def test_score_node_missing_requirements_errors(monkeypatch, temp_vault):
 
 
 async def test_score_node_passes_profile_to_llm(monkeypatch, temp_vault):
-    """The profile_text passed to _score must include resume + skill-inventory content."""
+    """The profile_text passed to _score includes resume + RAG-retrieved skill chunks."""
     from compass.pipeline.nodes import score
+    from compass.rag.retriever import RetrievedChunk
 
     captured = {}
 
@@ -75,9 +76,13 @@ async def test_score_node_passes_profile_to_llm(monkeypatch, temp_vault):
             score=3.0, reasoning="", matched_skills=[], missing_skills=[], tailoring_notes=""
         )
 
+    async def fake_retrieve(query, k=8):
+        return [RetrievedChunk(skill="Python", document="## Python\nLevel 3.", score=0.9)]
+
     monkeypatch.setattr(score, "_score", fake_score)
+    monkeypatch.setattr(score, "rag_retrieve", fake_retrieve)
     req = JobRequirements(
-        required_skills=[],
+        required_skills=["Python"],
         nice_to_have_skills=[],
         years_experience=None,
         seniority="mid",
@@ -86,7 +91,7 @@ async def test_score_node_passes_profile_to_llm(monkeypatch, temp_vault):
     )
     await score.score_node(_state(req))
     assert "Fake resume body" in captured["profile_text"]
-    assert "Python: 3" in captured["profile_text"]
+    assert "## Python\nLevel 3." in captured["profile_text"]
 
 
 async def test_score_node_drops_skills_outside_jd_universe(monkeypatch, temp_vault):

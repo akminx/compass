@@ -14,7 +14,8 @@ import logging
 from compass.config import SCORE_THRESHOLD
 from compass.llm import make_agent
 from compass.pipeline.state import CompassState, JobRequirements, JobScore
-from compass.vault.reader import read_resume, read_skill_inventory
+from compass.rag.retriever import retrieve as rag_retrieve
+from compass.vault.reader import read_resume
 
 logger = logging.getLogger(__name__)
 
@@ -95,8 +96,24 @@ async def _score_with_retry(req: JobRequirements, profile_text: str) -> JobScore
     return retry
 
 
-def _profile_text() -> str:
-    return f"## RESUME\n{read_resume()}\n\n## SKILL INVENTORY\n{read_skill_inventory()}"
+async def _profile_text(req: JobRequirements) -> str:
+    """Build candidate-profile context for the score prompt.
+
+    Resume stays inline; the prior full skill-inventory inject is now top-k
+    chunks retrieved against the JD's skills + summary.
+    """
+    query_parts = [*req.required_skills, *req.nice_to_have_skills]
+    if req.summary:
+        query_parts.append(req.summary)
+    query = " ".join(query_parts).strip()
+
+    chunks = await rag_retrieve(query, k=8) if query else []
+
+    profile = f"## RESUME\n{read_resume()}"
+    if chunks:
+        ranked = "\n\n".join(c.document for c in chunks)
+        profile += f"\n\n## RELEVANT SKILLS (top-{len(chunks)} by similarity)\n{ranked}"
+    return profile
 
 
 async def score_node(state: CompassState) -> dict:
@@ -108,7 +125,8 @@ async def score_node(state: CompassState) -> dict:
         }
 
     try:
-        result = await _score_with_retry(req, _profile_text())
+        profile = await _profile_text(req)
+        result = await _score_with_retry(req, profile)
     except Exception as e:
         logger.exception("score_node: LLM call failed")
         return {
