@@ -93,11 +93,13 @@ class TestIntakeFilterRouting:
     def test_route_after_filter_in_scope_returns_extract(self):
         """Unit test: predicate returns 'extract' when in_scope is True."""
         from compass.pipeline.graph import _route_after_filter
+
         assert _route_after_filter({"in_scope": True}) == "extract"
 
     def test_route_after_filter_out_of_scope_returns_end(self):
         """Unit test: predicate returns 'end' for in_scope False or None."""
         from compass.pipeline.graph import _route_after_filter
+
         assert _route_after_filter({"in_scope": False}) == "end"
         assert _route_after_filter({"in_scope": None}) == "end"
         assert _route_after_filter({}) == "end"

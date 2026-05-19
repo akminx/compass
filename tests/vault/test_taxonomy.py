@@ -55,8 +55,15 @@ def test_normalize_ml_foundations():
     suppressing match scores for the agentic-AI JDs the project targets."""
     from compass.vault.taxonomy import normalize
 
-    for raw in ["Large Language Models", "Large Language Model", "LLM", "LLMs",
-                "language models", "Generative AI", "Gen AI"]:
+    for raw in [
+        "Large Language Models",
+        "Large Language Model",
+        "LLM",
+        "LLMs",
+        "language models",
+        "Generative AI",
+        "Gen AI",
+    ]:
         assert normalize(raw) == "LLMs", f"{raw!r} should map to LLMs"
     for raw in ["Machine Learning", "ML", "applied ML", "machine-learning"]:
         assert normalize(raw) == "Machine Learning", f"{raw!r} should map to Machine Learning"
