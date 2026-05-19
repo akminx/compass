@@ -83,6 +83,70 @@ def test_write_job_note_omits_full_jd_section_when_not_provided(temp_vault):
     assert "## Full JD" not in path.read_text()
 
 
+def test_jobnote_body_has_skills_section_with_wikilinks(temp_vault):
+    """Day 1 Obsidian P1: JobNote body renders a `## Skills` block with
+    wikilinks so the graph view shows JobNote → SkillNote edges. Section
+    sits between the LLM summary and `## Full JD`."""
+    from compass.vault.writer import write_job_note
+
+    note = _make_job_note(
+        skills_required=["Python", "LangGraph"],
+        skills_nice_to_have=["FastAPI"],
+        skills_matched=["Python"],
+        skills_missing=["LangGraph"],
+    )
+    path = write_job_note(note, full_description="raw jd text here")
+    body = path.read_text()
+    assert "## Skills" in body
+    assert "[[Python]]" in body
+    assert "[[LangGraph]]" in body
+    assert "[[FastAPI]]" in body
+    assert "**Required:**" in body
+    assert "**Nice to have:**" in body
+    assert "**Matched:**" in body
+    assert "**Missing:**" in body
+    # ## Skills must appear before ## Full JD
+    assert body.index("## Skills") < body.index("## Full JD")
+
+
+def test_jobnote_body_omits_empty_skill_categories(temp_vault):
+    """Empty categories are omitted entirely — no '(none)' placeholder."""
+    from compass.vault.writer import write_job_note
+
+    note = _make_job_note(
+        skills_required=["Python"],
+        skills_nice_to_have=[],
+        skills_matched=[],
+        skills_missing=["Python"],
+    )
+    path = write_job_note(note)
+    body = path.read_text()
+    assert "**Nice to have:**" not in body
+    assert "**Matched:**" not in body
+    assert "**Required:** [[Python]]" in body
+    assert "**Missing:** [[Python]]" in body
+
+
+def test_jobnote_skill_wikilink_aliases_unsafe_filenames(temp_vault):
+    """Skills with spaces or punctuation resolve to a safe-segment filename;
+    the wikilink must point at the actual file via alias form so the link
+    resolves AND the display matches the user-facing skill name."""
+    from compass.vault.writer import write_job_note
+
+    note = _make_job_note(
+        skills_required=["AWS Bedrock", "C++"],
+        skills_matched=[],
+        skills_missing=[],
+        skills_nice_to_have=[],
+    )
+    path = write_job_note(note)
+    body = path.read_text()
+    assert "[[AWS_Bedrock|AWS Bedrock]]" in body
+    # `_safe_segment` collapses non-word runs to `_` then strips trailing `_`,
+    # so "C++" becomes the file "C.md" — alias keeps the original display.
+    assert "[[C|C++]]" in body
+
+
 def test_write_job_note_idempotent_on_duplicate_url(temp_vault):
     """Writing the same URL twice should overwrite the same file, not create a second."""
     from compass.vault.writer import write_job_note

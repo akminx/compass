@@ -57,6 +57,38 @@ def _to_metadata(model: BaseModel) -> dict:
     return model.model_dump(mode="json", by_alias=True)
 
 
+def _wikilink(skill: str) -> str:
+    """Render a skill as an Obsidian wikilink pointing at skills/<safe>.md.
+
+    SkillNotes are stored under filenames produced by `_safe_segment`. When the
+    skill name contains characters that get rewritten (e.g. "AWS Bedrock" →
+    "AWS_Bedrock", "C++" → "C__"), emit the alias form `[[target|display]]` so
+    the link resolves AND the display matches what the user typed.
+    """
+    target = _safe_segment(skill)
+    return f"[[{target}|{skill}]]" if target != skill else f"[[{skill}]]"
+
+
+def _render_skills_section(note: JobNote) -> str:
+    """Render `## Skills` body block. Empty categories are omitted entirely."""
+    rows: list[tuple[str, list[str]]] = [
+        ("Required", note.skills_required),
+        ("Nice to have", note.skills_nice_to_have),
+        ("Matched", note.skills_matched),
+        ("Missing", note.skills_missing),
+    ]
+    lines = ["## Skills", ""]
+    any_row = False
+    for label, skills in rows:
+        if not skills:
+            continue
+        any_row = True
+        lines.append(f"**{label}:** " + " · ".join(_wikilink(s) for s in skills))
+    if not any_row:
+        return ""
+    return "\n".join(lines) + "\n"
+
+
 def write_job_note(note: JobNote, full_description: str | None = None) -> Path:
     """Write a JobNote to vault/jobs/. Idempotent on URL — same URL overwrites the same file.
 
@@ -80,6 +112,9 @@ def write_job_note(note: JobNote, full_description: str | None = None) -> Path:
         target = jobs_dir / _job_filename(note)
 
     body = f"# {note.company} — {note.title}\n\n{note.jd_summary}\n"
+    skills_block = _render_skills_section(note)
+    if skills_block:
+        body += f"\n{skills_block}"
     if full_description:
         body += f"\n## Full JD\n\n{full_description.strip()}\n"
     post = frontmatter.Post(content=body)
