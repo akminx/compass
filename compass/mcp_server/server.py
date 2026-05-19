@@ -222,17 +222,26 @@ def list_canonical_skills() -> list[str]:
 
 
 @mcp.tool()
-def add_application(job_id: str, resume_variant: str = "resume.md", referral: bool = False) -> dict:
+def add_application(
+    job_id: str,
+    resume_variant: str = "resume.md",
+    referral: bool = False,
+    force: bool = False,
+) -> dict:
     """Create an ApplicationNote linked to a JobNote. Marks the JobNote as applied.
 
     job_id: substring of the JobNote filename (e.g. 'Sierra-Agent_Engineer') or
             the JobNote's url field. Returns an error dict if zero or >1 match.
+
+    force: pass True to overwrite an existing ApplicationNote (use for reposted
+           jobs). Default False refuses overwrite to protect status-transition
+           history on in-flight applications.
     """
     from compass.applications.lifecycle import add_application as _add
 
     try:
-        note = _add(job_id, resume_variant=resume_variant, referral=referral)
-    except LookupError as e:
+        note = _add(job_id, resume_variant=resume_variant, referral=referral, force=force)
+    except (LookupError, FileExistsError) as e:
         return {"error": str(e)}
     return note.model_dump(mode="json")
 

@@ -186,6 +186,31 @@ def test_mcp_add_application_unknown_job_returns_error(temp_vault):
     assert "no JobNote matched" in result["error"]
 
 
+def test_mcp_add_application_reapply_returns_error_without_force(temp_vault):
+    """Bug F regression: re-applying without force=True must return error,
+    not silently overwrite the existing ApplicationNote."""
+    from compass.mcp_server.server import add_application
+
+    _seed_sierra_jobnote(temp_vault)
+    first = add_application(job_id="Sierra-Agent_Engineer")
+    assert "error" not in first
+
+    second = add_application(job_id="Sierra-Agent_Engineer")
+    assert "error" in second
+    assert "already has status" in second["error"]
+
+
+def test_mcp_add_application_force_overrides(temp_vault):
+    """force=True bypasses the overwrite guard (for reposted jobs)."""
+    from compass.mcp_server.server import add_application
+
+    _seed_sierra_jobnote(temp_vault)
+    add_application(job_id="Sierra-Agent_Engineer")
+    forced = add_application(job_id="Sierra-Agent_Engineer", force=True)
+    assert "error" not in forced
+    assert forced["status"] == "applied"
+
+
 def test_mcp_update_application_status_valid_transition(temp_vault):
     from compass.mcp_server.server import add_application, update_application_status
 

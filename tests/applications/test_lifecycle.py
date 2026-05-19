@@ -100,6 +100,52 @@ class TestFindJobnoteCaseInsensitive:
         assert p.exists()
 
 
+class TestAddApplicationOverwriteGuard:
+    """Bug F regression: add_application must NOT silently overwrite an existing
+    in-flight ApplicationNote and destroy status-transition history."""
+
+    def test_reapply_to_applied_job_raises_without_force(self, temp_vault):
+        _seed_jobnote(temp_vault)
+        from compass.applications.lifecycle import add_application
+
+        add_application(job_id="Sierra-Agent_Engineer")
+        with pytest.raises(FileExistsError, match="already has status"):
+            add_application(job_id="Sierra-Agent_Engineer")
+
+    def test_reapply_with_force_succeeds(self, temp_vault):
+        _seed_jobnote(temp_vault)
+        from compass.applications.lifecycle import add_application
+
+        app1 = add_application(job_id="Sierra-Agent_Engineer")
+        # force=True allows the re-apply (e.g. for a reposted job)
+        app2 = add_application(job_id="Sierra-Agent_Engineer", force=True)
+        assert app1.applied_date == app2.applied_date  # same day
+        assert app2.status == "applied"
+
+    def test_reapply_to_rejected_job_also_guarded(self, temp_vault):
+        """Even terminal statuses (rejected/withdrawn) refuse silent overwrite."""
+        _seed_jobnote(temp_vault)
+        from compass.applications.lifecycle import add_application, update_application_status
+
+        app = add_application(job_id="Sierra-Agent_Engineer")
+        update_application_status(
+            app_id=f"{app.applied_date.isoformat()}-Sierra", status="rejected"
+        )
+        with pytest.raises(FileExistsError, match="rejected"):
+            add_application(job_id="Sierra-Agent_Engineer")
+        # But force=True still works
+        app2 = add_application(job_id="Sierra-Agent_Engineer", force=True)
+        assert app2.status == "applied"
+
+    def test_first_apply_does_not_trigger_guard(self, temp_vault):
+        """A genuinely-new JobNote (status='new' or missing) applies normally."""
+        _seed_jobnote(temp_vault)
+        from compass.applications.lifecycle import add_application
+
+        app = add_application(job_id="Sierra-Agent_Engineer")
+        assert app.status == "applied"
+
+
 class TestUpdateStatus:
     def test_valid_transition(self, temp_vault):
         _seed_jobnote(temp_vault)

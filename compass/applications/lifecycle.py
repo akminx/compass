@@ -98,15 +98,41 @@ def _update_jobnote_status(jobnote_path: Path, status: str) -> None:
     jobnote_path.write_text(frontmatter.dumps(md) + "\n", encoding="utf-8")
 
 
+# JobNote.status values that mean "this job already has an application in flight"
+# — refuse to silently overwrite an in-flight application.
+_POST_APPLIED_STATUSES = frozenset({
+    "applied", "screen", "onsite", "offer",
+    "rejected", "withdrawn", "ghosted", "accepted", "declined",
+})
+
+
 def add_application(
     job_id: str,
     *,
     resume_variant: str = "resume.md",
     referral: bool = False,
+    force: bool = False,
 ) -> ApplicationNote:
-    """Create an ApplicationNote linked to a JobNote and mark the JobNote applied."""
+    """Create an ApplicationNote linked to a JobNote and mark the JobNote applied.
+
+    Refuses to overwrite an existing in-flight ApplicationNote unless force=True.
+    The ApplicationNote filename is deterministic on (company, title, applied_date,
+    job_ref hash) — so re-running this on the same JobNote on the same day would
+    silently clobber any status transitions or contacts you'd recorded against the
+    first application. The force=True path is for legitimate re-applications to
+    a reposted job (transitions through screen/onsite are wiped intentionally).
+    """
     job_path = find_jobnote(job_id)
     job_md = frontmatter.load(job_path).metadata
+
+    current_status = job_md.get("status", "new")
+    if current_status in _POST_APPLIED_STATUSES and not force:
+        raise FileExistsError(
+            f"JobNote {job_path.name!r} already has status={current_status!r}. "
+            f"Re-applying would overwrite the existing ApplicationNote and lose "
+            f"any status transitions or contacts. Pass force=True to override "
+            f"(use this when applying to a reposted job)."
+        )
 
     note = ApplicationNote(
         company=job_md["company"],
@@ -119,7 +145,10 @@ def add_application(
     )
     write_application_note(note)
     _update_jobnote_status(job_path, "applied")
-    append_agent_log(f"application added {note.company} {note.title}")
+    append_agent_log(
+        f"application added {note.company} {note.title}"
+        + (" (FORCED re-apply)" if force else "")
+    )
     return note
 
 
