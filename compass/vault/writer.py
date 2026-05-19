@@ -149,7 +149,10 @@ def write_company_note(note: CompanyNote) -> Path:
             logger.warning(
                 "write_company_note: %s has invalid tier=%r (expected one of %s); "
                 "ignoring existing value and using incoming tier=%r",
-                note.company, existing_tier, sorted(_valid_tiers), note.tier,
+                note.company,
+                existing_tier,
+                sorted(_valid_tiers),
+                note.tier,
             )
         elif note.tier == "unknown" and existing_tier != "unknown":
             update["tier"] = existing_tier

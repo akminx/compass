@@ -13,20 +13,26 @@ os.environ.setdefault("OPENROUTER_API_KEY", "test-stub")
 os.environ.setdefault("VAULT_PATH", "/tmp/compass-vault-pytest-placeholder")
 os.environ.setdefault("LEARNING_VAULT_PATH", "/tmp/learning-vault-pytest-placeholder")
 
-# Seed the placeholder vault with the canonical skill-taxonomy.md from the user's
-# real vault if it exists — taxonomy.normalize() is needed by extract_node tests
-# and reads from VAULT_PATH/_meta/skill-taxonomy.md (cached). This is read-only.
+# Seed the placeholder vault with a skill-taxonomy.md so taxonomy.normalize()
+# tests have data to work with. Priority order:
+#   1. User's real vault (so taxonomy edits are picked up immediately by tests)
+#   2. Checked-in fixture at tests/fixtures/skill-taxonomy.md (CI fallback)
+# Either way the file is copied each test session so the lru_cache stays fresh.
 _real_taxonomy = os.path.expanduser("~/Documents/compass-vault/_meta/skill-taxonomy.md")
+_fixture_taxonomy = os.path.join(os.path.dirname(__file__), "fixtures", "skill-taxonomy.md")
 _placeholder_meta = os.path.join(os.environ["VAULT_PATH"], "_meta")
 _placeholder_taxonomy = os.path.join(_placeholder_meta, "skill-taxonomy.md")
 if os.path.exists(_real_taxonomy):
-    # Always re-copy so taxonomy edits in the source vault are picked up on the
-    # next test run. Without this, the lru_cached normalize() returns stale data
-    # against an old copy and edits to the taxonomy aren't testable.
+    _taxonomy_source = _real_taxonomy
+elif os.path.exists(_fixture_taxonomy):
+    _taxonomy_source = _fixture_taxonomy
+else:
+    _taxonomy_source = None
+if _taxonomy_source is not None:
     os.makedirs(_placeholder_meta, exist_ok=True)
     import shutil as _shutil
 
-    _shutil.copyfile(_real_taxonomy, _placeholder_taxonomy)
+    _shutil.copyfile(_taxonomy_source, _placeholder_taxonomy)
 
 from pathlib import Path
 
