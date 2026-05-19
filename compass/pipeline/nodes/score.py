@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 
+from compass.config import SCORE_THRESHOLD
 from compass.llm import make_agent
 from compass.pipeline.state import CompassState, JobRequirements, JobScore
 from compass.vault.reader import read_resume, read_skill_inventory
@@ -113,9 +114,13 @@ async def score_node(state: CompassState) -> dict:
         return {
             "score_result": None,
             "errors": [*state.get("errors", []), f"score_node: {type(e).__name__}: {e}"],
+            "score_threshold": SCORE_THRESHOLD,
         }
 
-    return {"score_result": _constrain_to_jd_skills(result, req)}
+    return {
+        "score_result": _constrain_to_jd_skills(result, req),
+        "score_threshold": SCORE_THRESHOLD,
+    }
 
 
 def _constrain_to_jd_skills(score: JobScore, req: JobRequirements) -> JobScore:

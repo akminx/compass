@@ -132,6 +132,38 @@ async def test_resume_unknown_thread_raises():
 
 
 @pytest.mark.usefixtures("temp_hitl_db", "checkpoint_db", "temp_vault")
+async def test_resume_status_derives_from_final_state_not_input(stub_llm_nodes, monkeypatch):
+    """If the graph auto-rejects on resume (e.g. threshold edited mid-flight),
+    state_store must record 'rejected', not the input decision's 'approved'."""
+    from compass.hitl.resume import resume_pending
+    from compass.pipeline.graph import run_pipeline
+
+    job = RawJob(
+        company="Sierra",
+        title="SWE",
+        url="https://x/divergence-probe",
+        source="ashby",
+        description="...",
+        date_posted=_dt.date(2026, 5, 18),
+    )
+    await run_pipeline(raw_jobs=[job])
+    tid = (await state_store.list_pending())[0]["thread_id"]
+
+    # Force the resume to auto-reject regardless of the input decision —
+    # simulates hitl_node short-circuiting on resume (e.g. SCORE_THRESHOLD
+    # edited between pause and resume).
+    async def auto_reject(state):
+        return {"human_approved": False}
+
+    monkeypatch.setattr("compass.pipeline.graph.hitl_node", auto_reject)
+
+    await resume_pending(tid, decision={"approved": True, "feedback": "human said yes"})
+
+    row = await state_store.get_pending(tid)
+    assert row["status"] == "rejected"  # NOT "approved" — graph really auto-rejected
+
+
+@pytest.mark.usefixtures("temp_hitl_db", "checkpoint_db", "temp_vault")
 async def test_resume_already_resolved_raises(stub_llm_nodes):
     from compass.hitl.resume import resume_pending
     from compass.pipeline.graph import run_pipeline

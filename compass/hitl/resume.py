@@ -50,7 +50,12 @@ async def resume_pending(
     if status_override is not None:
         resolved_status = status_override
     else:
-        resolved_status = "approved" if decision.get("approved") else "rejected"
+        # Derive from the FINAL graph state, not the input decision. A graph that
+        # auto-rejected on resume (e.g. SCORE_THRESHOLD edited between pause and
+        # resume, hitl_node short-circuited before consuming interrupt()) would
+        # otherwise be recorded as "approved" in state_store while the JobNote
+        # carries hitl_decision="auto_rejected" — audit-trail divergence.
+        resolved_status = "approved" if final.get("human_approved") is True else "rejected"
     await state_store.mark_resolved(
         thread_id,
         status=resolved_status,

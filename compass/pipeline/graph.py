@@ -119,8 +119,14 @@ def _vault_url_set() -> set[str]:
 
 
 def _thread_id_for(job_url: str, batch_started_at: datetime) -> str:
-    """Deterministic 16-char SHA-1 of (url, batch start) — same batch + same job = same thread."""
-    raw = f"{job_url}|{batch_started_at.isoformat()}"
+    """Deterministic 16-char SHA-1 of (url, batch start, pid) — same batch + same job = same thread.
+
+    PID is included to disambiguate cross-process collisions (e.g. local CLI
+    and Modal cron both starting at the same wall-clock microsecond in 1.B.3).
+    """
+    import os
+
+    raw = f"{job_url}|{batch_started_at.isoformat()}|{os.getpid()}"
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 
@@ -140,6 +146,7 @@ def _initial_state(job: RawJob, thread_id: str | None = None) -> CompassState:
         "jobs_written": 0,
         "errors": [],
         "thread_id": thread_id,
+        "score_threshold": None,
     }
 
 
@@ -279,6 +286,7 @@ async def run_pipeline(raw_jobs: list[RawJob] | None = None) -> CompassState:
         "in_scope": None,
         "role_family": None,
         "thread_id": None,
+        "score_threshold": None,
     }
     # `jobs_paused` is informational only — not in CompassState TypedDict.
     aggregate["jobs_paused"] = paused_count  # type: ignore[typeddict-unknown-key]
@@ -305,13 +313,21 @@ def _append_run_log(state: CompassState, duration_s: float) -> None:
     """Append one row per run to `_meta/pipeline-runs.md` for debugging cron failures."""
     log_path = VAULT_PATH / "_meta" / "pipeline-runs.md"
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    expected_header = "| Timestamp | Processed | Written | Paused | Errors | Duration |"
+    expected_separator = "|---|---|---|---|---|---|"
+
     if not log_path.exists():
         log_path.write_text(
-            "# Pipeline Run Log\n\n"
-            "| Timestamp | Processed | Written | Paused | Errors | Duration |\n"
-            "|---|---|---|---|---|---|\n",
+            f"# Pipeline Run Log\n\n{expected_header}\n{expected_separator}\n",
             encoding="utf-8",
         )
+    else:
+        # One-time migration: pre-1.B.1 logs are 5-column. Insert a Paused=0
+        # column into existing rows so Dataview parses the table correctly.
+        text = log_path.read_text(encoding="utf-8")
+        if expected_header not in text:
+            _migrate_run_log(log_path, text, expected_header, expected_separator)
+
     ts = datetime.now().isoformat(timespec="seconds")
     paused = state.get("jobs_paused", 0)  # type: ignore[typeddict-item]
     row = (
@@ -320,6 +336,39 @@ def _append_run_log(state: CompassState, duration_s: float) -> None:
     )
     with log_path.open("a", encoding="utf-8") as f:
         f.write(row)
+
+
+def _migrate_run_log(log_path, text: str, expected_header: str, expected_separator: str) -> None:
+    """One-time migration: insert Paused=0 column into existing 5-col rows.
+
+    Pre-1.B.1 rows: | ts | processed | written | errors | duration |
+    Post-1.B.1 rows: | ts | processed | written | paused | errors | duration |
+    """
+    new_lines = []
+    in_table = False
+    migrated_header = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("| Timestamp"):
+            new_lines.append(expected_header)
+            in_table = True
+            migrated_header = True
+            continue
+        if in_table and stripped.startswith("|---"):
+            new_lines.append(expected_separator)
+            continue
+        if in_table and stripped.startswith("|") and not stripped.startswith("| Timestamp"):
+            cells = [c.strip() for c in stripped.strip("|").split("|")]
+            if len(cells) == 5:
+                ts, processed, written, errors, duration = cells
+                new_lines.append(f"| {ts} | {processed} | {written} | 0 | {errors} | {duration} |")
+                continue
+            elif len(cells) == 6:
+                new_lines.append(line)
+                continue
+        new_lines.append(line)
+    if migrated_header:
+        log_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
 
 def _count_unknown_skills_seen_this_run(start_wall: datetime) -> int:

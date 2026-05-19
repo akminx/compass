@@ -74,3 +74,5 @@ class CompassState(TypedDict):
     errors: list[str]
 
     thread_id: str | None
+
+    score_threshold: float | None

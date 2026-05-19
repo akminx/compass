@@ -125,11 +125,14 @@ async def test_below_threshold_job_runs_to_completion_no_state_store_row(monkeyp
 
 
 @pytest.mark.usefixtures("temp_hitl_db", "checkpoint_db", "stub_llm_nodes", "temp_vault")
-async def test_thread_id_is_deterministic_for_same_url_and_batch():
-    """Re-running the SAME batch (same start_wall) reuses the same thread_id —
-    second run hits the idempotent INSERT OR IGNORE path."""
+async def test_thread_id_is_deterministic_for_same_url_and_batch_same_process(monkeypatch):
+    """Re-running the SAME batch (same start_wall) within the same process
+    reuses the same thread_id — second run hits the idempotent INSERT OR IGNORE path."""
+    import os
+
     from compass.pipeline.graph import _thread_id_for
 
+    monkeypatch.setattr(os, "getpid", lambda: 12345)
     tid_a = _thread_id_for("https://jobs.example.com/x", _dt.datetime(2026, 5, 19, 9, 0, 0))
     tid_b = _thread_id_for("https://jobs.example.com/x", _dt.datetime(2026, 5, 19, 9, 0, 0))
     tid_c = _thread_id_for("https://jobs.example.com/y", _dt.datetime(2026, 5, 19, 9, 0, 0))

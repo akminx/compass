@@ -47,11 +47,16 @@ def _derive_hitl_decision(state: CompassState) -> tuple[str | None, datetime | N
     score = state.get("score_result")
     score_value = score.score if score is not None else 0.0
 
+    # Prefer state-captured threshold (sticky); fall back to config for old checkpoints.
+    threshold = state.get("score_threshold")
+    if threshold is None:
+        threshold = SCORE_THRESHOLD
+
     if approved is True:
         decision = "approved"
     elif feedback.startswith(HITL_TIMEOUT_FEEDBACK_PREFIX):
         decision = "timed_out"
-    elif score_value < SCORE_THRESHOLD:
+    elif score_value < threshold:
         decision = "auto_rejected"
     else:
         decision = "rejected"

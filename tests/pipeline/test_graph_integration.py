@@ -209,3 +209,45 @@ async def test_run_pipeline_appends_to_run_log(temp_vault, mocked_llms, auto_app
     log_text = log_path.read_text()
     assert "| Timestamp |" in log_text  # header was written
     assert "| 1 |" in log_text  # one job processed
+
+
+async def test_run_log_migrates_5col_to_6col_on_first_post_1b1_append(temp_vault):
+    """A pre-1.B.1 pipeline-runs.md with 5-col rows gets migrated to 6-col on
+    the next append. Existing data preserved with Paused=0."""
+    log_path = temp_vault / "_meta" / "pipeline-runs.md"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(
+        "# Pipeline Run Log\n\n"
+        "| Timestamp | Processed | Written | Errors | Duration |\n"
+        "|---|---|---|---|---|\n"
+        "| 2026-05-17T10:00:00 | 20 | 5 | 0 | 7.2s |\n"
+        "| 2026-05-18T10:00:00 | 15 | 3 | 1 | 5.4s |\n",
+        encoding="utf-8",
+    )
+
+    from compass.pipeline.graph import _append_run_log
+
+    state = {
+        "raw_jobs": [],
+        "current_job": None,
+        "extracted_requirements": None,
+        "score_result": None,
+        "in_scope": None,
+        "role_family": None,
+        "human_approved": None,
+        "human_feedback": None,
+        "tailored_paragraph": None,
+        "vault_written": False,
+        "jobs_processed": 10,
+        "jobs_written": 2,
+        "errors": [],
+        "thread_id": None,
+        "score_threshold": None,
+    }
+    state["jobs_paused"] = 1  # type: ignore[typeddict-unknown-key]
+    _append_run_log(state, 4.1)
+
+    text = log_path.read_text(encoding="utf-8")
+    assert "| Timestamp | Processed | Written | Paused | Errors | Duration |" in text
+    assert "| 2026-05-17T10:00:00 | 20 | 5 | 0 | 0 | 7.2s |" in text  # migrated
+    assert "| 2026-05-18T10:00:00 | 15 | 3 | 0 | 1 | 5.4s |" in text

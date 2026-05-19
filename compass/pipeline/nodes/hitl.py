@@ -26,12 +26,19 @@ async def hitl_node(state: CompassState) -> dict:
     score = state.get("score_result")
     job = state.get("current_job")
 
-    if score is None or score.score < SCORE_THRESHOLD:
+    # Prefer the threshold captured at score time (sticky across pause/resume).
+    # Falls back to live config only for backward-compat with paused threads
+    # checkpointed before this field existed.
+    threshold = state.get("score_threshold")
+    if threshold is None:
+        threshold = SCORE_THRESHOLD
+
+    if score is None or score.score < threshold:
         logger.info(
             "hitl: auto-reject %s (score=%s, threshold=%.2f)",
             job.url if job else "(unknown)",
             getattr(score, "score", None),
-            SCORE_THRESHOLD,
+            threshold,
         )
         return {"human_approved": False}
 

@@ -98,3 +98,45 @@ async def test_malformed_resume_value_defaults_to_rejected(monkeypatch):
     monkeypatch.setattr("compass.pipeline.nodes.hitl.interrupt", lambda _p: "bogus")
     result = await hitl_node(_state(score=4.2))
     assert result == {"human_approved": False}
+
+
+async def test_below_threshold_uses_state_score_threshold_when_present(monkeypatch):
+    """If state['score_threshold'] is set (captured at score time), hitl uses
+    it — not the live config value. Prevents resume-time SCORE_THRESHOLD
+    edits from silently auto-rejecting a pre-approved thread."""
+    captured = {}
+
+    def fake_interrupt(_p):
+        captured["called"] = True
+        return {"approved": True}
+
+    monkeypatch.setattr("compass.pipeline.nodes.hitl.interrupt", fake_interrupt)
+
+    state = _state(score=3.0)
+    state["score_threshold"] = 2.0  # captured at score time; less than 3.0
+    # Live config: SCORE_THRESHOLD=3.5 (default)
+    import compass.pipeline.nodes.hitl as hitl_mod
+
+    monkeypatch.setattr(hitl_mod, "SCORE_THRESHOLD", 3.5)
+
+    result = await hitl_node(state)
+    assert captured.get("called") is True  # interrupt fired despite config threshold > score
+    assert result["human_approved"] is True
+
+
+async def test_below_threshold_falls_back_to_config_when_state_threshold_missing(monkeypatch):
+    """Backward-compat: paused threads from before this fix have no
+    state['score_threshold']; hitl falls back to config."""
+    monkeypatch.setattr(
+        "compass.pipeline.nodes.hitl.interrupt",
+        lambda p: pytest.fail("interrupt should not fire when score < config threshold"),
+    )
+
+    state = _state(score=2.0)
+    # state['score_threshold'] not set — defaults to None via .get()
+    import compass.pipeline.nodes.hitl as hitl_mod
+
+    monkeypatch.setattr(hitl_mod, "SCORE_THRESHOLD", 3.5)
+
+    result = await hitl_node(state)
+    assert result == {"human_approved": False}
