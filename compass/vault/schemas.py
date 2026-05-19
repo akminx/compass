@@ -44,7 +44,7 @@ SkillCategory = Literal[
     "voice",
     "fine-tuning",
 ]
-Source = Literal["greenhouse", "lever", "ashby", "jobspy", "smoke", "manual"]
+Source = Literal["greenhouse", "lever", "ashby", "workday", "jobspy", "smoke", "manual"]
 HitlDecision = Literal["approved", "rejected", "auto_rejected", "timed_out"]
 InterviewDifficulty = Literal[
     "hackerrank",

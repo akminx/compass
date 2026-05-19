@@ -449,32 +449,37 @@ async def _scrape_all() -> list[RawJob]:
     from compass.scrapers.ashby import scrape_ashby_many
     from compass.scrapers.greenhouse import scrape_greenhouse_many
     from compass.scrapers.lever import scrape_lever_many
+    from compass.scrapers.workday import scrape_workday_many
 
     yaml_slugs = _yaml_scraper_slugs()
     gh_slugs = yaml_slugs.get("greenhouse") or list(GREENHOUSE_BOARDS)
     lv_slugs = yaml_slugs.get("lever") or list(LEVER_COMPANIES)
     ash_slugs = yaml_slugs.get("ashby") or list(ASHBY_BOARDS)
+    wd_slugs = yaml_slugs.get("workday") or []
 
     if yaml_slugs:
         logger.info(
-            "scrape: YAML-driven targeting — greenhouse=%d lever=%d ashby=%d boards",
+            "scrape: YAML-driven targeting — greenhouse=%d lever=%d ashby=%d workday=%d boards",
             len(gh_slugs),
             len(lv_slugs),
             len(ash_slugs),
+            len(wd_slugs),
         )
 
-    gh, lv, ash = await asyncio.gather(
+    gh, lv, ash, wd = await asyncio.gather(
         scrape_greenhouse_many(gh_slugs),
         scrape_lever_many(lv_slugs),
         scrape_ashby_many(ash_slugs),
+        scrape_workday_many(wd_slugs),
     )
 
     gh = _filter_and_sort_by_recency(gh)
     lv = _filter_and_sort_by_recency(lv)
     ash = _filter_and_sort_by_recency(ash)
+    wd = _filter_and_sort_by_recency(wd)
 
     interleaved: list[RawJob] = []
-    iters = [iter(gh), iter(lv), iter(ash)]
+    iters = [iter(gh), iter(lv), iter(ash), iter(wd)]
     while iters:
         next_iters = []
         for it in iters:
@@ -511,7 +516,12 @@ def _yaml_scraper_slugs() -> dict[str, list[str]]:
     from compass.vault.target_companies import list_yaml_companies, refresh_yaml
 
     refresh_yaml()
-    by_provider: dict[str, list[str]] = {"greenhouse": [], "lever": [], "ashby": []}
+    by_provider: dict[str, list[str]] = {
+        "greenhouse": [],
+        "lever": [],
+        "ashby": [],
+        "workday": [],
+    }
     for tier in ("apply-now", "opportunistic"):
         for entry in list_yaml_companies(tier_filter=tier):
             ats = entry.get("ats") or {}

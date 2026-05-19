@@ -14,9 +14,10 @@ import logging
 
 from compass.config import SCORE_THRESHOLD
 from compass.llm import make_agent
-from compass.pipeline.state import CompassState, JobRequirements, JobScore
+from compass.pipeline.state import CompassState, JobRequirements, JobScore, RawJob
 from compass.rag.retriever import retrieve as rag_retrieve
 from compass.vault.reader import read_resume
+from compass.vault.target_companies import get_company_meta
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,22 @@ Return a JobScore with:
 - missing_skills: skills from the JD's required+nice-to-have list that the candidate lacks (level < 2)
 - tailoring_notes: ONE sentence suggesting how to frame the application (skip if score < 3.0)
 
+SECONDARY SIGNAL — company targeting context:
+The job's company carries a tier classification from the candidate's strategic
+target list (apply-now / opportunistic / backend-prep / stretch / skip), an
+interview-loop difficulty (hackerrank / case / lc-easy / lc-medium / lc-hard /
+takehome), and the candidate's notes about why the company matters. When that
+context is provided in the JOB BLOCK below, use it as ONE input to the score —
+not the dominant one. Skill match is still primary. But:
+- An `apply-now` company with an `lc-easy` or `hackerrank` or `case` loop is a
+  realistic landing — don't under-score those just because the candidate has
+  gaps; tailoring + interview prep can close them.
+- An `opportunistic` or `backend-prep` company with an `lc-hard` loop is a
+  stretch — score those honestly even if skill match looks strong, since the
+  loop will be the actual blocker.
+- The `notes` field tells you why the candidate cares — use it for the
+  tailoring_notes if the score is >= 3.
+
 HARD CONSTRAINTS on matched_skills and missing_skills:
 1. Every skill in matched_skills MUST appear in the JD's required or nice_to_have list. Do NOT list skills from the candidate's profile that the JD did not ask for.
 2. Every skill in missing_skills MUST appear in the JD's required or nice_to_have list. Do NOT list every skill in the canonical taxonomy that the candidate lacks.
@@ -53,9 +70,30 @@ def _build_agent():
     return make_agent("score", output_type=JobScore, system_prompt=_SYSTEM_PROMPT)
 
 
-def _format_prompt(req: JobRequirements, profile_text: str) -> str:
+def _company_context_block(job: RawJob | None) -> str:
+    """Render the company's YAML targeting metadata as a prompt block. Empty
+    string when the company isn't in the user's target list — the LLM scores
+    purely on skill match in that case (likely a JD that landed via fallback
+    config, not the YAML)."""
+    if job is None:
+        return ""
+    meta = get_company_meta(job.company)
+    if not meta:
+        return ""
+    return (
+        "# COMPANY TARGETING CONTEXT\n"
+        f"company: {job.company}\n"
+        f"tier: {meta.get('tier') or 'unknown'}\n"
+        f"interview_difficulty: {meta.get('interview_difficulty') or 'unknown'}\n"
+        f"section: {meta.get('section') or 'unknown'}\n"
+        f"notes: {meta.get('notes') or '(none)'}\n\n"
+    )
+
+
+def _format_prompt(req: JobRequirements, profile_text: str, job: RawJob | None) -> str:
     return (
         f"# CANDIDATE PROFILE\n{profile_text}\n\n"
+        f"{_company_context_block(job)}"
         f"# JOB REQUIREMENTS\n"
         f"required: {', '.join(req.required_skills) or '(none)'}\n"
         f"nice-to-have: {', '.join(req.nice_to_have_skills) or '(none)'}\n"
@@ -66,10 +104,10 @@ def _format_prompt(req: JobRequirements, profile_text: str) -> str:
     )
 
 
-async def _score(req: JobRequirements, profile_text: str) -> JobScore:
+async def _score(req: JobRequirements, profile_text: str, job: RawJob | None = None) -> JobScore:
     # Tests patch this function; the underlying pydantic-ai Agent is harder to stub.
     agent = _build_agent()
-    result = await agent.run(_format_prompt(req, profile_text))
+    result = await agent.run(_format_prompt(req, profile_text, job))
     return result.output
 
 
@@ -82,8 +120,10 @@ def _reasoning_complete(text: str) -> bool:
     return len(t) >= 20 and t[-1] in '.!?"'
 
 
-async def _score_with_retry(req: JobRequirements, profile_text: str) -> JobScore:
-    result = await _score(req, profile_text)
+async def _score_with_retry(
+    req: JobRequirements, profile_text: str, job: RawJob | None = None
+) -> JobScore:
+    result = await _score(req, profile_text, job)
     if _reasoning_complete(result.reasoning):
         return result
     logger.warning(
@@ -91,7 +131,7 @@ async def _score_with_retry(req: JobRequirements, profile_text: str) -> JobScore
         len(result.reasoning or ""),
         (result.reasoning or "")[-40:],
     )
-    retry = await _score(req, profile_text)
+    retry = await _score(req, profile_text, job)
     if not _reasoning_complete(retry.reasoning):
         logger.warning("score_node: retry still produced incomplete reasoning — accepting anyway")
     return retry
@@ -127,7 +167,7 @@ async def score_node(state: CompassState) -> dict:
 
     try:
         profile = await _profile_text(req)
-        result = await _score_with_retry(req, profile)
+        result = await _score_with_retry(req, profile, state.get("current_job"))
     except Exception as e:
         logger.exception("score_node: LLM call failed")
         return {

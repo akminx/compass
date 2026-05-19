@@ -23,7 +23,7 @@ def mocked_llms(monkeypatch):
             summary="Build agentic systems with LangGraph and MCP.",
         )
 
-    async def fake_score(req, profile_text):
+    async def fake_score(req, profile_text, job=None):
         return JobScore(
             score=4.2,
             reasoning="Strong MCP + LangGraph match",
@@ -154,7 +154,7 @@ async def test_run_pipeline_skips_tailor_when_below_threshold_but_still_writes(
             summary="Build agents.",
         )
 
-    async def fake_score(req, profile_text):
+    async def fake_score(req, profile_text, job=None):
         return JobScore(
             score=2.0,
             reasoning="weak match against requirements.",

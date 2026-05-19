@@ -10,7 +10,7 @@ from typing import Literal, TypedDict
 
 from pydantic import BaseModel, Field
 
-Source = Literal["greenhouse", "lever", "ashby", "jobspy", "smoke", "manual"]
+Source = Literal["greenhouse", "lever", "ashby", "workday", "jobspy", "smoke", "manual"]
 Seniority = Literal["junior", "mid", "senior", "staff", "unknown"]
 RemotePolicy = Literal["remote", "hybrid", "onsite", "unknown"]
 
