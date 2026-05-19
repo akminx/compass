@@ -38,6 +38,10 @@ Tools exposed:
     update_application_status(app_id, ...)  -> transition status with optional next-action fields
     list_pending_actions(through_date)      -> ApplicationNotes with due next_action_date
     tailor_resume(job_id)                   -> tailoring suggestions from JobNote frontmatter
+
+  HiTL approvals:
+    pending_approvals()                     -> paused threads awaiting approval (oldest first)
+    approve(thread_id, approved, feedback)  -> resume a paused thread; runs tailor on approve
 """
 
 from __future__ import annotations
@@ -46,6 +50,8 @@ from mcp.server.fastmcp import FastMCP
 
 from compass.analysis import gap_aggregator, skill_assessor
 from compass.config import VAULT_PATH
+from compass.hitl import state_store as _state_store
+from compass.hitl.resume import resume_pending as _resume_pending
 from compass.vault.learning_bridge import path_to_uri, resolve, scan_evidence
 from compass.vault.taxonomy import all_canonicals
 
@@ -327,6 +333,47 @@ async def tailor_resume(job_id: str) -> dict:
         or "(not yet tailored — re-run pipeline with score >= threshold)",
         "skills_matched": md.get("skills_matched", []),
         "skills_missing": md.get("skills_missing", []),
+    }
+
+
+# ── HiTL approvals ───────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def pending_approvals() -> list[dict]:
+    """List jobs paused at hitl awaiting human approval. Oldest first.
+
+    Returned rows include: thread_id, job_url, company, title, score,
+    score_reasoning, matched_skills, missing_skills, created_at (ISO8601 UTC),
+    status, resolved_at, feedback. All values are JSON-safe primitives.
+    """
+    rows = await _state_store.list_pending()
+    # rows are already plain dicts of JSON-safe primitives + list[str]
+    return rows
+
+
+@mcp.tool()
+async def approve(thread_id: str, approved: bool, feedback: str | None = None) -> dict:
+    """Resume a paused thread. approved=True runs tailor + vault_write;
+    approved=False skips tailor and writes the rejected JobNote.
+
+    Returns {"vault_written": bool, "human_approved": bool, "human_feedback": str | None}
+    on success, or {"error": "..."} if the thread is unknown or already resolved.
+    """
+    try:
+        final = await _resume_pending(
+            thread_id,
+            decision={"approved": approved, "feedback": feedback},
+        )
+    except (LookupError, ValueError) as e:
+        return {"error": str(e)}
+    # Strip non-JSON-safe state from the return (current_job is a Pydantic model,
+    # extracted_requirements / score_result are Pydantic). Phase 1.A bug #11
+    # pattern: FastMCP cannot serialize Pydantic instances or datetime objects.
+    return {
+        "vault_written": bool(final.get("vault_written")),
+        "human_approved": bool(final.get("human_approved")),
+        "human_feedback": final.get("human_feedback"),
     }
 
 
