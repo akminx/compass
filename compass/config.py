@@ -44,6 +44,9 @@ EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
 # ── HiTL ──────────────────────────────────────────────────────────────────────
 HITL_STATE_DB: Path = Path(os.getenv("HITL_STATE_DB", "~/.compass/hitl.db")).expanduser()
+HITL_CHECKPOINT_DB: Path = Path(
+    os.getenv("HITL_CHECKPOINT_DB", "~/.compass/checkpoints.db")
+).expanduser()
 HITL_TIMEOUT_HOURS: int = int(os.getenv("HITL_TIMEOUT_HOURS", "4"))
 
 # ── Pipeline ──────────────────────────────────────────────────────────────────

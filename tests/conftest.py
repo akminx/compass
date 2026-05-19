@@ -40,6 +40,21 @@ import pytest
 
 
 @pytest.fixture
+def temp_hitl_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point HITL_STATE_DB at a fresh per-test SQLite file.
+
+    The store reads `compass.config.HITL_STATE_DB` inside function bodies (per
+    the module-level discipline rule), so monkeypatching the attribute is
+    sufficient — no module reimport needed.
+    """
+    db = tmp_path / "pending.db"
+    import compass.config as cfg
+
+    monkeypatch.setattr(cfg, "HITL_STATE_DB", db)
+    return db
+
+
+@pytest.fixture
 def temp_vault(tmp_path: Path, monkeypatch):
     """Create a minimal compass-vault structure in a tmp dir and point config at it."""
     vault = tmp_path / "compass-vault"

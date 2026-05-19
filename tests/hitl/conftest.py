@@ -1,29 +1,14 @@
-"""Shared fixtures for HiTL tests."""
+"""Shared fixtures for HiTL tests.
+
+`temp_hitl_db` lives in the top-level tests/conftest.py so pipeline tests can
+reuse it without duplication.
+"""
 
 from __future__ import annotations
 
 import datetime as _dt
-from typing import TYPE_CHECKING
 
 import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
-
-@pytest.fixture
-def temp_hitl_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Point HITL_STATE_DB at a fresh per-test SQLite file.
-
-    The store reads `compass.config.HITL_STATE_DB` inside function bodies (per
-    the module-level discipline rule), so monkeypatching the attribute is
-    sufficient — no module reimport needed.
-    """
-    db = tmp_path / "pending.db"
-    import compass.config as cfg
-
-    monkeypatch.setattr(cfg, "HITL_STATE_DB", db)
-    return db
 
 
 @pytest.fixture

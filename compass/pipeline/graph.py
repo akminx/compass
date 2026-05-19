@@ -17,15 +17,18 @@ Graph flow (per job):
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import time
 from datetime import datetime
 
 import frontmatter
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, START, StateGraph
 
 from compass.analysis import gap_aggregator
 from compass.config import MAX_CONCURRENT_JOBS, VAULT_PATH
+from compass.hitl import state_store
 from compass.pipeline.nodes.extract import extract_node
 from compass.pipeline.nodes.hitl import hitl_node
 from compass.pipeline.nodes.intake import intake_node
@@ -61,7 +64,7 @@ def _route_after_hitl(state: CompassState) -> str:
     return "vault_write"
 
 
-def build_graph():
+def build_graph(checkpointer=None):
     builder = StateGraph(CompassState)
     builder.add_node("intake", intake_node)
     builder.add_node("intake_filter", intake_filter_node)
@@ -93,7 +96,7 @@ def build_graph():
     builder.add_edge("tailor", "vault_write")
     builder.add_edge("vault_write", END)
 
-    return builder.compile()
+    return builder.compile(checkpointer=checkpointer)
 
 
 def _vault_url_set() -> set[str]:
@@ -115,7 +118,13 @@ def _vault_url_set() -> set[str]:
     return urls
 
 
-def _initial_state(job: RawJob) -> CompassState:
+def _thread_id_for(job_url: str, batch_started_at: datetime) -> str:
+    """Deterministic 16-char SHA-1 of (url, batch start) — same batch + same job = same thread."""
+    raw = f"{job_url}|{batch_started_at.isoformat()}"
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _initial_state(job: RawJob, thread_id: str | None = None) -> CompassState:
     return {
         "raw_jobs": [],
         "current_job": job,
@@ -130,7 +139,7 @@ def _initial_state(job: RawJob) -> CompassState:
         "jobs_processed": 0,
         "jobs_written": 0,
         "errors": [],
-        "thread_id": None,
+        "thread_id": thread_id,
     }
 
 
@@ -159,19 +168,72 @@ def _langfuse_config() -> dict:
         return {}
 
 
-async def _process_one(graph, job: RawJob, sem: asyncio.Semaphore) -> CompassState:
+async def _process_one(
+    graph,
+    job: RawJob,
+    sem: asyncio.Semaphore,
+    thread_id: str,
+) -> tuple[CompassState, bool]:
+    """Invoke the graph for one job. Returns (final_state, was_paused)."""
+    config = {
+        "configurable": {"thread_id": thread_id},
+        **_langfuse_config(),
+    }
     async with sem:
         try:
-            return await graph.ainvoke(_initial_state(job), config=_langfuse_config())
+            result = await graph.ainvoke(_initial_state(job, thread_id=thread_id), config=config)
         except Exception as e:
-            # logger.exception preserves the traceback to stderr; the string version
-            # below is still aggregated into state for the run summary.
             logger.exception("pipeline: graph crashed on %s", job.url)
-            return {**_initial_state(job), "errors": [f"graph: {type(e).__name__}: {e}"]}
+            return (
+                {
+                    **_initial_state(job, thread_id=thread_id),
+                    "errors": [f"graph: {type(e).__name__}: {e}"],
+                },
+                False,
+            )
+
+    # When interrupt() fires, ainvoke returns with state containing the
+    # __interrupt__ marker AND without progressing past the hitl node.
+    # vault_written stays False, jobs_written stays 0 — that's our signal.
+    interrupts = result.get("__interrupt__")
+    if interrupts:
+        payload = interrupts[0].value if hasattr(interrupts[0], "value") else interrupts[0]
+        if isinstance(payload, dict) and payload.get("kind") == "approval_request":
+            await state_store.add_pending(
+                thread_id=thread_id,
+                job_url=payload["job_url"],
+                company=payload["company"],
+                title=payload["title"],
+                score=float(payload["score"]),
+                score_reasoning=payload["score_reasoning"],
+                matched_skills=list(payload["matched_skills"]),
+                missing_skills=list(payload["missing_skills"]),
+            )
+            logger.info(
+                "pipeline: paused %s for approval (thread_id=%s, score=%.2f)",
+                job.url,
+                thread_id,
+                payload["score"],
+            )
+            return (result, True)
+        # Unknown interrupt shape — DO NOT silently swallow. Phase 0 bug pattern:
+        # a future interrupt() added elsewhere in the graph would otherwise
+        # disappear into a "succeeded with jobs_paused=0" black hole. Log loudly
+        # and still count as paused so the caller's bookkeeping reflects reality.
+        logger.error(
+            "pipeline: graph paused at UNKNOWN interrupt kind for %s — payload=%r",
+            job.url,
+            payload,
+        )
+        return (result, True)
+    return (result, False)
 
 
 async def run_pipeline(raw_jobs: list[RawJob] | None = None) -> CompassState:
-    """Scrape (or accept) jobs, dedup, run per-job graph, regenerate gap plan."""
+    """Scrape (or accept) jobs, dedup, run per-job graph under a single
+    AsyncSqliteSaver, regenerate gap plan."""
+    from compass.config import HITL_CHECKPOINT_DB
+
     start_monotonic = time.monotonic()
     start_wall = datetime.now()  # captured alongside monotonic; immune to NTP/DST mid-run
     if raw_jobs is None:
@@ -183,9 +245,24 @@ async def run_pipeline(raw_jobs: list[RawJob] | None = None) -> CompassState:
     if dropped:
         logger.info("pipeline: dropping %d/%d jobs already in vault", dropped, len(raw_jobs))
 
-    graph = build_graph()
-    sem = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
-    results = await asyncio.gather(*[_process_one(graph, j, sem) for j in fresh])
+    HITL_CHECKPOINT_DB.parent.mkdir(parents=True, exist_ok=True)
+    async with AsyncSqliteSaver.from_conn_string(str(HITL_CHECKPOINT_DB)) as checkpointer:
+        # Enable WAL on the checkpoint DB once per process. Cheap if already set.
+        # See state_store._connect for the rationale.
+        try:
+            await checkpointer.conn.execute("PRAGMA journal_mode=WAL")
+            await checkpointer.conn.execute("PRAGMA busy_timeout=5000")
+        except Exception:
+            logger.debug("checkpoint: WAL pragma set already or unsupported; continuing")
+        graph = build_graph(checkpointer=checkpointer)
+        sem = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
+        coros = [
+            _process_one(graph, j, sem, thread_id=_thread_id_for(j.url, start_wall)) for j in fresh
+        ]
+        results = await asyncio.gather(*coros)
+
+    paused_count = sum(int(p) for _, p in results)
+    final_states = [s for s, _ in results]
 
     aggregate: CompassState = {
         "raw_jobs": raw_jobs,
@@ -195,14 +272,16 @@ async def run_pipeline(raw_jobs: list[RawJob] | None = None) -> CompassState:
         "human_approved": None,
         "human_feedback": None,
         "tailored_paragraph": None,
-        "vault_written": any(r.get("vault_written") for r in results),
+        "vault_written": any(r.get("vault_written") for r in final_states),
         "jobs_processed": len(fresh),
-        "jobs_written": sum(int(bool(r.get("vault_written"))) for r in results),
-        "errors": [e for r in results for e in r.get("errors", [])],
+        "jobs_written": sum(int(bool(r.get("vault_written"))) for r in final_states),
+        "errors": [e for r in final_states for e in r.get("errors", [])],
         "in_scope": None,
         "role_family": None,
         "thread_id": None,
     }
+    # `jobs_paused` is informational only — not in CompassState TypedDict.
+    aggregate["jobs_paused"] = paused_count  # type: ignore[typeddict-unknown-key]
 
     if aggregate["jobs_written"] > 0:
         gap_aggregator.regenerate(write=True)
@@ -211,9 +290,10 @@ async def run_pipeline(raw_jobs: list[RawJob] | None = None) -> CompassState:
     _append_run_log(aggregate, duration_s)
     unknown_count = _count_unknown_skills_seen_this_run(start_wall)
     logger.info(
-        "pipeline: processed=%d written=%d errors=%d unknown_skills_seen=%d duration=%.1fs",
+        "pipeline: processed=%d written=%d paused=%d errors=%d unknown_skills_seen=%d duration=%.1fs",
         aggregate["jobs_processed"],
         aggregate["jobs_written"],
+        paused_count,
         len(aggregate["errors"]),
         unknown_count,
         duration_s,
@@ -228,14 +308,15 @@ def _append_run_log(state: CompassState, duration_s: float) -> None:
     if not log_path.exists():
         log_path.write_text(
             "# Pipeline Run Log\n\n"
-            "| Timestamp | Processed | Written | Errors | Duration |\n"
-            "|---|---|---|---|---|\n",
+            "| Timestamp | Processed | Written | Paused | Errors | Duration |\n"
+            "|---|---|---|---|---|---|\n",
             encoding="utf-8",
         )
     ts = datetime.now().isoformat(timespec="seconds")
+    paused = state.get("jobs_paused", 0)  # type: ignore[typeddict-item]
     row = (
         f"| {ts} | {state['jobs_processed']} | {state['jobs_written']} | "
-        f"{len(state['errors'])} | {duration_s:.1f}s |\n"
+        f"{paused} | {len(state['errors'])} | {duration_s:.1f}s |\n"
     )
     with log_path.open("a", encoding="utf-8") as f:
         f.write(row)
@@ -294,5 +375,6 @@ if __name__ == "__main__":
     print(
         f"Processed: {result['jobs_processed']} | "
         f"Written: {result['jobs_written']} | "
+        f"Paused: {result.get('jobs_paused', 0)} | "
         f"Errors: {len(result['errors'])}"
     )
