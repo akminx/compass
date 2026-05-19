@@ -1,8 +1,9 @@
 """
 score_node — score a job against the candidate profile.
 
-Reads resume.md + skill-inventory.md from the vault and passes them as context
-to the LLM. Returns a JobScore (0.0–5.0) with matched/missing/tailoring breakdown.
+Profile context is the full resume plus top-k chunks retrieved from the
+skill-inventory Chroma index, queried with the JD's skills + summary.
+Returns a JobScore (0.0–5.0) with matched/missing/tailoring breakdown.
 
 Model: SCORE_MODEL (default google/gemini-2.5-flash).
 """
