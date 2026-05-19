@@ -6,6 +6,7 @@ Writes -> reads -> validates -> cleans up. Run before deploying.
 Usage:
     uv run python scripts/test_vault_roundtrip.py
 """
+
 from __future__ import annotations
 
 import sys
@@ -48,7 +49,9 @@ def main() -> int:
     job_path = write_job_note(note)
     print(f"  OK wrote job note: {job_path.name}")
 
-    company_path = write_company_note(CompanyNote(company=SENTINEL_COMPANY, tier="unknown", roles_seen=1))
+    company_path = write_company_note(
+        CompanyNote(company=SENTINEL_COMPANY, tier="unknown", roles_seen=1)
+    )
     print(f"  OK wrote company note: {company_path.name}")
 
     skill_path = update_skill_note("Python", SENTINEL_URL)
