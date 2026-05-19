@@ -149,3 +149,74 @@ class TestIntakeFilter:
         )
         assert out["in_scope"] is True
         assert out["role_family"] == "other-eng"
+
+
+class TestRejectRules:
+    """preferences.md `reject_if_title_contains` + `reject_if_jd_contains` are
+    enforced at intake before any LLM call. Saves ~40-60% LLM cost on a wide
+    scrape and keeps senior/staff/principal noise out of the vault."""
+
+    def _write_prefs(self, temp_vault):
+        prefs = temp_vault / "_profile" / "preferences.md"
+        prefs.write_text(
+            "---\ntype: profile\n---\n"
+            "## Role filters\n"
+            "```yaml\n"
+            "reject_if_title_contains:\n"
+            "  - Senior\n"
+            "  - Sr.\n"
+            "  - Staff\n"
+            "  - Principal\n"
+            "reject_if_jd_contains:\n"
+            "  - 5+ years\n"
+            "  - PhD required\n"
+            "```\n",
+            encoding="utf-8",
+        )
+
+    async def test_senior_in_title_dropped_before_llm(self, monkeypatch, temp_vault):
+        from compass.pipeline.nodes import intake_filter as mod
+
+        self._write_prefs(temp_vault)
+        mock_llm = AsyncMock()
+        monkeypatch.setattr(mod, "llm_classify", mock_llm)
+        out = await mod.intake_filter_node(_state("Senior Software Engineer, Agents"))
+        assert out["in_scope"] is False
+        assert out["role_family"] == "out-of-scope"
+        mock_llm.assert_not_called()
+        log = (temp_vault / "_meta" / "filtered-jobs.md").read_text()
+        assert "title rejects" in log
+        assert "senior" in log.lower()
+
+    async def test_yoe_in_jd_dropped_before_llm(self, monkeypatch, temp_vault):
+        from compass.pipeline.nodes import intake_filter as mod
+
+        self._write_prefs(temp_vault)
+        mock_llm = AsyncMock()
+        monkeypatch.setattr(mod, "llm_classify", mock_llm)
+        out = await mod.intake_filter_node(
+            _state("Engineer", "Looking for someone with 5+ years of LLM experience.")
+        )
+        assert out["in_scope"] is False
+        assert out["role_family"] == "out-of-scope"
+        mock_llm.assert_not_called()
+        log = (temp_vault / "_meta" / "filtered-jobs.md").read_text()
+        assert "jd rejects" in log
+
+    async def test_reject_rules_dont_affect_clean_jds(self, monkeypatch, temp_vault):
+        from compass.pipeline.nodes import intake_filter as mod
+
+        self._write_prefs(temp_vault)
+        mock_llm = AsyncMock()
+        monkeypatch.setattr(mod, "llm_classify", mock_llm)
+        out = await mod.intake_filter_node(_state("Agent Engineer", "Build agents in Python."))
+        assert out["in_scope"] is True
+
+    async def test_missing_preferences_file_doesnt_crash(self, temp_vault):
+        from compass.pipeline.nodes import intake_filter as mod
+
+        # Delete the seed preferences file so load_reject_rules returns empties
+        (temp_vault / "_profile" / "preferences.md").unlink()
+        out = await mod.intake_filter_node(_state("Agent Engineer"))
+        assert out["in_scope"] is True
+        assert out["role_family"] == "agent-engineer"

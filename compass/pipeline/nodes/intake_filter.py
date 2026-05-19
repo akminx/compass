@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 import compass.config as cfg
 from compass.pipeline.role_family import keyword_classify, llm_classify, upgrade_family
+from compass.vault.reader import load_reject_rules
 
 if TYPE_CHECKING:
     from compass.pipeline.state import CompassState
@@ -47,6 +48,29 @@ async def intake_filter_node(state: CompassState) -> dict:
         }
 
     body = job.description or ""
+
+    # Hard rejects from preferences.md — runs BEFORE LLM-stage classification so
+    # senior/staff/principal/lead titles and "5+ years" / "PhD required" JDs are
+    # dropped at zero LLM cost. On a 41-board scrape this is ~40-60% of volume.
+    rules = load_reject_rules()
+    title_lc = (job.title or "").lower()
+    body_lc = body.lower()
+    for needle in rules["title"]:
+        if needle and needle in title_lc:
+            _log_filtered(job.company, job.title, f"title rejects: {needle!r}")
+            logger.info(
+                "intake_filter: dropped %s — %s (title rule: %r)",
+                job.company, job.title, needle,
+            )
+            return {"in_scope": False, "role_family": "out-of-scope"}
+    for needle in rules["jd"]:
+        if needle and needle in body_lc:
+            _log_filtered(job.company, job.title, f"jd rejects: {needle!r}")
+            logger.info(
+                "intake_filter: dropped %s — %s (jd rule: %r)",
+                job.company, job.title, needle,
+            )
+            return {"in_scope": False, "role_family": "out-of-scope"}
 
     decided, family = keyword_classify(job.title)
     if decided is True:

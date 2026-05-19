@@ -406,11 +406,21 @@ def _count_unknown_skills_seen_this_run(start_wall: datetime) -> int:
     )
 
 
-async def _scrape_all() -> list[RawJob]:
-    """Scrape all configured sources concurrently, interleave round-robin, cap.
+MAX_POSTING_AGE_DAYS = 30  # Drop JDs older than this — postings >30d are usually filled or stale.
 
-    Interleaving prevents a single high-volume source from exhausting
-    MAX_JOBS_PER_RUN before quieter sources get a chance.
+
+async def _scrape_all() -> list[RawJob]:
+    """Scrape all configured sources concurrently, drop stale postings, sort
+    each board by recency, then interleave round-robin and cap.
+
+    Order matters:
+    1. Drop postings with `date_posted` older than MAX_POSTING_AGE_DAYS — stale
+       roles aren't worth LLM cost or vault clutter.
+    2. Sort each board's results by date_posted DESC (None last) so when the
+       interleave-cap below fires, each board contributes its FRESHEST jobs.
+    3. Round-robin interleave so a single high-volume board doesn't exhaust
+       MAX_JOBS_PER_RUN before quieter boards get a chance.
+    4. Cap to MAX_JOBS_PER_RUN.
     """
     from compass.config import ASHBY_BOARDS, GREENHOUSE_BOARDS, LEVER_COMPANIES, MAX_JOBS_PER_RUN
     from compass.scrapers.ashby import scrape_ashby_many
@@ -422,6 +432,11 @@ async def _scrape_all() -> list[RawJob]:
         scrape_lever_many(LEVER_COMPANIES),
         scrape_ashby_many(ASHBY_BOARDS),
     )
+
+    gh = _filter_and_sort_by_recency(gh)
+    lv = _filter_and_sort_by_recency(lv)
+    ash = _filter_and_sort_by_recency(ash)
+
     interleaved: list[RawJob] = []
     iters = [iter(gh), iter(lv), iter(ash)]
     while iters:
@@ -434,6 +449,28 @@ async def _scrape_all() -> list[RawJob]:
                 pass
         iters = next_iters
     return interleaved[:MAX_JOBS_PER_RUN]
+
+
+def _filter_and_sort_by_recency(jobs: list[RawJob]) -> list[RawJob]:
+    """Drop >30d-old postings (when date_posted is known); sort by date_posted
+    DESC with None-dated jobs sinking to the bottom. Postings without a
+    `date_posted` aren't dropped — many ATSes don't expose it consistently and
+    we can't tell stale from undated."""
+    from datetime import date, timedelta
+
+    cutoff = date.today() - timedelta(days=MAX_POSTING_AGE_DAYS)
+    kept = [j for j in jobs if j.date_posted is None or j.date_posted >= cutoff]
+    kept.sort(key=lambda j: (j.date_posted is None, -_date_to_ordinal(j.date_posted)))
+    return kept
+
+
+def _date_to_ordinal(d: object) -> int:
+    """date.toordinal() wrapper that treats None as 0 — only used for sort key."""
+    from datetime import date
+
+    if isinstance(d, date):
+        return d.toordinal()
+    return 0
 
 
 if __name__ == "__main__":
