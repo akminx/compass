@@ -62,6 +62,7 @@ async def resume_pending(
         status=resolved_status,
         feedback=decision.get("feedback"),
     )
+    await _purge_thread_checkpoints(thread_id)
 
     if final.get("vault_written"):
         # Resumed thread wrote a JobNote — derived counters (skills/appears_in_jobs,
@@ -79,3 +80,15 @@ async def resume_pending(
 
     logger.info("hitl: resumed thread %s -> %s", thread_id, resolved_status)
     return final
+
+
+async def _purge_thread_checkpoints(thread_id: str) -> None:
+    """Drop LangGraph per-step history for a resolved thread; state_store is the audit trail."""
+    import aiosqlite
+
+    from compass.config import HITL_CHECKPOINT_DB
+
+    async with aiosqlite.connect(HITL_CHECKPOINT_DB) as conn:
+        await conn.execute("DELETE FROM checkpoints WHERE thread_id = ?", (thread_id,))
+        await conn.execute("DELETE FROM writes WHERE thread_id = ?", (thread_id,))
+        await conn.commit()

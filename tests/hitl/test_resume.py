@@ -220,3 +220,42 @@ async def test_resume_already_resolved_raises(stub_llm_nodes):
     with pytest.raises(ValueError, match="already resolved"):
         await resume_pending(tid, decision={"approved": True})
     assert stub_llm_nodes["calls"] == before
+
+
+@pytest.mark.usefixtures("temp_hitl_db", "checkpoint_db", "temp_vault")
+async def test_resume_purges_thread_checkpoint_blobs(stub_llm_nodes):
+    """After a thread resolves, its checkpoint rows in HITL_CHECKPOINT_DB must
+    be deleted — otherwise the DB grows unboundedly. Phase 1.B.1 I-2."""
+    import aiosqlite
+
+    from compass.config import HITL_CHECKPOINT_DB
+    from compass.hitl.resume import resume_pending
+    from compass.pipeline.graph import run_pipeline
+
+    job = RawJob(
+        company="Sierra",
+        title="SWE",
+        url="u://purge-probe",
+        source="ashby",
+        description="...",
+        date_posted=_dt.date(2026, 5, 19),
+    )
+    pre = await run_pipeline(raw_jobs=[job])
+    assert pre["jobs_paused"] == 1
+    tid = (await state_store.list_pending())[0]["thread_id"]
+
+    async with aiosqlite.connect(HITL_CHECKPOINT_DB) as conn:
+        async with conn.execute(
+            "SELECT COUNT(*) FROM checkpoints WHERE thread_id = ?", (tid,)
+        ) as cur:
+            (pre_count,) = await cur.fetchone()
+    assert pre_count > 0, f"setup: no checkpoint rows for {tid}"
+
+    await resume_pending(tid, decision={"approved": True, "feedback": "test"})
+
+    async with aiosqlite.connect(HITL_CHECKPOINT_DB) as conn:
+        async with conn.execute(
+            "SELECT COUNT(*) FROM checkpoints WHERE thread_id = ?", (tid,)
+        ) as cur:
+            (post_count,) = await cur.fetchone()
+    assert post_count == 0, f"checkpoint rows for resolved {tid} were not purged"
