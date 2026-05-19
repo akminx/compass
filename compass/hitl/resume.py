@@ -61,5 +61,20 @@ async def resume_pending(
         status=resolved_status,
         feedback=decision.get("feedback"),
     )
+
+    if final.get("vault_written"):
+        # Resumed thread wrote a JobNote — derived counters (skills/appears_in_jobs,
+        # companies/roles_seen) now drift unless we resync. Phase 0 bug #12 + Phase
+        # 1.A bug #1 family: run_pipeline() calls regenerate() at end of batch, but
+        # resume paths (MCP approve + timeout_checker) bypass that. Call it here so
+        # every resume keeps the vault internally consistent.
+        from compass.analysis import gap_aggregator
+
+        try:
+            gap_aggregator.regenerate(write=True)
+        except Exception:
+            # Counter sync failure must not block the resume — log and continue.
+            logger.exception("hitl: gap_aggregator.regenerate failed after resume")
+
     logger.info("hitl: resumed thread %s -> %s", thread_id, resolved_status)
     return final

@@ -164,6 +164,41 @@ async def test_resume_status_derives_from_final_state_not_input(stub_llm_nodes, 
 
 
 @pytest.mark.usefixtures("temp_hitl_db", "checkpoint_db", "temp_vault")
+async def test_resume_regenerates_counters(stub_llm_nodes, monkeypatch):
+    """A resumed thread writes a JobNote — gap_aggregator.regenerate() MUST run
+    so derived counters (CompanyNote.roles_seen, SkillNote.appears_in_jobs)
+    reflect the new JobNote. Phase 0 #12 / Phase 1.A #1 drift family."""
+    from compass.hitl.resume import resume_pending
+    from compass.pipeline.graph import run_pipeline
+
+    regen_called = {"count": 0}
+
+    def fake_regenerate(write: bool = False):
+        regen_called["count"] += 1
+        return ([], {})
+
+    monkeypatch.setattr("compass.analysis.gap_aggregator.regenerate", fake_regenerate)
+
+    job = RawJob(
+        company="Sierra",
+        title="SWE",
+        url="https://x/regen-probe",
+        source="ashby",
+        description="...",
+        date_posted=_dt.date(2026, 5, 18),
+    )
+    await run_pipeline(raw_jobs=[job])
+    tid = (await state_store.list_pending())[0]["thread_id"]
+
+    # Baseline: run_pipeline did NOT regenerate (jobs_written==0 because the
+    # job paused before vault_write). Reset counter to isolate the resume call.
+    regen_called["count"] = 0
+
+    await resume_pending(tid, decision={"approved": True, "feedback": "test"})
+    assert regen_called["count"] == 1, "resume_pending must call gap_aggregator.regenerate"
+
+
+@pytest.mark.usefixtures("temp_hitl_db", "checkpoint_db", "temp_vault")
 async def test_resume_already_resolved_raises(stub_llm_nodes):
     from compass.hitl.resume import resume_pending
     from compass.pipeline.graph import run_pipeline

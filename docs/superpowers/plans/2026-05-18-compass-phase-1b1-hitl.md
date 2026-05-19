@@ -2197,6 +2197,7 @@ All of the following must hold before declaring Phase 1.B.1 complete:
 | `approve(thread_id, approved=None)` "request changes" branch | UX | post-1.B | Today binary; if needed, ship as third decision dict key |
 | Per-thread auth (anyone with MCP access can approve) | Security | post-1.B | Solo-user system; revisit if hosted |
 | Surface `pending_approvals` in the Dataview dashboard | UX polish | **2.B** | Dataview can't read SQLite; needs a tiny exporter |
+| Atomic `claim_pending()` to prevent double-resume race (I4: MCP approve vs. `timeout_checker` cron, or MCP double-click) | Race / dup writes | **1.B.3** | Real-world trigger is the Modal cron; ship the claim alongside cron in 1.B.3. Today's MCP-only flow is single-user, no concurrent caller. |
 
 ---
 
