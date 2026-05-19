@@ -1,20 +1,15 @@
-"""Parse _profile/target-companies.md into a company→tier map.
+"""Parse _profile/target-companies.md into a company→tier map AND
+_profile/target-companies.yaml into a company→full-metadata map.
 
-The file is human-edited but follows a stable section structure:
-  ## Tier `apply-now`
-  | Company | ... |
-  |---|---|
-  | Sierra | ... |
-  ...
-  ## Tier `6-month`
-  ...
+Two files cooperate:
+- target-companies.md — human-readable narrative + tier tables. Source of truth
+  for `get_tier` lookups (legacy, tested).
+- target-companies.yaml — machine-readable per-company metadata: ATS coords,
+  geos, interview_difficulty, cisco_adjacency, role_family_hints, notes.
+  Source of truth for `get_company_meta` lookups (added 2026-05-19).
 
-Parser walks the file once at module import (and on refresh()) and builds a
-dict keyed by normalized company name. Naive lookup; no fuzzy matching.
-
-This is the source of truth for JobNote.tier and CompanyNote.tier during
-pipeline runs. Human edits to a CompanyNote's tier are still preserved by
-write_company_note (which we don't touch here).
+Both are kept in sync by hand. Eventually the YAML may absorb the md tier
+column outright, but for the 3-month pivot they coexist.
 """
 
 from __future__ import annotations
@@ -23,10 +18,18 @@ import logging
 import re
 from typing import Literal
 
+import yaml
+
 logger = logging.getLogger(__name__)
 
-Tier = Literal["apply-now", "6-month", "stretch", "skip", "unknown"]
-TIER_ORDER: list[Tier] = ["apply-now", "6-month", "stretch", "skip"]
+Tier = Literal[
+    "apply-now", "opportunistic", "backend-prep", "6-month", "stretch", "skip", "unknown"
+]
+# Order: most-preferred first. Used by `get_tier` to break bidirectional-match
+# ties (prefer the strongest tier when a company name matches multiple entries).
+TIER_ORDER: list[Tier] = [
+    "apply-now", "opportunistic", "backend-prep", "6-month", "stretch", "skip"
+]
 
 # NOTE: _TIER_HEADING is intentionally un-anchored so "Tier `apply-now` (in range)"
 # still captures "apply-now". Don't tighten it without updating the real vault file.
@@ -150,3 +153,126 @@ def get_tier(company: str) -> Tier:
 # import-time parse usually returns {}. Tests must call refresh() after their
 # fixture monkeypatches cfg.VAULT_PATH.
 refresh()
+
+
+# ── YAML-driven per-company metadata ─────────────────────────────────────────
+
+_yaml_meta: dict[str, dict] | None = None
+
+
+def _parse_yaml() -> dict[str, dict]:
+    """Load _profile/target-companies.yaml into {normalized_company: meta_dict}.
+
+    Returns {} when the file is missing — callers fall through to the legacy
+    markdown-only behavior.
+    """
+    import compass.config as cfg
+
+    path = cfg.VAULT_PATH / "_profile" / "target-companies.yaml"
+    if not path.exists():
+        return {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as e:
+        logger.warning("target-companies.yaml is malformed: %s", e)
+        return {}
+    out: dict[str, dict] = {}
+    for entry in data.get("companies") or []:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("company")
+        if not name:
+            continue
+        out[_normalize(name)] = entry
+    return out
+
+
+def refresh_yaml() -> None:
+    """Re-parse target-companies.yaml. Call from tests or after manual edits."""
+    global _yaml_meta
+    _yaml_meta = _parse_yaml()
+    logger.info("target_companies (yaml): parsed %d entries", len(_yaml_meta))
+
+
+def get_company_meta(company: str) -> dict | None:
+    """Return the full YAML metadata dict for a company, or None if absent.
+
+    Lookup uses the same normalize + bidirectional-substring strategy as
+    `get_tier`. Returns None — not a default — so callers can distinguish
+    "company not in target list" from "company has empty metadata".
+    """
+    if _yaml_meta is None:
+        refresh_yaml()
+    assert _yaml_meta is not None  # mypy: refresh_yaml sets it
+
+    query = _normalize(company)
+    if not query:
+        return None
+
+    direct = _yaml_meta.get(query)
+    if direct is not None:
+        return direct
+
+    if len(query) < _MIN_FUZZY_LEN:
+        return None
+
+    for key, meta in _yaml_meta.items():
+        if len(key) < _MIN_FUZZY_LEN:
+            continue
+        if query in key or key in query:
+            return meta
+    return None
+
+
+_VALID_DIFFICULTIES = {
+    "hackerrank", "case", "lc-easy", "lc-medium", "lc-medium-hard",
+    "lc-hard", "takehome", "unknown",
+}
+_VALID_ADJACENCIES = {"none", "low", "medium", "high"}
+
+
+def get_interview_difficulty(company: str) -> str:
+    """Return one of `_VALID_DIFFICULTIES`. YAML typos collapse to "unknown"
+    so JobNote/CompanyNote schema validation never fails on human edits."""
+    meta = get_company_meta(company)
+    if meta is None:
+        return "unknown"
+    raw = str(meta.get("interview_difficulty") or "unknown").strip().lower()
+    return raw if raw in _VALID_DIFFICULTIES else "unknown"
+
+
+def get_cisco_adjacency(company: str) -> str:
+    """Return one of `_VALID_ADJACENCIES`. YAML typos collapse to "none"."""
+    meta = get_company_meta(company)
+    if meta is None:
+        return "none"
+    raw = str(meta.get("cisco_adjacency") or "none").strip().lower()
+    return raw if raw in _VALID_ADJACENCIES else "none"
+
+
+def get_ats(company: str) -> tuple[str, str] | None:
+    """Return (provider, slug) or None if not in YAML or not scrapable."""
+    meta = get_company_meta(company)
+    if meta is None:
+        return None
+    ats = meta.get("ats") or {}
+    provider = ats.get("provider")
+    slug = ats.get("slug")
+    if not provider or not slug:
+        return None
+    return (str(provider), str(slug))
+
+
+def list_yaml_companies(tier_filter: str | None = None) -> list[dict]:
+    """Return the raw company entries from the YAML, optionally filtered to
+    one tier. Used by seed scripts + scraper positive-filtering."""
+    if _yaml_meta is None:
+        refresh_yaml()
+    assert _yaml_meta is not None
+    entries = list(_yaml_meta.values())
+    if tier_filter is not None:
+        entries = [e for e in entries if e.get("tier") == tier_filter]
+    return entries
+
+
+refresh_yaml()
