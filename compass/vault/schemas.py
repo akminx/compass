@@ -33,6 +33,7 @@ SkillCategory = Literal[
     "fine-tuning",
 ]
 Source = Literal["greenhouse", "lever", "ashby", "jobspy", "smoke", "manual"]
+HitlDecision = Literal["approved", "rejected", "auto_rejected", "timed_out"]
 
 
 class JobNote(BaseModel):
@@ -59,7 +60,7 @@ class JobNote(BaseModel):
     skills_missing: list[str] = []
     jd_summary: str = ""
     tailored_paragraph: str | None = None
-    hitl_decision: str | None = None
+    hitl_decision: HitlDecision | None = None
     hitl_at: datetime | None = None
     applied_at: datetime | None = None
 

@@ -21,7 +21,7 @@ inside hitl_node — only the vault-write gate is gone.
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
 from compass.vault.schemas import CompanyNote, JobNote
@@ -31,6 +31,30 @@ if TYPE_CHECKING:
     from compass.pipeline.state import CompassState
 
 logger = logging.getLogger(__name__)
+
+
+def _derive_hitl_decision(state: CompassState) -> tuple[str | None, datetime | None]:
+    """Map state -> (hitl_decision, hitl_at). Returns (None, None) if hitl never ran."""
+    from compass.config import SCORE_THRESHOLD
+
+    approved = state.get("human_approved")
+    if approved is None:
+        # hitl never reached (e.g. extract/score errored). Leave fields null.
+        return (None, None)
+
+    feedback = (state.get("human_feedback") or "").lower()
+    score = state.get("score_result")
+    score_value = score.score if score is not None else 0.0
+
+    if approved is True:
+        decision = "approved"
+    elif feedback.startswith("auto-cancelled after"):
+        decision = "timed_out"
+    elif score_value < SCORE_THRESHOLD:
+        decision = "auto_rejected"
+    else:
+        decision = "rejected"
+    return (decision, datetime.now())
 
 
 async def vault_write_node(state: CompassState) -> dict:
@@ -86,6 +110,7 @@ async def vault_write_node(state: CompassState) -> dict:
                     company_tier_for_write = "unknown"
                 break
 
+    hitl_decision, hitl_at = _derive_hitl_decision(state)
     note = JobNote(
         company=job.company,
         title=job.title,
@@ -108,6 +133,8 @@ async def vault_write_node(state: CompassState) -> dict:
         skills_missing=score.missing_skills,
         jd_summary=req.summary,
         tailored_paragraph=state.get("tailored_paragraph"),
+        hitl_decision=hitl_decision,
+        hitl_at=hitl_at,
     )
     write_job_note(note, full_description=job.description)
 

@@ -7,9 +7,16 @@ import frontmatter
 from compass.pipeline.state import CompassState, JobRequirements, JobScore, RawJob
 
 
-def _state(
-    skills_required: list[str], skills_matched: list[str], score: float = 4.2
+def _build_state_for_score(
+    *,
+    score: float = 4.2,
+    skills_required: list[str] | None = None,
+    skills_matched: list[str] | None = None,
+    human_approved: bool = True,
+    human_feedback: str | None = None,
 ) -> CompassState:
+    skills_required = skills_required if skills_required is not None else ["MCP", "LangGraph"]
+    skills_matched = skills_matched if skills_matched is not None else ["MCP"]
     return {
         "raw_jobs": [],
         "current_job": RawJob(
@@ -38,8 +45,8 @@ def _state(
         ),
         "in_scope": True,
         "role_family": "agent-engineer",
-        "human_approved": True,
-        "human_feedback": None,
+        "human_approved": human_approved,
+        "human_feedback": human_feedback,
         "tailored_paragraph": None,
         "vault_written": False,
         "jobs_processed": 0,
@@ -51,7 +58,9 @@ def _state(
 async def test_vault_write_node_writes_jobnote(temp_vault):
     from compass.pipeline.nodes.vault_write import vault_write_node
 
-    result = await vault_write_node(_state(["MCP", "LangGraph"], ["MCP"]))
+    result = await vault_write_node(
+        _build_state_for_score(skills_required=["MCP", "LangGraph"], skills_matched=["MCP"])
+    )
     assert result["vault_written"] is True
     assert result["jobs_written"] == 1
     job_files = list((temp_vault / "jobs").glob("*.md"))
@@ -71,7 +80,9 @@ async def test_vault_write_node_records_skills_on_jobnote(temp_vault):
 
     from compass.pipeline.nodes.vault_write import vault_write_node
 
-    await vault_write_node(_state(["MCP", "LangGraph"], ["MCP"]))
+    await vault_write_node(
+        _build_state_for_score(skills_required=["MCP", "LangGraph"], skills_matched=["MCP"])
+    )
     job_files = list((temp_vault / "jobs").glob("*.md"))
     assert len(job_files) == 1
     loaded = frontmatter.load(job_files[0])
@@ -82,7 +93,7 @@ async def test_vault_write_node_records_skills_on_jobnote(temp_vault):
 async def test_vault_write_node_writes_company_note(temp_vault):
     from compass.pipeline.nodes.vault_write import vault_write_node
 
-    await vault_write_node(_state(["MCP"], ["MCP"]))
+    await vault_write_node(_build_state_for_score(skills_required=["MCP"], skills_matched=["MCP"]))
     company_path = temp_vault / "companies" / "Sierra.md"
     assert company_path.exists()
 
@@ -90,7 +101,7 @@ async def test_vault_write_node_writes_company_note(temp_vault):
 async def test_vault_write_node_handles_missing_state(temp_vault):
     from compass.pipeline.nodes.vault_write import vault_write_node
 
-    state = _state(["MCP"], ["MCP"])
+    state = _build_state_for_score(skills_required=["MCP"], skills_matched=["MCP"])
     state["score_result"] = None
     result = await vault_write_node(state)
     assert result["vault_written"] is False
@@ -101,7 +112,7 @@ async def test_vault_write_node_persists_tailored_paragraph(temp_vault):
     """When state has tailored_paragraph, it lands on the JobNote."""
     from compass.pipeline.nodes.vault_write import vault_write_node
 
-    state = _state(["MCP"], ["MCP"])
+    state = _build_state_for_score(skills_required=["MCP"], skills_matched=["MCP"])
     state["tailored_paragraph"] = "Lead with your Cisco MCP server work."
     await vault_write_node(state)
     job_files = list((temp_vault / "jobs").glob("*.md"))
@@ -114,7 +125,7 @@ async def test_vault_write_node_persists_full_jd_body(temp_vault):
     raw JD is preserved in the JobNote body, not just the LLM summary."""
     import compass.pipeline.nodes.vault_write as vw
 
-    state = _state(["MCP"], ["MCP"], score=4.2)
+    state = _build_state_for_score(skills_required=["MCP"], skills_matched=["MCP"], score=4.2)
     state["current_job"] = state["current_job"].model_copy(
         update={"description": "VERY_DISTINCTIVE_RAW_JD_MARKER agentic engineering."}
     )
@@ -129,7 +140,7 @@ async def test_low_score_in_scope_still_writes(temp_vault):
     regardless of match_score. Pre-1.A this returned vault_written=False."""
     from compass.pipeline.nodes.vault_write import vault_write_node
 
-    state = _state(["Python"], ["Python"], score=1.5)
+    state = _build_state_for_score(skills_required=["Python"], skills_matched=["Python"], score=1.5)
     state["in_scope"] = True
     state["role_family"] = "swe-backend"
     result = await vault_write_node(state)
@@ -142,7 +153,9 @@ async def test_role_family_threaded_to_jobnote(temp_vault):
     """role_family from state lands in JobNote frontmatter."""
     from compass.pipeline.nodes.vault_write import vault_write_node
 
-    state = _state(["LangGraph"], ["LangGraph"], score=4.0)
+    state = _build_state_for_score(
+        skills_required=["LangGraph"], skills_matched=["LangGraph"], score=4.0
+    )
     state["in_scope"] = True
     state["role_family"] = "agent-engineer"
     await vault_write_node(state)
@@ -162,7 +175,7 @@ async def test_tier_resolved_from_target_companies(temp_vault):
 
     from compass.pipeline.nodes.vault_write import vault_write_node
 
-    state = _state(["MCP"], ["MCP"], score=4.5)
+    state = _build_state_for_score(skills_required=["MCP"], skills_matched=["MCP"], score=4.5)
     state["in_scope"] = True
     state["role_family"] = "agent-engineer"
     await vault_write_node(state)
@@ -179,7 +192,7 @@ async def test_unknown_company_tier_remains_unknown(temp_vault):
 
     from compass.pipeline.nodes.vault_write import vault_write_node
 
-    state = _state(["MCP"], ["MCP"], score=4.5)
+    state = _build_state_for_score(skills_required=["MCP"], skills_matched=["MCP"], score=4.5)
     state["in_scope"] = True
     state["role_family"] = "agent-engineer"
     state["current_job"] = state["current_job"].model_copy(update={"company": "RandomCo"})
@@ -207,7 +220,7 @@ async def test_human_edited_company_tier_preserved(temp_vault):
 
     from compass.pipeline.nodes.vault_write import vault_write_node
 
-    state = _state(["MCP"], ["MCP"], score=4.5)
+    state = _build_state_for_score(skills_required=["MCP"], skills_matched=["MCP"], score=4.5)
     state["in_scope"] = True
     state["role_family"] = "agent-engineer"
     await vault_write_node(state)
@@ -217,3 +230,56 @@ async def test_human_edited_company_tier_preserved(temp_vault):
 
     job_path = next((temp_vault / "jobs").glob("*Sierra*.md"))
     assert frontmatter.load(job_path).metadata["tier"] == "apply-now"
+
+
+async def test_vault_write_records_approved_decision(temp_vault):
+    """state['human_approved'] = True -> hitl_decision='approved', hitl_at set."""
+    from compass.pipeline.nodes.vault_write import vault_write_node
+
+    state = _build_state_for_score(
+        score=4.5,
+        human_approved=True,
+        human_feedback="LGTM",
+    )
+    await vault_write_node(state)
+    job_file = next((temp_vault / "jobs").glob("*.md"))
+    md = frontmatter.load(job_file).metadata
+    assert md["hitl_decision"] == "approved"
+    assert "hitl_at" in md and md["hitl_at"] is not None
+
+
+async def test_vault_write_records_auto_rejected_for_low_score(temp_vault):
+    """Below-threshold path: hitl never interrupts; decision is 'auto_rejected'."""
+    from compass.pipeline.nodes.vault_write import vault_write_node
+
+    state = _build_state_for_score(score=2.0, human_approved=False, human_feedback=None)
+    await vault_write_node(state)
+    job_file = next((temp_vault / "jobs").glob("*.md"))
+    md = frontmatter.load(job_file).metadata
+    assert md["hitl_decision"] == "auto_rejected"
+
+
+async def test_vault_write_records_rejected_when_human_said_no(temp_vault):
+    """Above-threshold path with human_approved=False = explicit reject."""
+    from compass.pipeline.nodes.vault_write import vault_write_node
+
+    state = _build_state_for_score(score=4.2, human_approved=False, human_feedback="not a fit")
+    await vault_write_node(state)
+    job_file = next((temp_vault / "jobs").glob("*.md"))
+    md = frontmatter.load(job_file).metadata
+    assert md["hitl_decision"] == "rejected"
+
+
+async def test_vault_write_records_timed_out(temp_vault):
+    """Timeout-checker resume sets feedback='auto-cancelled after Xh timeout'."""
+    from compass.pipeline.nodes.vault_write import vault_write_node
+
+    state = _build_state_for_score(
+        score=4.2,
+        human_approved=False,
+        human_feedback="auto-cancelled after 4h timeout",
+    )
+    await vault_write_node(state)
+    job_file = next((temp_vault / "jobs").glob("*.md"))
+    md = frontmatter.load(job_file).metadata
+    assert md["hitl_decision"] == "timed_out"
