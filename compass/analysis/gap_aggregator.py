@@ -264,9 +264,44 @@ def regenerate(write: bool = True) -> tuple[list[GapPlanEntry], str]:
     rendered = render_master_plan(entries, jobs_n=len(jobs))
     if write:
         _sync_skill_counters(entries)
+        _sync_company_counters(jobs)
         MASTER_GAP_PLAN_PATH.parent.mkdir(parents=True, exist_ok=True)
         MASTER_GAP_PLAN_PATH.write_text(rendered, encoding="utf-8")
     return entries, rendered
+
+
+def _sync_company_counters(jobs: list[JobSummary]) -> None:
+    """Rewrite `roles_seen` on each `companies/*.md` to match the actual JobNote
+    count for that company. Same pattern as `_sync_skill_counters` — treat the
+    counter as derived data instead of an incrementing field that races under
+    parallel writes (MAX_CONCURRENT_JOBS=5 jobs at once for the same company
+    would lose increments without a file lock).
+    """
+    from collections import Counter
+
+    import yaml
+
+    companies_dir = VAULT_PATH / "companies"
+    if not companies_dir.exists():
+        return
+
+    counts = Counter(j.company for j in jobs if j.company)
+
+    for path in companies_dir.glob("*.md"):
+        text = path.read_text(encoding="utf-8")
+        m = re.match(r"^(---\n)(.*?)(\n---\n)(.*)", text, re.DOTALL)
+        if not m:
+            continue
+        fm = yaml.safe_load(m.group(2)) or {}
+        company = fm.get("company")
+        if not company:
+            continue
+        new_count = counts.get(company, 0)
+        if fm.get("roles_seen") == new_count:
+            continue
+        fm["roles_seen"] = new_count
+        new_fm = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True).strip()
+        path.write_text(f"---\n{new_fm}\n---\n{m.group(4)}", encoding="utf-8")
 
 
 def _sync_skill_counters(entries: list[GapPlanEntry]) -> None:

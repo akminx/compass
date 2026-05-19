@@ -115,10 +115,19 @@ def update_skill_note(canonical_skill: str, job_url: str) -> Path:
 
 
 def write_company_note(note: CompanyNote) -> Path:
-    """Write or update a company note. Merges roles_seen with existing count
-    AND preserves any non-default fields the user edited in Obsidian (tier,
-    why_interesting, geo, etc.) — otherwise every pipeline run would clobber
-    human edits back to defaults."""
+    """Write or update a company note.
+
+    `roles_seen` is intentionally NOT accumulated here — that would race under
+    parallel writes (MAX_CONCURRENT_JOBS=5 jobs for the same company could each
+    read roles_seen=0, all increment to 1, last writer wins → lost 4 increments).
+    Instead, `gap_aggregator._sync_company_counters()` derives the value from
+    `len(JobNotes for company)` at end of each pipeline run — same pattern as
+    skill counters (bug #12 from Phase 0). The value passed in via `note.roles_seen`
+    is preserved only when there's no existing CompanyNote yet (first write).
+
+    Human edits to non-default fields (tier, why_interesting, geo, etc.) are
+    preserved across pipeline runs.
+    """
     companies_dir = VAULT_PATH / "companies"
     companies_dir.mkdir(parents=True, exist_ok=True)
     path = companies_dir / f"{_safe_segment(note.company)}.md"
@@ -126,7 +135,8 @@ def write_company_note(note: CompanyNote) -> Path:
     if path.exists():
         existing = frontmatter.load(path).metadata
         update: dict = {
-            "roles_seen": int(existing.get("roles_seen", 0)) + note.roles_seen,
+            # Preserve existing roles_seen verbatim — gap_aggregator owns this counter.
+            "roles_seen": int(existing.get("roles_seen", 0)),
         }
         # Preserve human-set fields when the incoming note has the default value.
         if note.tier == "unknown" and existing.get("tier", "unknown") != "unknown":

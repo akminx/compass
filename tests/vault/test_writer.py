@@ -132,14 +132,19 @@ def test_write_company_note_creates_file(temp_vault):
     assert loaded.metadata["roles_seen"] == 1
 
 
-def test_write_company_note_increments_roles_seen(temp_vault):
+def test_write_company_note_does_not_increment_roles_seen(temp_vault):
+    """Post-Phase-1A: write_company_note no longer accumulates roles_seen — that
+    raced under MAX_CONCURRENT_JOBS=5. Counter is now derived by
+    gap_aggregator._sync_company_counters from JobNote count. See
+    tests/vault/test_company_counters.py for the derivation tests."""
     from compass.vault.schemas import CompanyNote
     from compass.vault.writer import write_company_note
 
     write_company_note(CompanyNote(company="Sierra", tier="apply-now", roles_seen=1))
     write_company_note(CompanyNote(company="Sierra", tier="apply-now", roles_seen=1))
     loaded = frontmatter.load(temp_vault / "companies" / "Sierra.md")
-    assert loaded.metadata["roles_seen"] == 2
+    # First write set it to 1; subsequent writes preserve existing (1), NOT add to it
+    assert loaded.metadata["roles_seen"] == 1
 
 
 def test_append_agent_log_writes_line(temp_vault):
@@ -212,4 +217,6 @@ def test_write_company_note_preserves_human_edits(temp_vault):
     loaded = frontmatter.load(company_path).metadata
     assert loaded["tier"] == "apply-now", "human-set tier was clobbered"
     assert "Top tier" in loaded["why_interesting"], "human-set why_interesting was clobbered"
-    assert loaded["roles_seen"] == 2, "roles_seen should still increment"
+    # Post-Phase-1A: roles_seen is preserved verbatim by write_company_note;
+    # gap_aggregator's _sync_company_counters owns the actual value.
+    assert loaded["roles_seen"] == 1, "roles_seen should be preserved (not incremented)"

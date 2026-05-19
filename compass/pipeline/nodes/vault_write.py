@@ -116,7 +116,9 @@ async def vault_write_node(state: CompassState) -> dict:
     # call update_skill_note here because that accumulated incorrectly on
     # job overwrites (every pipeline rerun used to inflate the counter).
 
-    write_company_note(CompanyNote(company=job.company, tier=company_tier_for_write, roles_seen=1))
+    # roles_seen is intentionally 0 — gap_aggregator._sync_company_counters
+    # derives it from len(JobNotes for company) at end of run. See writer.py:117.
+    write_company_note(CompanyNote(company=job.company, tier=company_tier_for_write, roles_seen=0))
 
     return {
         "vault_written": True,

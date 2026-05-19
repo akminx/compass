@@ -100,10 +100,19 @@ def _update_jobnote_status(jobnote_path: Path, status: str) -> None:
 
 # JobNote.status values that mean "this job already has an application in flight"
 # — refuse to silently overwrite an in-flight application.
-_POST_APPLIED_STATUSES = frozenset({
-    "applied", "screen", "onsite", "offer",
-    "rejected", "withdrawn", "ghosted", "accepted", "declined",
-})
+_POST_APPLIED_STATUSES = frozenset(
+    {
+        "applied",
+        "screen",
+        "onsite",
+        "offer",
+        "rejected",
+        "withdrawn",
+        "ghosted",
+        "accepted",
+        "declined",
+    }
+)
 
 
 def add_application(
@@ -146,8 +155,7 @@ def add_application(
     write_application_note(note)
     _update_jobnote_status(job_path, "applied")
     append_agent_log(
-        f"application added {note.company} {note.title}"
-        + (" (FORCED re-apply)" if force else "")
+        f"application added {note.company} {note.title}" + (" (FORCED re-apply)" if force else "")
     )
     return note
 
