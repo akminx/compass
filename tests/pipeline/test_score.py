@@ -31,7 +31,7 @@ def _state(req):
 async def test_score_node_returns_jobscore(monkeypatch, temp_vault):
     from compass.pipeline.nodes import score
 
-    async def fake_score(req, profile_text: str) -> JobScore:
+    async def fake_score(req, profile_text: str, job=None) -> JobScore:
         return JobScore(
             score=4.2,
             reasoning="Strong MCP match",
@@ -64,20 +64,25 @@ async def test_score_node_missing_requirements_errors(monkeypatch, temp_vault):
 
 
 async def test_score_node_passes_profile_to_llm(monkeypatch, temp_vault):
-    """The profile_text passed to _score must include resume + skill-inventory content."""
+    """The profile_text passed to _score includes resume + RAG-retrieved skill chunks."""
     from compass.pipeline.nodes import score
+    from compass.rag.retriever import RetrievedChunk
 
     captured = {}
 
-    async def fake_score(req, profile_text: str) -> JobScore:
+    async def fake_score(req, profile_text: str, job=None) -> JobScore:
         captured["profile_text"] = profile_text
         return JobScore(
             score=3.0, reasoning="", matched_skills=[], missing_skills=[], tailoring_notes=""
         )
 
+    async def fake_retrieve(query, k=8):
+        return [RetrievedChunk(skill="Python", document="## Python\nLevel 3.", score=0.9)]
+
     monkeypatch.setattr(score, "_score", fake_score)
+    monkeypatch.setattr(score, "rag_retrieve", fake_retrieve)
     req = JobRequirements(
-        required_skills=[],
+        required_skills=["Python"],
         nice_to_have_skills=[],
         years_experience=None,
         seniority="mid",
@@ -86,7 +91,7 @@ async def test_score_node_passes_profile_to_llm(monkeypatch, temp_vault):
     )
     await score.score_node(_state(req))
     assert "Fake resume body" in captured["profile_text"]
-    assert "Python: 3" in captured["profile_text"]
+    assert "## Python\nLevel 3." in captured["profile_text"]
 
 
 async def test_score_node_drops_skills_outside_jd_universe(monkeypatch, temp_vault):
@@ -95,7 +100,7 @@ async def test_score_node_drops_skills_outside_jd_universe(monkeypatch, temp_vau
     them so gap_aggregator never sees JD-irrelevant skills."""
     from compass.pipeline.nodes import score
 
-    async def hallucinating_score(req, profile_text):
+    async def hallucinating_score(req, profile_text, job=None):
         # Simulate the live-run bug: LLM listed every profile skill as "matched"
         # ignoring the empty required_skills.
         return JobScore(
@@ -124,7 +129,7 @@ async def test_score_node_keeps_only_jd_skills(monkeypatch, temp_vault):
     """When LLM mixes JD skills with hallucinated ones, only JD skills survive."""
     from compass.pipeline.nodes import score
 
-    async def mixed_score(req, profile_text):
+    async def mixed_score(req, profile_text, job=None):
         return JobScore(
             score=4.0,
             reasoning="...",
@@ -154,7 +159,7 @@ async def test_score_node_resolves_matched_missing_overlap(monkeypatch, temp_vau
     would count a matched skill as a gap."""
     from compass.pipeline.nodes import score
 
-    async def overlapping_score(req, profile_text):
+    async def overlapping_score(req, profile_text, job=None):
         return JobScore(
             score=4.0,
             reasoning="...",
@@ -190,7 +195,7 @@ async def test_score_node_retries_on_truncated_reasoning(monkeypatch, temp_vault
 
     call_count = {"n": 0}
 
-    async def flaky_score(req, profile_text):
+    async def flaky_score(req, profile_text, job=None):
         call_count["n"] += 1
         if call_count["n"] == 1:
             return JobScore(
@@ -228,7 +233,7 @@ async def test_score_node_no_retry_on_complete_reasoning(monkeypatch, temp_vault
 
     call_count = {"n": 0}
 
-    async def good_score(req, profile_text):
+    async def good_score(req, profile_text, job=None):
         call_count["n"] += 1
         return JobScore(
             score=4.0,

@@ -1,16 +1,18 @@
-"""
-hitl_node — Phase 0.B auto-approve based on SCORE_THRESHOLD.
+"""hitl_node — Phase 1.B.1 real human-in-the-loop via LangGraph interrupt().
 
-This is INTENTIONALLY auto-approve for 0.B. Real LangGraph `interrupt()` +
-`AsyncSqliteSaver` checkpointing + an MCP-tool-driven approval surface ship in
-Phase 1.B per the spec. Auto-approve unblocks the end-to-end pipeline so we
-can collect real eval data first.
+Behaviour:
+  * score < SCORE_THRESHOLD or score missing -> auto-reject, no interrupt fires
+  * score >= SCORE_THRESHOLD -> interrupt() with the approval payload; the
+    orchestrator catches the interrupt and registers the thread in
+    compass.hitl.state_store. A human resumes via Command(resume={...}).
 """
 
 from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
+
+from langgraph.types import interrupt
 
 from compass.config import SCORE_THRESHOLD
 
@@ -21,20 +23,44 @@ logger = logging.getLogger(__name__)
 
 
 async def hitl_node(state: CompassState) -> dict:
-    """Auto-approve if score >= SCORE_THRESHOLD, else reject. No human interaction in 0.B."""
     score = state.get("score_result")
-    if score is None:
-        logger.info("hitl: no score_result, rejecting by default")
+    job = state.get("current_job")
+
+    # Prefer the threshold captured at score time (sticky across pause/resume).
+    # Falls back to live config only for backward-compat with paused threads
+    # checkpointed before this field existed.
+    threshold = state.get("score_threshold")
+    if threshold is None:
+        threshold = SCORE_THRESHOLD
+
+    if score is None or score.score < threshold:
+        logger.info(
+            "hitl: auto-reject %s (score=%s, threshold=%.2f)",
+            job.url if job else "(unknown)",
+            getattr(score, "score", None),
+            threshold,
+        )
         return {"human_approved": False}
 
-    approved = score.score >= SCORE_THRESHOLD
-    job = state.get("current_job")
-    job_id = job.url if job else "(unknown)"
+    payload = {
+        "kind": "approval_request",
+        "job_url": job.url if job else "",
+        "company": job.company if job else "",
+        "title": job.title if job else "",
+        "score": score.score,
+        "score_reasoning": score.reasoning,
+        "matched_skills": list(score.matched_skills),
+        "missing_skills": list(score.missing_skills),
+    }
     logger.info(
-        "hitl: auto-%s job %s (score=%.2f, threshold=%.2f)",
-        "approve" if approved else "reject",
-        job_id,
-        score.score,
-        SCORE_THRESHOLD,
+        "hitl: interrupting for approval — %s (score=%.2f)", payload["job_url"], score.score
     )
-    return {"human_approved": approved}
+    decision = interrupt(payload)
+
+    if not isinstance(decision, dict):
+        logger.warning("hitl: malformed resume value %r — defaulting to reject", decision)
+        return {"human_approved": False}
+    return {
+        "human_approved": bool(decision.get("approved", False)),
+        "human_feedback": decision.get("feedback"),
+    }

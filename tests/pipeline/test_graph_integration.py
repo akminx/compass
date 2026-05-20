@@ -23,7 +23,7 @@ def mocked_llms(monkeypatch):
             summary="Build agentic systems with LangGraph and MCP.",
         )
 
-    async def fake_score(req, profile_text):
+    async def fake_score(req, profile_text, job=None):
         return JobScore(
             score=4.2,
             reasoning="Strong MCP + LangGraph match",
@@ -40,7 +40,19 @@ def mocked_llms(monkeypatch):
     monkeypatch.setattr(tailor, "_tailor", fake_tailor)
 
 
-async def test_run_pipeline_end_to_end(temp_vault, mocked_llms):
+@pytest.fixture
+def auto_approve_hitl(monkeypatch):
+    """Stub the `interrupt()` call in hitl_node so the integration tests can
+    exercise the full extract -> score -> hitl -> tailor -> vault_write path
+    without needing a real human resume."""
+
+    def fake_interrupt(_payload):
+        return {"approved": True, "feedback": None}
+
+    monkeypatch.setattr("compass.pipeline.nodes.hitl.interrupt", fake_interrupt)
+
+
+async def test_run_pipeline_end_to_end(temp_vault, mocked_llms, auto_approve_hitl):
     """Run a single fake job through the full graph; verify vault state."""
     from compass.pipeline.graph import run_pipeline
 
@@ -91,7 +103,7 @@ async def test_run_pipeline_skips_dedup_urls(temp_vault, mocked_llms):
             title="Agent Engineer",
             url="https://jobs.ashbyhq.com/sierra/test-uuid",
             source="ashby",
-            description="...",
+            description="Build LangGraph agents with MCP tool calling.",
             date_posted=date(2026, 5, 17),
         ),
     ]
@@ -100,7 +112,7 @@ async def test_run_pipeline_skips_dedup_urls(temp_vault, mocked_llms):
     assert state["jobs_written"] == 0
 
 
-async def test_run_pipeline_regenerates_gap_plan(temp_vault, mocked_llms):
+async def test_run_pipeline_regenerates_gap_plan(temp_vault, mocked_llms, auto_approve_hitl):
     """After processing, master-gap-plan.md should be regenerated."""
     from compass.pipeline.graph import run_pipeline
 
@@ -110,7 +122,7 @@ async def test_run_pipeline_regenerates_gap_plan(temp_vault, mocked_llms):
             title="Agent Engineer",
             url="https://jobs.ashbyhq.com/sierra/test-uuid",
             source="ashby",
-            description="...",
+            description="Build LangGraph agents with MCP tool calling.",
             date_posted=date(2026, 5, 17),
         ),
     ]
@@ -142,7 +154,7 @@ async def test_run_pipeline_skips_tailor_when_below_threshold_but_still_writes(
             summary="Build agents.",
         )
 
-    async def fake_score(req, profile_text):
+    async def fake_score(req, profile_text, job=None):
         return JobScore(
             score=2.0,
             reasoning="weak match against requirements.",
@@ -177,7 +189,7 @@ async def test_run_pipeline_skips_tailor_when_below_threshold_but_still_writes(
     assert tailor_calls["count"] == 0
 
 
-async def test_run_pipeline_appends_to_run_log(temp_vault, mocked_llms):
+async def test_run_pipeline_appends_to_run_log(temp_vault, mocked_llms, auto_approve_hitl):
     """Every run_pipeline invocation appends a row to _meta/pipeline-runs.md."""
     from compass.pipeline.graph import run_pipeline
 
@@ -197,3 +209,45 @@ async def test_run_pipeline_appends_to_run_log(temp_vault, mocked_llms):
     log_text = log_path.read_text()
     assert "| Timestamp |" in log_text  # header was written
     assert "| 1 |" in log_text  # one job processed
+
+
+async def test_run_log_migrates_5col_to_6col_on_first_post_1b1_append(temp_vault):
+    """A pre-1.B.1 pipeline-runs.md with 5-col rows gets migrated to 6-col on
+    the next append. Existing data preserved with Paused=0."""
+    log_path = temp_vault / "_meta" / "pipeline-runs.md"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(
+        "# Pipeline Run Log\n\n"
+        "| Timestamp | Processed | Written | Errors | Duration |\n"
+        "|---|---|---|---|---|\n"
+        "| 2026-05-17T10:00:00 | 20 | 5 | 0 | 7.2s |\n"
+        "| 2026-05-18T10:00:00 | 15 | 3 | 1 | 5.4s |\n",
+        encoding="utf-8",
+    )
+
+    from compass.pipeline.graph import _append_run_log
+
+    state = {
+        "raw_jobs": [],
+        "current_job": None,
+        "extracted_requirements": None,
+        "score_result": None,
+        "in_scope": None,
+        "role_family": None,
+        "human_approved": None,
+        "human_feedback": None,
+        "tailored_paragraph": None,
+        "vault_written": False,
+        "jobs_processed": 10,
+        "jobs_written": 2,
+        "errors": [],
+        "thread_id": None,
+        "score_threshold": None,
+    }
+    state["jobs_paused"] = 1  # type: ignore[typeddict-unknown-key]
+    _append_run_log(state, 4.1)
+
+    text = log_path.read_text(encoding="utf-8")
+    assert "| Timestamp | Processed | Written | Paused | Errors | Duration |" in text
+    assert "| 2026-05-17T10:00:00 | 20 | 5 | 0 | 0 | 7.2s |" in text  # migrated
+    assert "| 2026-05-18T10:00:00 | 15 | 3 | 0 | 1 | 5.4s |" in text

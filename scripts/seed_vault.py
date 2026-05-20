@@ -6,6 +6,7 @@ Run once after cloning: uv run python scripts/seed_vault.py
 Creates all required folders and placeholder files.
 Does NOT overwrite existing files.
 """
+
 import sys
 from pathlib import Path
 

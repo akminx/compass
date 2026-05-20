@@ -6,6 +6,7 @@ Runs against one known-good board per ATS. Expects each to return >= 1 RawJob.
 Usage:
     uv run python scripts/test_scrape.py
 """
+
 from __future__ import annotations
 
 import asyncio

@@ -10,7 +10,7 @@ from typing import Literal, TypedDict
 
 from pydantic import BaseModel, Field
 
-Source = Literal["greenhouse", "lever", "ashby", "jobspy", "smoke", "manual"]
+Source = Literal["greenhouse", "lever", "ashby", "workday", "jobspy", "smoke", "manual"]
 Seniority = Literal["junior", "mid", "senior", "staff", "unknown"]
 RemotePolicy = Literal["remote", "hybrid", "onsite", "unknown"]
 
@@ -62,6 +62,11 @@ class CompassState(TypedDict):
 
     in_scope: bool | None
     role_family: str | None
+    # Count of distinct agent-related terms hit in the JD body by intake_filter.
+    # 0 means the body has no agentic signal (and the role was likely dropped
+    # for that reason if the title was agent-oriented). 1+ means real signal.
+    # Used by vault_write_node to emit a `#signal/agent-strong|mention` tag.
+    agent_signal_count: int | None
 
     human_approved: bool | None
     human_feedback: str | None
@@ -72,3 +77,7 @@ class CompassState(TypedDict):
     jobs_written: int
 
     errors: list[str]
+
+    thread_id: str | None
+
+    score_threshold: float | None

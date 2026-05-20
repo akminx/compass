@@ -30,11 +30,21 @@ _NODE_ENV: dict[str, str] = {
 
 
 def get_model_id(node: str) -> str:
-    """Return the OpenRouter model id for a node, reading env at call time."""
+    """Return the OpenRouter model id for a node.
+
+    Reads from `compass.config` rather than `os.environ` directly. That way
+    tests that monkeypatch `compass.config.SCORE_MODEL` (etc.) actually
+    affect which model the LLM call uses. Pre-fix, reading `os.environ`
+    directly bypassed the patched constants and tests silently exercised
+    the production model.
+    """
     env_name = _NODE_ENV.get(node)
     if env_name is None:
         raise ValueError(f"unknown node {node!r}; expected one of {sorted(_NODE_ENV)}")
-    model_id = os.environ.get(env_name)
+    # Late-bind via cfg.<NAME> so monkeypatched test values take effect.
+    import compass.config as cfg
+
+    model_id = getattr(cfg, env_name, None) or os.environ.get(env_name)
     if not model_id:
         raise ValueError(f"no model configured for node {node!r} (env {env_name} unset)")
     return model_id
@@ -42,7 +52,9 @@ def get_model_id(node: str) -> str:
 
 def _get_model(node: str) -> OpenAIChatModel:
     """Build a pydantic-ai OpenAIChatModel pointed at OpenRouter for this node."""
-    api_key = os.environ.get("OPENROUTER_API_KEY")
+    import compass.config as cfg
+
+    api_key = getattr(cfg, "OPENROUTER_API_KEY", None) or os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         raise ValueError("OPENROUTER_API_KEY is not set")
     provider = OpenAIProvider(base_url=OPENROUTER_BASE_URL, api_key=api_key)

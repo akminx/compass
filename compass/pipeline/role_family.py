@@ -28,21 +28,42 @@ logger = logging.getLogger(__name__)
 IN_TITLE_KEYWORDS: dict[str, list[str]] = {
     "agent-engineer": [
         "agent engineer",
+        "ai agent engineer",
         "agentic engineer",
+        "agentic ai engineer",
         "agent platform",
         "agent orchestration",
         "agent reliability",
+        "software engineer, agents",
+        "software engineer - agents",
+        "software engineer - agentic",
+        "software engineer, agentic",
+        "ai native engineer",
+        # MTS = Member of Technical Staff. Frontier-startup flat-hierarchy
+        # signal, not literal seniority. Sierra / Decagon / Cognition / Cursor
+        # / Mistral / xAI all use it for agent-eng ICs. The MTS title alone
+        # routes to agent-engineer; if the JD body is research-flavored the
+        # body-signal upgrader can move it elsewhere.
+        "member of technical staff",
+        "mts - agents",
+        "mts, agents",
     ],
     "applied-ai": [
         "applied ai",
         "applied ml",
         "ai engineer",
+        "ai/ml engineer",
         "ml engineer",
         "machine learning engineer",
+        "genai engineer",
+        # AI Enablement = Cognition (Devin/Windsurf), Cursor — FDE-lite path
+        # explicitly named in target-roles.md as in-range.
+        "ai enablement engineer",
     ],
     "infra-llm": [
         "llm platform",
         "ai infrastructure",
+        "ai platform engineer",
         "inference engineer",
         "eval engineer",
         "evaluation engineer",
@@ -82,17 +103,36 @@ OUT_SUBSTRING_KEYWORDS: list[str] = [
     # pre-sales / solutions
     "presales",
     "pre-sales",
+    "solutions engineer",
+    "solution engineer",
+    # NOTE: "solutions architect" intentionally NOT in this list — that title
+    # straddles pre-sales and hands-on infra depending on company; the LLM
+    # body-check stage decides per-JD.
     # CS
     "customer success",
     "customer experience",
     "customer support",
     "technical csm",
-    # PM
+    # PM / product ops
     "product manager",
     "product management",
     "group pm",
     "agent pm",
-    # design (note: "designer", "motion graphics", etc. — substring is safe because they're distinctive)
+    "product operations",
+    "operations specialist",
+    "program manager",
+    # management track (Akash isn't pursuing management — per role-clarifications)
+    "engineering manager",
+    "engineering lead",
+    "director of engineering",
+    "head of engineering",
+    "vp of engineering",
+    "vp engineering",
+    # security (separate engineering discipline, not agentic-AI)
+    "security engineer",
+    "application security",
+    "infrastructure security",
+    # design (note: "designer" is distinctive enough for substring match)
     "designer",
     "motion graphics",
     "web designer",
@@ -177,12 +217,18 @@ ML_SIGNAL = [
     "huggingface",
 ]
 
+# `upgrade_family` only promotes families in this set to `agent-engineer` /
+# `applied-ai` based on JD body signals. Mobile and frontend are intentionally
+# excluded — a React Native job at an LLM-native startup whose JD mentions
+# "LangGraph" once is still a mobile job, not an agent-engineering job. The
+# user isn't a mobile or frontend specialist; promoting these clutters the
+# vault. Backend / fullstack / founding / other-eng are kept eligible because
+# "Software Engineer, Product" at Sierra is a real agent-eng role posted
+# under a generic SWE title.
 GENERIC_FAMILIES = {
     "swe-backend",
-    "swe-frontend",
     "swe-fullstack",
     "swe-founding",
-    "swe-mobile",
     "other-eng",
 }
 

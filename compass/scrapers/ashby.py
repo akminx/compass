@@ -8,6 +8,7 @@ No authentication required. Covers Sierra, Decagon, Cognition, Ramp, OpenAI, Cur
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import re
 from datetime import date, datetime
@@ -15,6 +16,18 @@ from datetime import date, datetime
 import httpx
 
 from compass.pipeline.state import RawJob
+
+_SCRIPT_STYLE_RE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE)
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _strip_html(raw: str) -> str:
+    """HTML→text fallback for Ashby boards that don't populate descriptionPlain."""
+    text = _SCRIPT_STYLE_RE.sub(" ", raw)
+    text = _TAG_RE.sub(" ", text)
+    text = html.unescape(text)
+    return re.sub(r"\s+", " ", text).strip()
+
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +79,13 @@ def _to_rawjob(slug: str, raw: dict) -> RawJob | None:
     try:
         description = (raw.get("descriptionPlain") or "").strip()
         if not description:
+            # Some Ashby boards return descriptionPlain=null but populate the
+            # HTML-rendered `description` field. Mirror the Lever fallback
+            # rather than silently dropping. Pre-fix, these jobs were lost.
+            description = _strip_html((raw.get("description") or "").strip())
+        if not description:
             logger.warning(
-                "ashby %s: empty description for %r — dropping (posting may use external HTML)",
+                "ashby %s: empty description for %r — dropping",
                 slug,
                 raw.get("title", "?"),
             )

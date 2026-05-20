@@ -44,6 +44,9 @@ EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
 # ── HiTL ──────────────────────────────────────────────────────────────────────
 HITL_STATE_DB: Path = Path(os.getenv("HITL_STATE_DB", "~/.compass/hitl.db")).expanduser()
+HITL_CHECKPOINT_DB: Path = Path(
+    os.getenv("HITL_CHECKPOINT_DB", "~/.compass/checkpoints.db")
+).expanduser()
 HITL_TIMEOUT_HOURS: int = int(os.getenv("HITL_TIMEOUT_HOURS", "4"))
 
 # ── Pipeline ──────────────────────────────────────────────────────────────────
@@ -54,7 +57,9 @@ MAX_CONCURRENT_JOBS: int = int(os.getenv("MAX_CONCURRENT_JOBS", "5"))
 # ── Tier weights (gap_aggregator) — overrides from preferences.md at runtime ─
 DEFAULT_TIER_WEIGHTS: dict[str, float] = {
     "apply-now": 1.0,
-    "6-month": 0.7,
+    "opportunistic": 0.85,
+    "backend-prep": 0.5,
+    "6-month": 0.7,  # legacy — pre-3-month-pivot
     "stretch": 0.3,
     "skip": 0.0,
     "unknown": 0.5,

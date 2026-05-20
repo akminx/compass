@@ -27,7 +27,7 @@ def mocked_extract_score(monkeypatch):
             summary="Build agents.",
         )
 
-    async def fake_score(req, profile_text):
+    async def fake_score(req, profile_text, job=None):
         return JobScore(
             score=4.0,
             reasoning="Strong Python + LangGraph evidence in profile.",

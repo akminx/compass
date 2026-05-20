@@ -10,7 +10,19 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-Tier = Literal["apply-now", "6-month", "stretch", "skip", "unknown"]
+# Tier values must stay in sync with `_profile/preferences.md::tier_weights`.
+# `6-month` is the legacy name retained for backwards-compat with existing
+# JobNotes; new code should prefer the 3-month-pivot tiers (apply-now,
+# opportunistic, backend-prep, stretch, skip).
+Tier = Literal[
+    "apply-now",
+    "opportunistic",
+    "backend-prep",
+    "6-month",
+    "stretch",
+    "skip",
+    "unknown",
+]
 SkillLevel = Literal[0, 1, 2, 3, 4, 5]
 SkillCategory = Literal[
     "language",
@@ -32,7 +44,18 @@ SkillCategory = Literal[
     "voice",
     "fine-tuning",
 ]
-Source = Literal["greenhouse", "lever", "ashby", "jobspy", "smoke", "manual"]
+Source = Literal["greenhouse", "lever", "ashby", "workday", "jobspy", "smoke", "manual"]
+HitlDecision = Literal["approved", "rejected", "auto_rejected", "timed_out"]
+InterviewDifficulty = Literal[
+    "hackerrank",
+    "case",
+    "lc-easy",
+    "lc-medium",
+    "lc-medium-hard",
+    "lc-hard",
+    "takehome",
+    "unknown",
+]
 
 
 class JobNote(BaseModel):
@@ -52,6 +75,7 @@ class JobNote(BaseModel):
     years_required: int | None = None
     role_family: str = ""
     tier: Tier = "unknown"
+    interview_difficulty: InterviewDifficulty = "unknown"
     tags: list[str] = []
     skills_required: list[str] = []
     skills_nice_to_have: list[str] = []
@@ -59,7 +83,7 @@ class JobNote(BaseModel):
     skills_missing: list[str] = []
     jd_summary: str = ""
     tailored_paragraph: str | None = None
-    hitl_decision: str | None = None
+    hitl_decision: HitlDecision | None = None
     hitl_at: datetime | None = None
     applied_at: datetime | None = None
 
@@ -99,6 +123,7 @@ class CompanyNote(BaseModel):
     why_interesting: str = ""
     known_stack: list[str] = []
     interview_format_notes: str = ""
+    interview_difficulty: InterviewDifficulty = "unknown"
     tags: list[str] = []
 
 

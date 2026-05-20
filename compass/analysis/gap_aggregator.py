@@ -68,6 +68,11 @@ def load_jobs() -> list[JobSummary]:
         fm = _parse_frontmatter(f)
         if not fm:
             continue
+        # Skip out-of-scope JobNotes — they shouldn't influence the gap plan.
+        # role_family is set once at intake; if a stale entry's title would
+        # now classify as out-of-scope, the migration script handles that.
+        if fm.get("role_family") == "out-of-scope":
+            continue
         out.append(
             JobSummary(
                 file=f,
@@ -264,10 +269,100 @@ def regenerate(write: bool = True) -> tuple[list[GapPlanEntry], str]:
     rendered = render_master_plan(entries, jobs_n=len(jobs))
     if write:
         _sync_skill_counters(entries)
+        _sync_skill_backlinks(jobs)
         _sync_company_counters(jobs)
         MASTER_GAP_PLAN_PATH.parent.mkdir(parents=True, exist_ok=True)
-        MASTER_GAP_PLAN_PATH.write_text(rendered, encoding="utf-8")
+        # Atomic write: tmp + os.replace so a process kill mid-write leaves
+        # the previous good file in place rather than a half-written one.
+        # Path.write_text uses truncate-then-write which is NOT atomic on
+        # macOS APFS — MCP get_master_gap_plan tool would read garbage.
+        import os as _os
+
+        tmp_path = MASTER_GAP_PLAN_PATH.with_suffix(".md.tmp")
+        tmp_path.write_text(rendered, encoding="utf-8")
+        _os.replace(tmp_path, MASTER_GAP_PLAN_PATH)
     return entries, rendered
+
+
+_SKILL_BACKLINKS_HEADING = "## Jobs requiring this skill"
+_SKILL_BACKLINKS_BLOCK = re.compile(r"(?ms)^## Jobs requiring this skill\s*\n.*?(?=^## |\Z)")
+
+
+def _sync_skill_backlinks(jobs: list[JobSummary]) -> None:
+    """Write a `## Jobs requiring this skill` block into each SkillNote body
+    that lists every JobNote whose required/nice-to-have skills include the
+    canonical name. Mirrors P2 of OBSIDIAN_LEVERAGE.md.
+
+    Preserves any human-edited content above the block (skill notes are seeded
+    with category headers + brief descriptions; we don't want to clobber that).
+    Replaces an existing block if present, appends otherwise.
+
+    Jobs are ordered by match_score DESC so the strongest fits sit at the top
+    of each SkillNote.
+    """
+    from collections import defaultdict
+
+    from compass.vault.taxonomy import normalize
+
+    skills_dir = VAULT_PATH / "skills"
+    if not skills_dir.exists():
+        return
+
+    by_skill: dict[str, list[JobSummary]] = defaultdict(list)
+    for job in jobs:
+        seen: set[str] = set()
+        for raw in (*job.skills_required, *job.skills_nice_to_have):
+            canon = normalize(raw)
+            if not canon or canon in seen:
+                continue
+            seen.add(canon)
+            by_skill[canon].append(job)
+
+    for path in skills_dir.glob("*.md"):
+        text = path.read_text(encoding="utf-8")
+        m = re.match(r"^(---\n.*?\n---\n)(.*)", text, re.DOTALL)
+        if not m:
+            continue
+        head, body = m.group(1), m.group(2)
+        # Resolve canonical from frontmatter
+        fm_m = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
+        if not fm_m:
+            continue
+        fm = yaml.safe_load(fm_m.group(1)) or {}
+        canonical = fm.get("skill")
+        if not canonical:
+            continue
+
+        bl_jobs = sorted(
+            by_skill.get(canonical, []),
+            key=lambda j: (-j.match_score, j.company, j.title),
+        )
+        rendered = _render_skill_backlinks(bl_jobs)
+
+        if _SKILL_BACKLINKS_BLOCK.search(body):
+            replacement = rendered + "\n" if rendered else ""
+            new_body = _SKILL_BACKLINKS_BLOCK.sub(replacement, body, count=1)
+            new_body = re.sub(r"\n{3,}", "\n\n", new_body)
+        elif rendered:
+            new_body = body.rstrip() + "\n\n" + rendered + "\n"
+        else:
+            new_body = body
+
+        if new_body != body:
+            path.write_text(head + new_body, encoding="utf-8")
+
+
+def _render_skill_backlinks(jobs: list[JobSummary]) -> str:
+    if not jobs:
+        return ""
+    lines = [_SKILL_BACKLINKS_HEADING, ""]
+    for j in jobs:
+        stem = j.file.stem  # filename minus .md — matches Obsidian's wikilink target
+        display = f"{j.company} — {j.title}"
+        score = f"score {j.match_score:.1f}"
+        tier = j.tier or "unknown"
+        lines.append(f"- [[{stem}|{display}]] · {score} · {tier}")
+    return "\n".join(lines) + "\n"
 
 
 def _sync_company_counters(jobs: list[JobSummary]) -> None:

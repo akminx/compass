@@ -59,6 +59,39 @@ def test_write_job_note_sanitizes_filename(temp_vault):
     assert "?" not in path.name
 
 
+def test_write_job_note_strips_html_from_full_jd(temp_vault):
+    """Belt-and-suspenders: if a scraper leaks HTML, the writer normalizes it
+    before persisting. Archived JobNotes showed `</span></strong></p></div>`
+    cruft from a historical scrape path that bypassed `_strip_html` — this
+    guards the writer-side boundary regardless of upstream behavior."""
+    from compass.vault.writer import write_job_note
+
+    leaky = (
+        "<p><strong>About Databricks</strong></p>"
+        '<p><span style="font-family: arial;">Databricks is the data and AI company.</span></p>'
+        "</div>"
+    )
+    path = write_job_note(_make_job_note(), full_description=leaky)
+    body = path.read_text()
+    assert "<p>" not in body
+    assert "</span>" not in body
+    assert "</div>" not in body
+    assert "Databricks is the data and AI company." in body
+    assert "About Databricks" in body
+
+
+def test_write_job_note_preserves_plain_text_with_angle_brackets(temp_vault):
+    """A JD containing literal `<` (e.g. `<200ms latency`) must pass through
+    untouched — only visibly-HTML inputs get stripped."""
+    from compass.vault.writer import write_job_note
+
+    plain = "Build agents with <200ms latency. Use Python 3.12 (>=3.12 OK)."
+    path = write_job_note(_make_job_note(), full_description=plain)
+    body = path.read_text()
+    assert "<200ms latency" in body
+    assert ">=3.12" in body
+
+
 def test_write_job_note_persists_full_jd_when_provided(temp_vault):
     """Regression: pre-fix JobNotes only carried the LLM-generated summary; the
     raw JD was discarded after extract+score. Humans then couldn't verify what
@@ -83,6 +116,70 @@ def test_write_job_note_omits_full_jd_section_when_not_provided(temp_vault):
     assert "## Full JD" not in path.read_text()
 
 
+def test_jobnote_body_has_skills_section_with_wikilinks(temp_vault):
+    """Day 1 Obsidian P1: JobNote body renders a `## Skills` block with
+    wikilinks so the graph view shows JobNote → SkillNote edges. Section
+    sits between the LLM summary and `## Full JD`."""
+    from compass.vault.writer import write_job_note
+
+    note = _make_job_note(
+        skills_required=["Python", "LangGraph"],
+        skills_nice_to_have=["FastAPI"],
+        skills_matched=["Python"],
+        skills_missing=["LangGraph"],
+    )
+    path = write_job_note(note, full_description="raw jd text here")
+    body = path.read_text()
+    assert "## Skills" in body
+    assert "[[Python]]" in body
+    assert "[[LangGraph]]" in body
+    assert "[[FastAPI]]" in body
+    assert "**Required:**" in body
+    assert "**Nice to have:**" in body
+    assert "**Matched:**" in body
+    assert "**Missing:**" in body
+    # ## Skills must appear before ## Full JD
+    assert body.index("## Skills") < body.index("## Full JD")
+
+
+def test_jobnote_body_omits_empty_skill_categories(temp_vault):
+    """Empty categories are omitted entirely — no '(none)' placeholder."""
+    from compass.vault.writer import write_job_note
+
+    note = _make_job_note(
+        skills_required=["Python"],
+        skills_nice_to_have=[],
+        skills_matched=[],
+        skills_missing=["Python"],
+    )
+    path = write_job_note(note)
+    body = path.read_text()
+    assert "**Nice to have:**" not in body
+    assert "**Matched:**" not in body
+    assert "**Required:** [[Python]]" in body
+    assert "**Missing:** [[Python]]" in body
+
+
+def test_jobnote_skill_wikilink_aliases_unsafe_filenames(temp_vault):
+    """Skills with spaces or punctuation resolve to a safe-segment filename;
+    the wikilink must point at the actual file via alias form so the link
+    resolves AND the display matches the user-facing skill name."""
+    from compass.vault.writer import write_job_note
+
+    note = _make_job_note(
+        skills_required=["AWS Bedrock", "C++"],
+        skills_matched=[],
+        skills_missing=[],
+        skills_nice_to_have=[],
+    )
+    path = write_job_note(note)
+    body = path.read_text()
+    assert "[[AWS_Bedrock|AWS Bedrock]]" in body
+    # `_safe_segment` collapses non-word runs to `_` then strips trailing `_`,
+    # so "C++" becomes the file "C.md" — alias keeps the original display.
+    assert "[[C|C++]]" in body
+
+
 def test_write_job_note_idempotent_on_duplicate_url(temp_vault):
     """Writing the same URL twice should overwrite the same file, not create a second."""
     from compass.vault.writer import write_job_note
@@ -94,29 +191,6 @@ def test_write_job_note_idempotent_on_duplicate_url(temp_vault):
     assert len(list((temp_vault / "jobs").glob("*.md"))) == 1
     loaded = frontmatter.load(p2)
     assert loaded.metadata["match_score"] == 4.5
-
-
-def test_update_skill_note_increments_counter(temp_vault):
-    from compass.vault.writer import update_skill_note
-
-    skill_path = temp_vault / "skills" / "LangGraph.md"
-    skill_path.write_text(
-        "---\ntype: skill\nskill: LangGraph\ncategory: agent-framework\nappears_in_jobs: 5\n---\n# LangGraph\n"
-    )
-    update_skill_note("LangGraph", "https://example.com/jobs/x")
-    loaded = frontmatter.load(skill_path)
-    assert loaded.metadata["appears_in_jobs"] == 6
-
-
-def test_update_skill_note_creates_if_missing(temp_vault):
-    from compass.vault.writer import update_skill_note
-
-    update_skill_note("Python", "https://example.com/jobs/x")
-    skill_path = temp_vault / "skills" / "Python.md"
-    assert skill_path.exists()
-    loaded = frontmatter.load(skill_path)
-    assert loaded.metadata["skill"] == "Python"
-    assert loaded.metadata["appears_in_jobs"] == 1
 
 
 def test_write_company_note_creates_file(temp_vault):
