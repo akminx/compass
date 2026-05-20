@@ -51,6 +51,15 @@ async def check_and_resume_timeouts(*, timeout_hours: int | None = None) -> int:
             try:
                 await state_store.mark_resolved(tid, status="error", feedback=f"resume error: {e}")
                 _log_to_agent_log(f"hitl-timeout-error: {tid} resume failed: {e}")
+                # Mirror the error status into the vault note (best-effort).
+                try:
+                    from compass.hitl import vault_view
+
+                    vault_view.update_pending_note_status(
+                        tid, status="error", feedback=f"resume error: {e}"
+                    )
+                except Exception:
+                    logger.exception("hitl: failed to update vault pending-note for %s", tid)
             except Exception:
                 logger.exception("hitl: also failed to mark %s as error", tid)
     return timed_out

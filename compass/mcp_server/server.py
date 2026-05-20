@@ -38,10 +38,13 @@ Tools exposed:
     update_application_status(app_id, ...)  -> transition status with optional next-action fields
     list_pending_actions(through_date)      -> ApplicationNotes with due next_action_date
     tailor_resume(job_id)                   -> tailoring suggestions from JobNote frontmatter
+    archive_marked_jobs()                   -> bulk-move JobNotes tagged manual_action:archive
 
   HiTL approvals:
     pending_approvals()                     -> paused threads awaiting approval (oldest first)
     approve(thread_id, approved, feedback)  -> resume a paused thread; runs tailor on approve
+    sync_pending_decisions()                -> bulk-apply Obsidian-edited statuses
+    regenerate_pending_notes()              -> rewrite hitl-pending/*.md from state_store DB
 """
 
 from __future__ import annotations
@@ -580,6 +583,54 @@ async def pending_approvals() -> list[dict]:
     rows = await _state_store.list_pending()
     # rows are already plain dicts of JSON-safe primitives + list[str]
     return rows
+
+
+@mcp.tool()
+def archive_marked_jobs() -> dict:
+    """Move every JobNote with `manual_action: archive` to `jobs-archive/`.
+
+    Workflow: open a JobNote in Obsidian, add `manual_action: archive` to its
+    frontmatter (property pane is fastest), save. Run this. Files move out
+    of `jobs/` so dashboard Dataview queries stop showing them. Audit-safe:
+    files are moved, not deleted, and stamped with `archived_at`.
+
+    Returns:
+        {archived: [filenames], errors: [...]}
+    """
+    from compass.applications.bulk_archive import archive_marked_jobs as _archive
+
+    return _archive()
+
+
+@mcp.tool()
+async def sync_pending_decisions() -> dict:
+    """Apply user-edited approve/reject decisions from `hitl-pending/*.md`.
+
+    Workflow: open a pending note in Obsidian, change frontmatter `status:`
+    from `pending` to `approved` or `rejected` (optionally add `feedback:`),
+    save, then call this. Every edited note is resumed in one batch.
+
+    Returns:
+        {processed: [...], skipped: [...], errors: [...]} — counts + per-row detail.
+        `processed` rows include {thread_id, company, title, action, vault_written}.
+    """
+    from compass.hitl.sync_decisions import sync_decisions
+
+    return await sync_decisions()
+
+
+@mcp.tool()
+async def regenerate_pending_notes() -> dict:
+    """Rewrite every `hitl-pending/*.md` note from the current state_store DB.
+
+    Use after editing the DB by hand, on first-time setup, or to recover after
+    accidentally deleting a note in Obsidian. Idempotent — overwrites in
+    place. Returns {"written": int}.
+    """
+    from compass.hitl import vault_view
+
+    n = await vault_view.regenerate_all_pending_notes()
+    return {"written": n}
 
 
 @mcp.tool()

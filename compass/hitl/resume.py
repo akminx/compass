@@ -74,6 +74,15 @@ async def resume_pending(
         status=resolved_status,
         feedback=decision.get("feedback"),
     )
+    # Mirror the resolution into the vault note (best-effort).
+    try:
+        from compass.hitl import vault_view
+
+        vault_view.update_pending_note_status(
+            thread_id, status=resolved_status, feedback=decision.get("feedback")
+        )
+    except Exception:
+        logger.exception("hitl: failed to update vault pending-note for %s", thread_id)
     await _purge_thread_checkpoints(thread_id)
 
     if final.get("vault_written"):
