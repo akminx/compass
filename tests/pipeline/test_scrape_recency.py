@@ -1,11 +1,13 @@
-"""Recency handling in _scrape_all: drop >30d-old postings, sort each board
-by date_posted DESC, None-dated jobs sink to the bottom."""
+"""Recency handling at the _scrape_all level: stale (>30d) postings are
+dropped, but input ORDER is preserved — the per-board recency sort moved
+into `round_robin_by_board` to fix the high-volume-board starvation bug.
+See tests/test_scraper_interleave.py for the sort + interleave behaviour."""
 
 from __future__ import annotations
 
 from datetime import date, timedelta
 
-from compass.pipeline.graph import MAX_POSTING_AGE_DAYS, _filter_and_sort_by_recency
+from compass.pipeline.graph import MAX_POSTING_AGE_DAYS, _drop_stale_postings
 from compass.pipeline.state import RawJob
 
 
@@ -23,30 +25,29 @@ def _job(name: str, days_ago: int | None) -> RawJob:
 def test_drops_jobs_older_than_cutoff():
     cutoff = MAX_POSTING_AGE_DAYS
     jobs = [_job("fresh", 1), _job("borderline", cutoff), _job("stale", cutoff + 1)]
-    kept = _filter_and_sort_by_recency(jobs)
+    kept = _drop_stale_postings(jobs)
     names = [j.title for j in kept]
     assert "role-fresh" in names
     assert "role-borderline" in names  # exactly on the boundary is kept
     assert "role-stale" not in names
 
 
-def test_undated_jobs_are_kept_and_sink_to_bottom():
+def test_undated_jobs_are_kept():
     """ATSes that don't expose date_posted shouldn't have their jobs dropped —
-    we can't distinguish stale from undated. But dated jobs are preferred."""
+    we can't distinguish stale from undated."""
     jobs = [_job("undated", None), _job("recent", 1), _job("old", 14)]
-    kept = _filter_and_sort_by_recency(jobs)
+    kept = _drop_stale_postings(jobs)
     assert len(kept) == 3
-    # recent (1d ago) > old (14d ago) > undated
-    assert kept[0].title == "role-recent"
-    assert kept[1].title == "role-old"
-    assert kept[2].title == "role-undated"
+    assert {j.title for j in kept} == {"role-undated", "role-recent", "role-old"}
 
 
-def test_freshest_first():
+def test_preserves_input_order():
+    """Sorting was deliberately moved out — the per-board round-robin in
+    `round_robin_by_board` must not be un-interleaved by a downstream sort."""
     jobs = [_job("oldish", 20), _job("today", 0), _job("yesterday", 1)]
-    kept = _filter_and_sort_by_recency(jobs)
-    assert [j.title for j in kept] == ["role-today", "role-yesterday", "role-oldish"]
+    kept = _drop_stale_postings(jobs)
+    assert [j.title for j in kept] == ["role-oldish", "role-today", "role-yesterday"]
 
 
 def test_empty_list_returns_empty():
-    assert _filter_and_sort_by_recency([]) == []
+    assert _drop_stale_postings([]) == []

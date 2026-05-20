@@ -111,14 +111,18 @@ async def scrape_lever(company: str) -> list[RawJob]:
 
 
 async def scrape_lever_many(companies: list[str]) -> list[RawJob]:
-    """Scrape multiple Lever companies concurrently. Per-company errors are logged, not raised."""
+    """Scrape multiple Lever companies concurrently. Pre-filters at the
+    scraper layer before per-board round-robin."""
+    from compass.scrapers._interleave import round_robin_by_board
+    from compass.scrapers._pre_filter import pre_filter_many
+
     if not companies:
         return []
     results = await asyncio.gather(*[scrape_lever(c) for c in companies], return_exceptions=True)
-    out: list[RawJob] = []
+    per_board: list[list[RawJob]] = []
     for r in results:
         if isinstance(r, list):
-            out.extend(r)
+            per_board.append(r)
         else:
             logger.warning("lever_many: unexpected exception: %s", r)
-    return out
+    return round_robin_by_board(pre_filter_many(per_board))

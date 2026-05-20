@@ -88,13 +88,17 @@ class TestIntakeFilter:
         assert out["role_family"] == "agent-engineer"
         mock_llm.assert_not_called()
 
-    async def test_generic_swe_stays_when_no_ai_signal(self, monkeypatch, temp_vault):
+    async def test_generic_swe_dropped_when_no_ai_signal(self, monkeypatch, temp_vault):
+        """Post-2026-05-20 tightening: generic SWE titles at mid-tier companies
+        WITHOUT any AI/agent body signal are now dropped at intake. User
+        explicitly asked for AI/agentic only — letting a Postgres/Kafka role
+        through wastes their attention."""
         from compass.pipeline.nodes import intake_filter as mod
 
         body = "Build REST APIs. Postgres. Kafka. On-call rotations."
         out = await mod.intake_filter_node(_state("Backend Engineer", body))
-        assert out["role_family"] == "swe-backend"
-        assert out["in_scope"] is True
+        assert out["in_scope"] is False
+        assert out["role_family"] == "out-of-scope"
 
     async def test_llm_in_scope_also_runs_upgrade(self, monkeypatch, temp_vault):
         """LLM returned generic family but body has strong agent signal — upgrade."""
@@ -259,17 +263,39 @@ class TestAgentSignalGate:
         assert out["in_scope"] is True
         assert out["agent_signal_count"] >= 3  # langgraph + agents + mcp + tool calling
 
-    async def test_swe_backend_passes_through_without_body_signal(self, temp_vault):
-        """Generic SWE titles at AI-native companies sometimes describe agent
-        work — don't gate them on body signal. The score node sees it later."""
+    async def test_swe_backend_dropped_without_body_signal(self, temp_vault):
+        """Post-2026-05-20 tightening: the agent-signal gate now applies to ALL
+        in-scope role families, not just AI-titled ones. A swe-backend role
+        whose body says only 'Postgres / distributed systems' has no AI/agent
+        signal → dropped at intake.
+
+        Old behavior (pre-tightening): swe-backend passed through to score,
+        letting non-AI roles into the vault at AI-adjacent companies."""
         from compass.pipeline.nodes import intake_filter as mod
 
         out = await mod.intake_filter_node(
             _state("Backend Engineer", "Build distributed systems with Postgres.")
         )
+        assert out["in_scope"] is False
+        assert out["role_family"] == "out-of-scope"
+
+    async def test_swe_backend_kept_with_ai_body_signal(self, temp_vault):
+        """A swe-backend titled role whose body talks about LLM/agent work
+        IS in scope — the gate looks at body, not just title."""
+        from compass.pipeline.nodes import intake_filter as mod
+
+        out = await mod.intake_filter_node(
+            _state(
+                "Backend Engineer",
+                "Build and serve LangGraph agent platforms. RAG, vector search, fine-tuning.",
+            )
+        )
         assert out["in_scope"] is True
-        assert out["role_family"] == "swe-backend"
-        assert out["agent_signal_count"] == 0  # tracked but not gating
+        # upgrade_family() may promote swe-backend → agent-engineer when the
+        # body has strong agentic signal — accept either; the in_scope=True
+        # is the only assertion we care about for the gate behavior.
+        assert out["role_family"] in {"swe-backend", "agent-engineer", "applied-ai", "infra-llm"}
+        assert out["agent_signal_count"] >= 2
 
     async def test_agent_engineer_title_with_one_signal_kept(self, temp_vault):
         from compass.pipeline.nodes import intake_filter as mod

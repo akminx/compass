@@ -5,7 +5,7 @@ Use as a supplemental source only. LinkedIn rate-limits aggressively.
 Always design for graceful degradation: if LinkedIn returns 0 results, log and continue.
 
 Usage:
-    jobs = await scrape_jobspy(search_term="agentic AI engineer", location="Austin, TX")
+    jobs = await scrape_jobspy(search_term="agentic AI engineer", location="Remote, US")
 """
 
 from compass.pipeline.state import RawJob

@@ -8,8 +8,8 @@ sales / PM / design / CS. With MAX_JOBS_PER_RUN=50, that's ~$0.10/day saved.
 
 More importantly: it fixes the gap-aggregator bias introduced by Phase 0.B's
 SCORE_THRESHOLD write-gate. Now ALL in-scope JDs reach the vault regardless
-of current match score, so stretch-role gaps (the ones Akash should be
-studying toward) actually drive the master gap plan.
+of current match score, so stretch-role gaps (the ones the candidate should
+be studying toward) actually drive the master gap plan.
 """
 
 from __future__ import annotations
@@ -38,9 +38,10 @@ from compass.vault.reader import load_reject_rules
 # dashboard can surface JDs with rich agentic language) but DON'T satisfy the
 # gate on their own.
 _AGENT_STRONG_TERMS = [
+    # === Agent-system terms (original spine) ===
     r"\bagent[-\s]?orchestration\b",
     r"\bmulti[-\s]?agent\b",
-    r"\bagentic\s+ai\b",
+    r"\bagentic\s+(ai|workflows?|systems?|engineering)\b",
     r"\bai\s+agent[s]?\b",
     r"\bllm\s+agent[s]?\b",
     r"\bmcp\b",
@@ -49,12 +50,11 @@ _AGENT_STRONG_TERMS = [
     r"\blangchain\b",
     r"\bpydantic\s+ai\b",
     r"\bagents\s+sdk\b",
-    r"\blangfuse\b",
-    r"\blangsmith\b",
-    r"\bbraintrust\b",
-    r"\btool[-\s]?calling\b",
-    r"\bfunction[-\s]?calling\b",
-    r"\bdurable\s+execution\b",
+    r"\bopenai\s+agents\b",
+    r"\bcrewai\b",
+    r"\bautogen\b",
+    r"\bdspy\b",
+    r"\bautonomous\s+agent[s]?\b",
     r"\bsub[-\s]?agents?\b",
     r"\bagent[-\s]?reliability\b",
     r"\bagent\s+evaluation\b",
@@ -62,7 +62,58 @@ _AGENT_STRONG_TERMS = [
     r"\bagent\s+framework\b",
     r"\bagent\s+development\b",
     r"\bagent\s+system\b",
-    r"\bautonomous\s+agent\b",
+    r"\btool[-\s]?calling\b",
+    r"\bfunction[-\s]?calling\b",
+    r"\bdurable\s+execution\b",
+    # === LLM products / vendors ===
+    r"\bopenai\s+api\b",
+    r"\banthropic\s+api\b",
+    r"\bclaude\s+api\b",
+    r"\bgpt[-\s]?[0-9]\b",
+    r"\bllama\s+[0-9]\b",
+    r"\bgemini\s+(api|pro|2)\b",
+    r"\bvertex\s+ai\b",
+    r"\baws\s+bedrock\b",
+    r"\bgenerative\s+ai\b",
+    r"\bgenai\b",
+    r"\bgen[-\s]?ai\b",
+    r"\blarge\s+language\s+model[s]?\b",
+    # === RAG / retrieval / vector ===
+    r"\brag\b",
+    r"\bretrieval[-\s]?augmented\s+generation\b",
+    r"\bvector\s+(search|database|store|index|embedding[s]?)\b",
+    r"\bsemantic\s+search\b",
+    r"\bembedding[s]?\b",
+    r"\bpinecone\b",
+    r"\bchroma(db)?\b",
+    r"\bweaviate\b",
+    r"\bqdrant\b",
+    r"\bmilvus\b",
+    r"\bllamaindex\b",
+    r"\bllama[-\s]?index\b",
+    # === Prompt eng / fine-tune / training ===
+    r"\bprompt\s+engineering\b",
+    r"\bprompt\s+optimization\b",
+    r"\bfine[-\s]?tun(e|ing)\b",
+    r"\binstruction[-\s]?tuning\b",
+    r"\blora\b",
+    r"\brlhf\b",
+    # === Eval / observability ===
+    r"\blangfuse\b",
+    r"\blangsmith\b",
+    r"\bbraintrust\b",
+    r"\bdeepeval\b",
+    r"\bragas\b",
+    r"\bllm[-\s]?as[-\s]?(a[-\s]?)?judge\b",
+    r"\bllm\s+evaluation\b",
+    r"\bmodel\s+evaluation\b",
+    # === Inference / serving ===
+    r"\bvllm\b",
+    r"\bsglang\b",
+    r"\btriton\s+inference\b",
+    r"\bray\s+serve\b",
+    r"\bmodel\s+serving\b",
+    r"\binference\s+(optimization|serving|engine|platform)\b",
 ]
 _AGENT_WEAK_TERMS = [
     r"\bagentic\b",
@@ -149,6 +200,23 @@ async def intake_filter_node(state: CompassState) -> dict:
             )
             return {"in_scope": False, "role_family": "out-of-scope", "agent_signal_count": 0}
 
+    # Location gate — preferences.md lists US cities + Remote-US as preferred /
+    # acceptable. Drop unambiguous non-US locations BEFORE the LLM stage. The
+    # check is conservative: ambiguous strings ("Remote", "Multiple Locations",
+    # "") pass through. See compass/pipeline/location_filter.py.
+    from compass.pipeline.location_filter import is_us_compatible
+
+    keep, loc_reason = is_us_compatible(job.location)
+    if not keep:
+        _log_filtered(job.company, job.title, loc_reason)
+        logger.info(
+            "intake_filter: dropped %s — %s (%s)",
+            job.company,
+            job.title,
+            loc_reason,
+        )
+        return {"in_scope": False, "role_family": "out-of-scope", "agent_signal_count": 0}
+
     decided, family = keyword_classify(job.title)
     if decided is True:
         upgraded = upgrade_family(family, body)
@@ -181,33 +249,29 @@ async def intake_filter_node(state: CompassState) -> dict:
 def _gated_by_agent_signal(company: str, title: str, body: str, role_family: str) -> dict:
     """Final gate after title-based role_family classification.
 
-    User's target market (from _profile/target-roles.md) requires JDs that
-    talk about agents in production — not just titles that say "AI Engineer."
-    A JD body with ZERO agent-related terms is almost always a generic
-    ML/RAG/data-science role mis-titled, which the user doesn't want.
+    The candidate target is AI/agentic engineering specifically — not generic
+    SWE work at AI-adjacent companies. So we require at least one STRONG
+    signal in the JD body (LangGraph / MCP / RAG / vector search / fine-tuning
+    / LLM API / etc.) for the job to be in scope.
 
-    Applied to in-scope agent-engineer / applied-ai / infra-llm classifications
-    only; SWE family roles (swe-backend, swe-fullstack, swe-frontend) pass
-    through unfiltered because they may be agent-eng IC roles posted under
-    generic SWE titles at AI-native companies (Sierra "Software Engineer,
-    Product" is real).
+    Applies to ALL in-scope role families (agent-engineer, applied-ai,
+    infra-llm, swe-backend, swe-fullstack, swe-frontend, swe-mobile, fde-eng,
+    other-eng). Pre-fix this only gated AI-titled roles, letting generic
+    SWE-titled roles at AI-adjacent companies through without any AI body
+    language.
 
     Sets `agent_signal_count` in state so downstream nodes (vault_write,
     score) can tag/weight by signal strength.
     """
     signal_count = _agent_signal_count(body)
     has_strong = _has_strong_agent_signal(body)
-    agent_oriented = role_family in {"agent-engineer", "applied-ai", "infra-llm"}
-    # Gate: an agent-oriented title with NO strong signal is dropped. A title
-    # like "AI Engineer" whose body only says "be a change agent" counts as
-    # zero strong signal even though signal_count>=1. This is intentional —
-    # "agent" alone is too noisy in corporate JD prose.
-    if agent_oriented and not has_strong:
+    if not has_strong:
         _log_filtered(company, title, "no-strong-agent-signal in body")
         logger.info(
-            "intake_filter: dropped %s — %s (agent-oriented title but body has no strong agent signal; signal_count=%d)",
+            "intake_filter: dropped %s — %s (role_family=%s; body has no strong AI/agent signal; signal_count=%d)",
             company,
             title,
+            role_family,
             signal_count,
         )
         return {

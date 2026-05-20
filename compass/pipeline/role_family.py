@@ -7,7 +7,7 @@ Returns (True, family) | (False, "out-of-scope") | (None, "") where None means
 Stage 2 (bottom): a Gemini-Flash structured-output classifier called only when
 stage 1 returns None. Inclusion-biased prompt per the spec.
 
-The scope definition is Akash's, dated 2026-05-18, in PHASE_0_COMPLETE.md.
+The scope definition lives in PHASE_0_COMPLETE.md.
 """
 
 from __future__ import annotations
@@ -121,7 +121,7 @@ OUT_SUBSTRING_KEYWORDS: list[str] = [
     "product operations",
     "operations specialist",
     "program manager",
-    # management track (Akash isn't pursuing management — per role-clarifications)
+    # management track (out-of-scope per candidate role-clarifications)
     "engineering manager",
     "engineering lead",
     "director of engineering",
@@ -344,7 +344,7 @@ OUT means:
 - Marketing / growth / demand gen / lifecycle
 - Accounting / finance / operations / HR / recruiting / legal / compliance / policy-side T&S
 
-BIAS TOWARD INCLUSION. The cost of one extra LLM extract+score is far lower than the cost of dropping a role Akash would want to see. Classify OUT only when:
+BIAS TOWARD INCLUSION. The cost of one extra LLM extract+score is far lower than the cost of dropping an in-scope role. Classify OUT only when:
   (a) the title is in the OUT list, AND
   (b) the JD body shows zero engineering work.
 

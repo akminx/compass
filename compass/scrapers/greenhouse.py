@@ -106,16 +106,22 @@ async def scrape_greenhouse(board_token: str) -> list[RawJob]:
 
 
 async def scrape_greenhouse_many(board_tokens: list[str]) -> list[RawJob]:
-    """Scrape multiple Greenhouse boards concurrently."""
+    """Scrape multiple Greenhouse boards concurrently. Pre-filters at the
+    scraper layer (title-reject, jd-reject, non-US location) BEFORE the
+    per-board round-robin, so high-volume boards don't burn round-robin
+    slots on title-doomed jobs. Returns a per-board interleaved flat list."""
+    from compass.scrapers._interleave import round_robin_by_board
+    from compass.scrapers._pre_filter import pre_filter_many
+
     if not board_tokens:
         return []
     results = await asyncio.gather(
         *[scrape_greenhouse(t) for t in board_tokens], return_exceptions=True
     )
-    out: list[RawJob] = []
+    per_board: list[list[RawJob]] = []
     for r in results:
         if isinstance(r, list):
-            out.extend(r)
+            per_board.append(r)
         else:
             logger.warning("greenhouse_many: unexpected exception: %s", r)
-    return out
+    return round_robin_by_board(pre_filter_many(per_board))

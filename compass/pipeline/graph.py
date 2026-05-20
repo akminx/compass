@@ -39,7 +39,6 @@ from compass.pipeline.nodes.score import score_node
 from compass.pipeline.nodes.tailor import tailor_node
 from compass.pipeline.nodes.vault_write import vault_write_node
 from compass.pipeline.state import CompassState, RawJob
-from compass.vault.reader import list_job_notes
 
 logger = logging.getLogger(__name__)
 
@@ -116,28 +115,54 @@ def build_graph(checkpointer=None):
 
 
 def _vault_url_set() -> set[str]:
-    """Build the set of NORMALIZED URLs already in the vault — ONCE per batch.
+    """Build the set of NORMALIZED URLs already 'seen' by the pipeline — ONCE
+    per batch.
+
+    Scopes (all dedup against these):
+    - `jobs/`           — current JobNotes
+    - `jobs-archive/`   — operator-archived JobNotes; re-surfacing wastes attention
+    - `hitl-pending/`   — paused (or already-resolved) approvals; re-pausing the
+                          same URL on every run would otherwise create new
+                          pending rows with different thread_ids each batch,
+                          duplicating the queue.
 
     Normalization (`compass.vault.url_dedup.normalize_url`) collapses
     case/scheme/trailing-slash/utm-params variants so the same job seen via
-    Google and via LinkedIn dedups to one. Without it, the pipeline used to
-    write duplicate JobNotes for cosmetically-different URLs.
+    Google and via LinkedIn dedups to one.
 
-    A malformed frontmatter file is logged (NOT silently dropped from the set).
-    Without the log, a corrupt note silently causes a duplicate write next run.
+    Malformed files are logged, not silently skipped (corrupt note → duplicate
+    write next run otherwise).
     """
+    import compass.config as cfg
     from compass.vault.url_dedup import normalize_url
 
     urls: set[str] = set()
-    for path in list_job_notes():
-        try:
-            post = frontmatter.load(path)
-        except Exception as e:
-            logger.warning("dedup: failed to parse %s — %s", path.name, e)
+    # Job-shaped notes: frontmatter['url'] holds the canonical URL.
+    for subdir in ("jobs", "jobs-archive"):
+        d = cfg.VAULT_PATH / subdir
+        if not d.exists():
             continue
-        url = post.metadata.get("url")
-        if isinstance(url, str):
-            urls.add(normalize_url(url))
+        for path in sorted(d.glob("*.md")):
+            try:
+                post = frontmatter.load(path)
+            except Exception as e:
+                logger.warning("dedup: failed to parse %s — %s", path.name, e)
+                continue
+            url = post.metadata.get("url")
+            if isinstance(url, str):
+                urls.add(normalize_url(url))
+    # HiTL pending notes use frontmatter['job_url'] (different field name).
+    hitl_dir = cfg.VAULT_PATH / "hitl-pending"
+    if hitl_dir.exists():
+        for path in sorted(hitl_dir.glob("*.md")):
+            try:
+                post = frontmatter.load(path)
+            except Exception as e:
+                logger.warning("dedup: failed to parse %s — %s", path.name, e)
+                continue
+            url = post.metadata.get("job_url")
+            if isinstance(url, str):
+                urls.add(normalize_url(url))
     return urls
 
 
@@ -257,6 +282,18 @@ async def _process_one(
                 matched_skills=list(payload["matched_skills"]),
                 missing_skills=list(payload["missing_skills"]),
             )
+            # Mirror to the vault so the user can see paused jobs in Obsidian.
+            # Best-effort: vault-write failure never blocks the HiTL flow.
+            try:
+                from compass.hitl import vault_view
+
+                row = await state_store.get_pending(thread_id)
+                if row is not None:
+                    vault_view.write_pending_note(row)
+            except Exception:
+                logger.exception(
+                    "pipeline: failed to mirror pending note to vault for %s", thread_id
+                )
             logger.info(
                 "pipeline: paused %s for approval (thread_id=%s, score=%.2f)",
                 job.url,
@@ -482,10 +519,10 @@ async def _scrape_all() -> list[RawJob]:
         scrape_workday_many(wd_slugs),
     )
 
-    gh = _filter_and_sort_by_recency(gh)
-    lv = _filter_and_sort_by_recency(lv)
-    ash = _filter_and_sort_by_recency(ash)
-    wd = _filter_and_sort_by_recency(wd)
+    gh = _drop_stale_postings(gh)
+    lv = _drop_stale_postings(lv)
+    ash = _drop_stale_postings(ash)
+    wd = _drop_stale_postings(wd)
 
     interleaved: list[RawJob] = []
     iters = [iter(gh), iter(lv), iter(ash), iter(wd)]
@@ -501,27 +538,45 @@ async def _scrape_all() -> list[RawJob]:
     return interleaved[:MAX_JOBS_PER_RUN]
 
 
-def _filter_and_sort_by_recency(jobs: list[RawJob]) -> list[RawJob]:
-    """Drop >30d-old postings (when date_posted is known); sort by date_posted
-    DESC with None-dated jobs sinking to the bottom. Postings without a
-    `date_posted` aren't dropped — many ATSes don't expose it consistently and
-    we can't tell stale from undated."""
+def _drop_stale_postings(jobs: list[RawJob]) -> list[RawJob]:
+    """Drop >MAX_POSTING_AGE_DAYS-old postings (when date_posted is known);
+    preserve input order.
+
+    NOTE: pre-fix this function ALSO sorted by date_posted DESC, which
+    un-interleaved the per-board round-robin done inside each `scrape_*_many`.
+    That let any high-volume board starve quieter boards out of the global
+    cap. The per-board recency sort now happens inside
+    `round_robin_by_board` BEFORE the interleave — re-sorting here would
+    defeat that.
+
+    Postings without `date_posted` are kept — many ATSes don't expose it
+    consistently and we can't tell stale from undated.
+    """
     from datetime import date, timedelta
 
     cutoff = date.today() - timedelta(days=MAX_POSTING_AGE_DAYS)
-    kept = [j for j in jobs if j.date_posted is None or j.date_posted >= cutoff]
-    kept.sort(key=lambda j: (j.date_posted is None, -_date_to_ordinal(j.date_posted)))
-    return kept
+    return [j for j in jobs if j.date_posted is None or j.date_posted >= cutoff]
+
+
+# Backward-compat alias: external callers / tests still reference the old name.
+_filter_and_sort_by_recency = _drop_stale_postings
 
 
 def _yaml_scraper_slugs() -> dict[str, list[str]]:
-    """Read `_profile/target-companies.yaml` and group apply-now + opportunistic
-    boards by ATS provider. Returns {} when the YAML is missing — caller falls
-    back to the static config lists.
+    """Read `_profile/target-companies.yaml` and group eligible boards by ATS
+    provider. Returns {} when the YAML is missing — caller falls back to the
+    static config lists.
 
-    Tiers below `opportunistic` (backend-prep, stretch) are NOT scraped: the
-    3-month pivot defers those companies, and scraping them wastes LLM cost.
+    Default tier scope is `apply-now` only — the immediate-target cluster.
+    Other tiers (e.g. `opportunistic`) can be opted in via the
+    `COMPASS_SCRAPE_TIERS` env var (comma-separated tier names) when the
+    operator wants broader coverage.
+
+    Tiers further down the funnel (`backend-prep`, `stretch`) are never
+    scraped.
     """
+    import os
+
     from compass.vault.target_companies import list_yaml_companies, refresh_yaml
 
     refresh_yaml()
@@ -531,7 +586,10 @@ def _yaml_scraper_slugs() -> dict[str, list[str]]:
         "ashby": [],
         "workday": [],
     }
-    for tier in ("apply-now", "opportunistic"):
+    # Default: apply-now only. Override via `COMPASS_SCRAPE_TIERS=apply-now,opportunistic`.
+    tier_env = os.getenv("COMPASS_SCRAPE_TIERS", "apply-now").strip()
+    tiers = tuple(t.strip() for t in tier_env.split(",") if t.strip()) or ("apply-now",)
+    for tier in tiers:
         for entry in list_yaml_companies(tier_filter=tier):
             ats = entry.get("ats") or {}
             provider = (ats.get("provider") or "").lower()

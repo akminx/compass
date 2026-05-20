@@ -137,14 +137,19 @@ async def scrape_ashby(slug: str) -> list[RawJob]:
 
 
 async def scrape_ashby_many(slugs: list[str]) -> list[RawJob]:
-    """Scrape multiple Ashby boards concurrently. Per-slug errors are logged, not raised."""
+    """Scrape multiple Ashby boards concurrently. Pre-filters at the scraper
+    layer before per-board round-robin so the cap isn't burned on
+    title-doomed jobs."""
+    from compass.scrapers._interleave import round_robin_by_board
+    from compass.scrapers._pre_filter import pre_filter_many
+
     if not slugs:
         return []
     results = await asyncio.gather(*[scrape_ashby(s) for s in slugs], return_exceptions=True)
-    out: list[RawJob] = []
+    per_board: list[list[RawJob]] = []
     for r in results:
         if isinstance(r, list):
-            out.extend(r)
+            per_board.append(r)
         else:
             logger.warning("ashby_many: unexpected exception: %s", r)
-    return out
+    return round_robin_by_board(pre_filter_many(per_board))

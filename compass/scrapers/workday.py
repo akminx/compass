@@ -7,19 +7,14 @@ Workday's careers UI is a JavaScript SPA, but every tenant exposes an
 unauthenticated JSON endpoint behind it that serves the same paginated list.
 No auth, no cookies, no anti-bot — the SPA hits this same URL.
 
-The slug format the rest of Compass uses is `{subdomain}/{tenant}/{site}` —
-e.g. `wd5/citi/2`, `wd1/wf/WellsFargoJobs`. The YAML's `ats.slug` for a
+The slug format Compass uses is `{subdomain}/{tenant}/{site}` — e.g.
+`wd5/{tenant}/2`, `wd1/{tenant}/Jobs`. The YAML's `ats.slug` for a
 Workday-provider entry must be in this `wdN/tenant/site` form. The slug is
 parsed and joined back into the full URL at request time.
 
-Tenant/site discovery is per-company manual work — public careers pages all
-embed the URL in their initial JS bundle. There's no programmatic way to
-enumerate them. The verified set as of 2026-05-19:
-  wf/WellsFargoJobs/wd1            Wells Fargo
-  citi/2/wd5                       Citi
-  adobe/external_experienced/wd5   Adobe
-  ms/External/wd5                  Morgan Stanley
-  blackrock/BlackRock_Professional/wd1  BlackRock
+Tenant/site discovery is per-company manual work — public careers pages embed
+the URL in their initial JS bundle. There's no programmatic way to enumerate
+them; populate the YAML by inspecting each target tenant's careers site.
 """
 
 from __future__ import annotations
@@ -39,8 +34,10 @@ logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT = 25.0
 _USER_AGENT = "compass-job-scraper/0.1"
-# Workday paginates at 20 by default; ask for 50 per request to reduce round-trips.
-_PAGE_SIZE = 50
+# Workday's `/wday/cxs/.../jobs` endpoint enforces a hard `limit <= 20` —
+# requesting >20 returns HTTP 400 from every tenant tested. Pre-fix this was
+# 50, which silently broke every Workday scrape with HTTP 400.
+_PAGE_SIZE = 20
 # Cap iterations so a runaway pagination loop (or a board that returns
 # `total` lower than the actual count and never converges) can't burn
 # unbounded requests. 10 pages × 50 = 500 jobs per board, more than enough.
@@ -106,14 +103,16 @@ def _parse_posted_on(value: str | None) -> date | None:
 
 
 async def _fetch_job_detail(
-    client: httpx.AsyncClient, base: str, ext_path: str
+    client: httpx.AsyncClient, base: str, cxs_prefix: str, ext_path: str
 ) -> tuple[str | None, str | None]:
     """Fetch the full JD body + apply URL for one job. Returns (body, apply_url).
 
-    Workday's list endpoint returns short summaries; the actual JD lives at
-    /jobs/{external_path}. That endpoint is also unauthenticated JSON.
+    The detail JSON lives at `{base}/wday/cxs/{tenant}/{site}/job/...`, not at
+    `{base}{ext_path}` directly — the list endpoint's `externalPath` starts
+    with `/job/...` but is rooted under the `cxs` prefix. Pre-fix this hit
+    `{base}/job/...` and got 404 on every detail, dropping every Workday row.
     """
-    url = f"{base}{ext_path}"
+    url = f"{base}{cxs_prefix}{ext_path}"
     try:
         r = await client.get(url)
         if r.status_code != 200:
@@ -189,9 +188,9 @@ def _to_rawjob(
 async def scrape_workday(slug: str, company_label: str | None = None) -> list[RawJob]:
     """Scrape all open jobs from a Workday tenant/site.
 
-    `slug` is `subdomain/tenant/site` (e.g. `wd5/citi/2`). `company_label`
-    overrides the displayed company name — useful when the tenant token is
-    cryptic (e.g. `ms` → Morgan Stanley, `wf` → Wells Fargo).
+    `slug` is `subdomain/tenant/site`. `company_label` overrides the
+    displayed company name — useful when the tenant token is a cryptic
+    abbreviation rather than a recognizable brand.
 
     Returns [] on HTTP error — never raises.
     """
@@ -201,7 +200,8 @@ async def scrape_workday(slug: str, company_label: str | None = None) -> list[Ra
         return []
     subdomain, tenant, site = parsed
     base = f"https://{tenant}.{subdomain}.myworkdayjobs.com"
-    list_url = f"{base}/wday/cxs/{tenant}/{site}/jobs"
+    cxs_prefix = f"/wday/cxs/{tenant}/{site}"
+    list_url = f"{base}{cxs_prefix}/jobs"
     label = company_label or tenant
 
     jobs: list[RawJob] = []
@@ -235,7 +235,10 @@ async def scrape_workday(slug: str, company_label: str | None = None) -> list[Ra
             # Fetch detail bodies in parallel (modest concurrency to be a
             # good citizen — Workday will rate-limit aggressive scrapers).
             detail_results = await asyncio.gather(
-                *[_fetch_job_detail(client, base, p.get("externalPath", "")) for p in postings],
+                *[
+                    _fetch_job_detail(client, base, cxs_prefix, p.get("externalPath", ""))
+                    for p in postings
+                ],
                 return_exceptions=True,
             )
 
@@ -256,15 +259,19 @@ async def scrape_workday(slug: str, company_label: str | None = None) -> list[Ra
 
 
 async def scrape_workday_many(slugs: list[str]) -> list[RawJob]:
-    """Scrape multiple Workday tenants concurrently. Each slug is the full
+    """Scrape multiple Workday tenants concurrently. Pre-filters at the
+    scraper layer before per-board round-robin. Each slug is the full
     `subdomain/tenant/site` form."""
+    from compass.scrapers._interleave import round_robin_by_board
+    from compass.scrapers._pre_filter import pre_filter_many
+
     if not slugs:
         return []
     results = await asyncio.gather(*[scrape_workday(s) for s in slugs], return_exceptions=True)
-    out: list[RawJob] = []
+    per_board: list[list[RawJob]] = []
     for r in results:
         if isinstance(r, list):
-            out.extend(r)
+            per_board.append(r)
         else:
             logger.warning("workday_many: unexpected exception: %s", r)
-    return out
+    return round_robin_by_board(pre_filter_many(per_board))
