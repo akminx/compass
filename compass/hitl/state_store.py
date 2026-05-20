@@ -24,7 +24,7 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-_VALID_STATUSES = {"pending", "approved", "rejected", "timed_out", "error"}
+_VALID_STATUSES = {"pending", "resuming", "approved", "rejected", "timed_out", "error"}
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS pending_approvals (
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS pending_approvals (
   missing_skills   TEXT NOT NULL,
   created_at       TEXT NOT NULL,
   status           TEXT NOT NULL DEFAULT 'pending'
-                   CHECK (status IN ('pending','approved','rejected','timed_out','error')),
+                   CHECK (status IN ('pending','resuming','approved','rejected','timed_out','error')),
   resolved_at      TEXT,
   feedback         TEXT
 );
@@ -162,22 +162,51 @@ async def list_timed_out(*, timeout_hours: int) -> list[dict[str, Any]]:
     return [_row_to_dict(r) for r in rows]
 
 
+async def claim_pending(thread_id: str) -> bool:
+    """Atomic single-writer claim: transitions `pending → resuming` if and only
+    if the row is currently 'pending'. Returns True on successful claim,
+    False if another consumer beat us to it (row is already resuming, approved,
+    rejected, timed_out, or doesn't exist).
+
+    This is the race fix between Modal cron's timeout-checker and an MCP
+    `approve_job` call landing on the same thread_id at the same time.
+    Without it, both consumers' get_pending+status='pending' check would
+    pass, both would call graph.ainvoke on the same checkpoint, and we'd
+    get conflicting JobNote writes (one "timed_out", one "approved").
+    """
+    conn = await _connect()
+    try:
+        cursor = await conn.execute(
+            "UPDATE pending_approvals SET status = 'resuming' "
+            "WHERE thread_id = ? AND status = 'pending'",
+            (thread_id,),
+        )
+        await conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        await conn.close()
+
+
 async def mark_resolved(
     thread_id: str,
     *,
     status: str,
     feedback: str | None = None,
 ) -> None:
-    if status not in _VALID_STATUSES or status == "pending":
+    if status not in _VALID_STATUSES or status in ("pending", "resuming"):
         raise ValueError(f"invalid resolve status: {status!r}")
 
     conn = await _connect()
     try:
-        # Atomic guarded UPDATE: only transitions rows that are still pending.
+        # Atomic guarded UPDATE: only transitions rows currently in-flight
+        # (pending = never claimed; resuming = claim_pending succeeded but
+        # the graph hasn't finalized yet). Accepts both so callers can either
+        # claim+finalize (the new race-safe path) or directly finalize a
+        # never-claimed row (the legacy/test path).
         cursor = await conn.execute(
             "UPDATE pending_approvals "
             "SET status = ?, feedback = ?, resolved_at = ? "
-            "WHERE thread_id = ? AND status = 'pending'",
+            "WHERE thread_id = ? AND status IN ('pending', 'resuming')",
             (status, feedback, _now().isoformat(), thread_id),
         )
         await conn.commit()

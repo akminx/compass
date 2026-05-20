@@ -315,14 +315,21 @@ def get_ats(company: str) -> tuple[str, str] | None:
 
 def list_yaml_companies(tier_filter: str | None = None) -> list[dict]:
     """Return the raw company entries from the YAML, optionally filtered to
-    one tier. Used by seed scripts + scraper positive-filtering."""
-    if _yaml_meta is None:
-        refresh_yaml()
+    one tier. Used by seed scripts + scraper positive-filtering.
+
+    `_yaml_meta` indexes each entry by primary name AND all aliases — so a
+    naive `list(_yaml_meta.values())` returns N+1 copies for a company with
+    N aliases (JPMorgan has 5 aliases ⇒ 6 entries). Deduplicate by object
+    identity so callers (seed_companies_from_yaml, gap_aggregator, MCP tools)
+    see each company exactly once.
+    """
+    _maybe_reload_yaml()
     assert _yaml_meta is not None
-    entries = list(_yaml_meta.values())
+    # dict-by-id deduplication preserves order of first encounter
+    unique = list({id(e): e for e in _yaml_meta.values()}.values())
     if tier_filter is not None:
-        entries = [e for e in entries if e.get("tier") == tier_filter]
-    return entries
+        unique = [e for e in unique if e.get("tier") == tier_filter]
+    return unique
 
 
 refresh_yaml()

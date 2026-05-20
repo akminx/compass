@@ -195,10 +195,21 @@ async def run_against_judge(records: list[EvalRecord]) -> tuple[ScoreMetrics, li
         except Exception as e:
             per_record.append({"id": r.id, "error": f"judge failed: {e}"})
             continue
+        # IMPORTANT: the judge prompt instructs it to use exact phrases from the
+        # JD. The JD uses raw forms ("LangGraph", "pydantic-ai"); Compass's
+        # extract uses canonical forms ("LangGraph", "Pydantic AI"). Comparing
+        # them directly systematically deflates recall on multi-word skills
+        # with punctuation variants. Normalize the judge's output through the
+        # same taxonomy folding extract_node uses so both sides are canonical.
+        from compass.pipeline.nodes.extract import _normalize_skill_list
+
+        judge_skills_canonical = _normalize_skill_list(
+            list(verdict.expected_skills), r.jd_text
+        )
         predicted_scores.append(score.score)
         expected_scores.append(verdict.expected_score)
         predicted_skill_lists.append(extracted_skills)
-        expected_skill_lists.append(verdict.expected_skills)
+        expected_skill_lists.append(judge_skills_canonical)
         matched_skill_lists.append(list(score.matched_skills))
         per_record.append(
             {

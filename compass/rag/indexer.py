@@ -105,14 +105,27 @@ async def build_index(force_rebuild: bool = False) -> int:
     collection = _collection(client)
 
     documents = [body for _, body in sections]
+    new_ids = [_kebab(name) for name, _ in sections]
     embeddings = await asyncio.to_thread(_embed, documents)
 
     collection.upsert(
-        ids=[_kebab(name) for name, _ in sections],
+        ids=new_ids,
         documents=documents,
         embeddings=embeddings,
         metadatas=[{"skill": name, "source": "skill-inventory.md"} for name, _ in sections],
     )
+
+    # ORPHAN CLEANUP: upsert only adds/updates — it never deletes. If a skill
+    # was renamed ("LangGraph" → "LangGraph (async)") or removed from
+    # skill-inventory.md, the old chunk's id stays in the collection forever
+    # and pollutes future RAG retrievals. After every build, drop any id in
+    # the collection that's NOT in the current section list.
+    existing = collection.get(include=[]).get("ids", [])
+    orphan_ids = [eid for eid in existing if eid not in set(new_ids)]
+    if orphan_ids:
+        collection.delete(ids=orphan_ids)
+        logger.info("rag: pruned %d orphaned chunks (skills removed/renamed)", len(orphan_ids))
+
     logger.info("rag: indexed %d sections at %s", len(sections), cfg.CHROMA_PATH)
     return len(sections)
 

@@ -71,6 +71,24 @@ async def tailor_node(state: CompassState) -> dict:
     if score is None or job is None:
         return {}
 
+    # Cost gate — tailor uses Sonnet (~$0.05/call). Don't burn it on jobs that
+    # scored below the threshold even if the human approved (mis-click in the
+    # HiTL UI, score drift between pause and resume, etc.). The intended gate
+    # is score-based; without this, an accidental approval on a 1.0-scored
+    # job costs as much as a real 4.5-scored one.
+    from compass.config import SCORE_THRESHOLD
+
+    threshold = state.get("score_threshold")
+    if threshold is None:
+        threshold = SCORE_THRESHOLD
+    if score.score < threshold:
+        logger.info(
+            "tailor_node: skipping low-score job %s (score=%.2f < threshold=%.2f) "
+            "despite human_approved=True",
+            job.url, score.score, threshold,
+        )
+        return {}
+
     profile = f"{read_resume()}\n\n{read_profile_section('role-clarifications')}"
 
     try:

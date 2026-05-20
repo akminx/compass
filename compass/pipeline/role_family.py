@@ -217,12 +217,18 @@ ML_SIGNAL = [
     "huggingface",
 ]
 
+# `upgrade_family` only promotes families in this set to `agent-engineer` /
+# `applied-ai` based on JD body signals. Mobile and frontend are intentionally
+# excluded — a React Native job at an LLM-native startup whose JD mentions
+# "LangGraph" once is still a mobile job, not an agent-engineering job. The
+# user isn't a mobile or frontend specialist; promoting these clutters the
+# vault. Backend / fullstack / founding / other-eng are kept eligible because
+# "Software Engineer, Product" at Sierra is a real agent-eng role posted
+# under a generic SWE title.
 GENERIC_FAMILIES = {
     "swe-backend",
-    "swe-frontend",
     "swe-fullstack",
     "swe-founding",
-    "swe-mobile",
     "other-eng",
 }
 

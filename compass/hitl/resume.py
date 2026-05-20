@@ -39,6 +39,18 @@ async def resume_pending(
     if row["status"] != "pending":
         raise ValueError(f"thread {thread_id!r} already resolved ({row['status']!r})")
 
+    # ATOMIC CLAIM before invoking the graph: prevents Modal cron and MCP
+    # approve from both passing the get_pending check, both calling ainvoke
+    # on the same checkpoint, and writing conflicting JobNotes (one
+    # "timed_out", one "approved"). If another consumer already claimed the
+    # row, abort cleanly with the same ValueError shape an already-resolved
+    # row would produce — callers handle this identically.
+    if not await state_store.claim_pending(thread_id):
+        raise ValueError(
+            f"thread {thread_id!r} was claimed by another resume consumer "
+            f"(Modal cron + MCP approve race avoided)"
+        )
+
     # Late import to avoid potential circular import: graph.py imports state_store
     from compass.pipeline.graph import _build_checkpoint_serde, build_graph
 

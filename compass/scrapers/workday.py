@@ -132,8 +132,16 @@ def _to_rawjob(
     raw: dict,
     body: str | None,
     apply_url: str | None,
+    base_url: str = "",
 ) -> RawJob | None:
-    """Build a RawJob from a Workday list-page entry + (optional) detail body."""
+    """Build a RawJob from a Workday list-page entry + (optional) detail body.
+
+    `base_url` is the Workday tenant origin (e.g. `https://citi.wd5.myworkdayjobs.com`)
+    used to absolutize relative `externalPath` values when the detail endpoint
+    didn't return an `externalUrl`. Without this, the `RawJob.url` would be a
+    bare path like `/job/abc` that `normalize_url` then mangles into the
+    invalid string `https:///job/abc`, breaking dedup and apply-link clicks.
+    """
     try:
         title = raw.get("title")
         if not title:
@@ -143,11 +151,27 @@ def _to_rawjob(
             # Workday rate-limits detail fetches more aggressively than list
             # fetches, so we sometimes get list-only entries. Drop them.
             return None
+        # Resolve the canonical URL: prefer the detail endpoint's `externalUrl`;
+        # fall back to absolutizing `externalPath` against the tenant origin.
+        url = apply_url
+        if not url:
+            ext_path = raw.get("externalPath") or ""
+            if ext_path and base_url and ext_path.startswith("/"):
+                url = f"{base_url}{ext_path}"
+            elif ext_path.startswith("http"):
+                url = ext_path
+        if not url:
+            # No usable URL at all — skip rather than write a broken vault row.
+            logger.warning(
+                "workday: no usable URL for %r at %s (skipping)",
+                title, company_label,
+            )
+            return None
         location_str = raw.get("locationsText") or None
         return RawJob(
             company=company_label,
             title=title,
-            url=apply_url or raw.get("externalPath") or "",
+            url=url,
             source="workday",  # type: ignore[arg-type]
             location=location_str,
             remote=infer_remote_policy(location_str),
@@ -218,7 +242,7 @@ async def scrape_workday(slug: str, company_label: str | None = None) -> list[Ra
                 if isinstance(detail, BaseException):
                     continue
                 body, apply_url = detail
-                rj = _to_rawjob(label, raw, body, apply_url)
+                rj = _to_rawjob(label, raw, body, apply_url, base_url=base)
                 if rj is not None:
                     jobs.append(rj)
 
