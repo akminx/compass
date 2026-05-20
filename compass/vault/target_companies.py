@@ -174,6 +174,15 @@ refresh()
 # ── YAML-driven per-company metadata ─────────────────────────────────────────
 
 _yaml_meta: dict[str, dict] | None = None
+_yaml_mtime: float | None = None  # last-seen mtime of target-companies.yaml
+
+
+def _yaml_path():
+    """Resolve VAULT_PATH at call time — required so tests that monkeypatch
+    `compass.config.VAULT_PATH` don't get the module-import-time value."""
+    import compass.config as cfg
+
+    return cfg.VAULT_PATH / "_profile" / "target-companies.yaml"
 
 
 def _parse_yaml() -> dict[str, dict]:
@@ -182,9 +191,7 @@ def _parse_yaml() -> dict[str, dict]:
     Returns {} when the file is missing — callers fall through to the legacy
     markdown-only behavior.
     """
-    import compass.config as cfg
-
-    path = cfg.VAULT_PATH / "_profile" / "target-companies.yaml"
+    path = _yaml_path()
     if not path.exists():
         return {}
     try:
@@ -199,15 +206,47 @@ def _parse_yaml() -> dict[str, dict]:
         name = entry.get("company")
         if not name:
             continue
-        out[_normalize(name)] = entry
+        # Index by primary name AND any aliases (e.g. JPMorgan ↔ JPMC, BofA ↔ BankofAmerica)
+        keys = [_normalize(name)]
+        aliases = entry.get("aliases") or []
+        if isinstance(aliases, list):
+            keys.extend(_normalize(a) for a in aliases if isinstance(a, str))
+        for k in keys:
+            if k:
+                out[k] = entry
     return out
 
 
 def refresh_yaml() -> None:
-    """Re-parse target-companies.yaml. Call from tests or after manual edits."""
-    global _yaml_meta
+    """Re-parse target-companies.yaml. Call from tests or after manual edits.
+    Cheap — small file, < 1ms read."""
+    global _yaml_meta, _yaml_mtime
     _yaml_meta = _parse_yaml()
+    path = _yaml_path()
+    _yaml_mtime = path.stat().st_mtime if path.exists() else None
     logger.info("target_companies (yaml): parsed %d entries", len(_yaml_meta))
+
+
+def _maybe_reload_yaml() -> None:
+    """Reload _yaml_meta if the file on disk has been modified since last
+    parse. Called by every YAML-reading accessor so a long-running MCP
+    server picks up edits within ~one mtime check.
+
+    Cheap — a single stat() call per accessor invocation.
+    """
+    global _yaml_meta, _yaml_mtime
+    if _yaml_meta is None:
+        refresh_yaml()
+        return
+    path = _yaml_path()
+    if not path.exists():
+        if _yaml_meta:
+            _yaml_meta = {}
+            _yaml_mtime = None
+        return
+    current_mtime = path.stat().st_mtime
+    if _yaml_mtime is None or current_mtime > _yaml_mtime:
+        refresh_yaml()
 
 
 def get_company_meta(company: str) -> dict | None:
@@ -217,9 +256,8 @@ def get_company_meta(company: str) -> dict | None:
     `get_tier`. Returns None — not a default — so callers can distinguish
     "company not in target list" from "company has empty metadata".
     """
-    if _yaml_meta is None:
-        refresh_yaml()
-    assert _yaml_meta is not None  # mypy: refresh_yaml sets it
+    _maybe_reload_yaml()
+    assert _yaml_meta is not None  # mypy: _maybe_reload_yaml ensures non-None
 
     query = _normalize(company)
     if not query:

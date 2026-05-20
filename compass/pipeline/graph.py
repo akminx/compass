@@ -116,11 +116,18 @@ def build_graph(checkpointer=None):
 
 
 def _vault_url_set() -> set[str]:
-    """Build the set of URLs already in the vault — ONCE per batch.
+    """Build the set of NORMALIZED URLs already in the vault — ONCE per batch.
+
+    Normalization (`compass.vault.url_dedup.normalize_url`) collapses
+    case/scheme/trailing-slash/utm-params variants so the same job seen via
+    Google and via LinkedIn dedups to one. Without it, the pipeline used to
+    write duplicate JobNotes for cosmetically-different URLs.
 
     A malformed frontmatter file is logged (NOT silently dropped from the set).
     Without the log, a corrupt note silently causes a duplicate write next run.
     """
+    from compass.vault.url_dedup import normalize_url
+
     urls: set[str] = set()
     for path in list_job_notes():
         try:
@@ -130,7 +137,7 @@ def _vault_url_set() -> set[str]:
             continue
         url = post.metadata.get("url")
         if isinstance(url, str):
-            urls.add(url)
+            urls.add(normalize_url(url))
     return urls
 
 
@@ -280,8 +287,10 @@ async def run_pipeline(raw_jobs: list[RawJob] | None = None) -> CompassState:
     if raw_jobs is None:
         raw_jobs = await _scrape_all()
 
+    from compass.vault.url_dedup import normalize_url as _norm_url
+
     seen_urls = _vault_url_set()
-    fresh = [j for j in raw_jobs if j.url not in seen_urls]
+    fresh = [j for j in raw_jobs if _norm_url(j.url) not in seen_urls]
     dropped = len(raw_jobs) - len(fresh)
     if dropped:
         logger.info("pipeline: dropping %d/%d jobs already in vault", dropped, len(raw_jobs))

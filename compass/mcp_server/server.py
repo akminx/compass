@@ -296,7 +296,15 @@ async def generate_cover_letter(job_filename: str) -> dict:
     from compass.config import VAULT_PATH
     from compass.pipeline.cover_letter import generate_cover_letter_from_jobnote
 
-    job_path = VAULT_PATH / "jobs" / job_filename
+    # Path-traversal guard: `job_filename` is user-supplied; reject anything
+    # that resolves outside compass-vault/jobs/. Without this, a string like
+    # "../_profile/resume.md" would load + cover-letter-ize the resume file.
+    jobs_dir = (VAULT_PATH / "jobs").resolve()
+    job_path = (VAULT_PATH / "jobs" / job_filename).resolve()
+    try:
+        job_path.relative_to(jobs_dir)
+    except ValueError:
+        return {"error": f"job_filename must be inside jobs/: {job_filename!r}"}
     if not job_path.exists():
         return {"error": f"JobNote not found: {job_filename}"}
     try:

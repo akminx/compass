@@ -220,7 +220,8 @@ async def run_evals(*, mode: str = "labels", limit: int | None = None) -> dict:
     else:
         metrics, per_record = await run_against_labels(records)
 
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    # Include microseconds so two runs within the same second don't overwrite.
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     out_path = RESULTS_DIR / f"results-{mode}-{timestamp}.json"
     out_path.write_text(
         json.dumps(

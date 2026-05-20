@@ -82,6 +82,9 @@ async def _fetch_generic(url: str) -> tuple[str | None, str | None]:
     return page_title, body
 
 
+_ALLOWED_SCHEMES = {"http", "https"}
+
+
 async def fetch_rawjob_from_url(
     url: str,
     *,
@@ -95,8 +98,22 @@ async def fetch_rawjob_from_url(
     Both default to inferred values from the URL's host or page <title>.
 
     Returns None (not raise) when extraction fails so MCP callers can show
-    a clean "try paste-text instead" message.
+    a clean "try paste-text instead" message. Also returns None — without
+    even attempting the fetch — when the URL scheme isn't http(s); avoids
+    accidental file://, ftp://, javascript:, data: URLs reaching httpx.
     """
+    parts_for_scheme_check = urlparse(url)
+    if parts_for_scheme_check.scheme.lower() not in _ALLOWED_SCHEMES:
+        logger.warning(
+            "add_url: refusing non-http(s) URL: scheme=%r url=%r",
+            parts_for_scheme_check.scheme,
+            url[:80],
+        )
+        return None
+    if not parts_for_scheme_check.hostname:
+        logger.warning("add_url: refusing URL with no hostname: %r", url[:80])
+        return None
+
     # Provider detection is exposed for tests + future structured-API
     # routing. For one-off URLs the generic static path is fast enough.
     _detect_provider(url)

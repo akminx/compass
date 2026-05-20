@@ -4,7 +4,10 @@ from unittest.mock import AsyncMock
 from compass.pipeline.state import CompassState, RawJob
 
 
-def _state(title: str, description: str = "We build agents.") -> CompassState:
+def _state(title: str, description: str = "We build LangGraph agents with MCP.") -> CompassState:
+    # Default description carries a STRONG agent signal so tests that don't
+    # care about body content (most of them) still pass the agent-signal gate.
+    # Tests that DO care override the description explicitly.
     job = RawJob(
         company="Acme",
         title=title,
@@ -213,7 +216,9 @@ class TestRejectRules:
         self._write_prefs(temp_vault)
         mock_llm = AsyncMock()
         monkeypatch.setattr(mod, "llm_classify", mock_llm)
-        out = await mod.intake_filter_node(_state("Agent Engineer", "Build agents in Python."))
+        out = await mod.intake_filter_node(
+            _state("Agent Engineer", "Build LangGraph agents in Python with MCP.")
+        )
         assert out["in_scope"] is True
 
     async def test_missing_preferences_file_doesnt_crash(self, temp_vault):
@@ -240,7 +245,7 @@ class TestAgentSignalGate:
         assert out["role_family"] == "out-of-scope"
         assert out["agent_signal_count"] == 0
         log = (temp_vault / "_meta" / "filtered-jobs.md").read_text()
-        assert "no-agent-signal" in log
+        assert "no-strong-agent-signal" in log
 
     async def test_agent_title_with_body_signal_kept(self, temp_vault):
         from compass.pipeline.nodes import intake_filter as mod
@@ -276,6 +281,74 @@ class TestAgentSignalGate:
         assert out["agent_signal_count"] >= 1
 
 
+class TestAgentSignalFalsePositives:
+    """Regression tests for 2026-05-19 adversarial review: weak-signal words
+    ('agent' alone in non-agentic context) must NOT pass the gate."""
+
+    async def test_change_agent_marketing_speak_dropped(self, temp_vault):
+        from compass.pipeline.nodes import intake_filter as mod
+
+        out = await mod.intake_filter_node(
+            _state(
+                "AI Engineer",
+                "We're looking for a change agent who can transform our team.",
+            )
+        )
+        assert out["in_scope"] is False, "marketing 'change agent' must not pass the gate"
+        assert out["agent_signal_count"] >= 1, "but weak signal count should still reflect the hit"
+
+    async def test_user_agent_http_header_context_dropped(self, temp_vault):
+        from compass.pipeline.nodes import intake_filter as mod
+
+        out = await mod.intake_filter_node(
+            _state("AI Engineer", "Set the User-Agent header in your requests to the API.")
+        )
+        assert out["in_scope"] is False
+        assert out["agent_signal_count"] >= 1
+
+    async def test_real_strong_signal_passes(self, temp_vault):
+        from compass.pipeline.nodes import intake_filter as mod
+
+        out = await mod.intake_filter_node(
+            _state("AI Engineer", "Build LangGraph multi-agent systems with MCP.")
+        )
+        assert out["in_scope"] is True
+        assert out["agent_signal_count"] >= 3  # langgraph + multi-agent + mcp
+
+    async def test_strong_signal_alone_passes_even_without_agent_word(self, temp_vault):
+        """A JD that mentions only LangGraph + tool-calling should pass — those
+        are unambiguous agent-eng terms even without the word 'agent'."""
+        from compass.pipeline.nodes import intake_filter as mod
+
+        out = await mod.intake_filter_node(
+            _state("AI Engineer", "Implement function-calling with LangGraph for our platform.")
+        )
+        assert out["in_scope"] is True
+
+
+class TestAgentSignalCountConsistency:
+    """Regression: every dropped JD should set agent_signal_count to a number,
+    not None. Downstream readers should never have to handle None for that key."""
+
+    async def test_title_reject_sets_signal_count_zero(self, monkeypatch, temp_vault):
+        from compass.pipeline.nodes import intake_filter as mod
+
+        TestRejectRules()._write_prefs(temp_vault)
+        out = await mod.intake_filter_node(_state("Senior Software Engineer"))
+        assert out["in_scope"] is False
+        assert out["agent_signal_count"] == 0
+
+    async def test_jd_reject_sets_signal_count_zero(self, monkeypatch, temp_vault):
+        from compass.pipeline.nodes import intake_filter as mod
+
+        TestRejectRules()._write_prefs(temp_vault)
+        out = await mod.intake_filter_node(
+            _state("AI Engineer", "Looking for 5+ years experience with agents.")
+        )
+        assert out["in_scope"] is False
+        assert out["agent_signal_count"] == 0
+
+
 def test_agent_signal_count_helper():
     """Counts distinct term hits, case-insensitive, word-boundary safe."""
     from compass.pipeline.nodes.intake_filter import _agent_signal_count
@@ -288,4 +361,6 @@ def test_agent_signal_count_helper():
     # word-boundary: "agenda" should not match "agent"
     assert _agent_signal_count("Your daily agenda includes meetings.") == 0
     # "agentic" matches its own pattern, not "agent"
-    assert _agent_signal_count("We are an agentic AI company.") == 1
+    # "agentic AI" is a STRONG term (matches r"\bagentic\s+ai\b"); "agentic"
+    # alone is also a WEAK term — both fire, distinct hits.
+    assert _agent_signal_count("We are an agentic AI company.") == 2

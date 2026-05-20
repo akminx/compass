@@ -130,13 +130,17 @@ def write_job_note(note: JobNote, full_description: str | None = None) -> Path:
     jobs_dir = VAULT_PATH / "jobs"
     jobs_dir.mkdir(parents=True, exist_ok=True)
 
+    from compass.vault.url_dedup import normalize_url
+
+    note_url_norm = normalize_url(note.url)
     target: Path | None = None
     for existing in jobs_dir.glob("*.md"):
         try:
             post = frontmatter.load(existing)
         except Exception:
             continue
-        if post.metadata.get("url") == note.url:
+        existing_url = post.metadata.get("url")
+        if isinstance(existing_url, str) and normalize_url(existing_url) == note_url_norm:
             target = existing
             break
     if target is None:

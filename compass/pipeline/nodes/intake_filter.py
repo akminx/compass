@@ -24,16 +24,25 @@ from compass.pipeline.role_family import keyword_classify, llm_classify, upgrade
 from compass.vault.reader import load_reject_rules
 
 # Body-level signal that the JD actually describes agentic work in production —
-# mirrors the "AND" clause in _profile/target-roles.md::JD-master-boolean. Used
-# as a secondary gate after title-based role_family classification: an AI-flavored
-# title with ZERO of these terms in the body is almost always a generic ML/RAG
-# role, not the agent-eng work the user wants. Word boundaries enforced so
-# "agent" doesn't trip on "agenda" or "agentic" inside "non-agentic".
-_AGENT_BODY_TERMS = [
-    r"\bagents?\b",
-    r"\bagentic\b",
+# mirrors the "AND" clause in _profile/target-roles.md::JD-master-boolean.
+#
+# Tiered to avoid false positives:
+#
+# STRONG signals are unambiguous — they only appear in JDs that actually
+# describe agent/LLM-platform work. At least ONE strong signal is required
+# for the gate to pass on an agent-oriented title.
+#
+# WEAK signals (just "agent" / "agents" / "agentic" on their own) are noisy:
+# every corporate JD has phrases like "be a change agent", "user-agent header",
+# "outage management agent". Weak hits are tracked for the auto-tag (so the
+# dashboard can surface JDs with rich agentic language) but DON'T satisfy the
+# gate on their own.
+_AGENT_STRONG_TERMS = [
     r"\bagent[-\s]?orchestration\b",
     r"\bmulti[-\s]?agent\b",
+    r"\bagentic\s+ai\b",
+    r"\bai\s+agent[s]?\b",
+    r"\bllm\s+agent[s]?\b",
     r"\bmcp\b",
     r"\bmodel context protocol\b",
     r"\blanggraph\b",
@@ -47,16 +56,43 @@ _AGENT_BODY_TERMS = [
     r"\bfunction[-\s]?calling\b",
     r"\bdurable\s+execution\b",
     r"\bsub[-\s]?agents?\b",
+    r"\bagent[-\s]?reliability\b",
+    r"\bagent\s+evaluation\b",
+    r"\bagent\s+platform\b",
+    r"\bagent\s+framework\b",
+    r"\bagent\s+development\b",
+    r"\bagent\s+system\b",
+    r"\bautonomous\s+agent\b",
 ]
-_AGENT_BODY_RE = re.compile("|".join(_AGENT_BODY_TERMS), re.IGNORECASE)
+_AGENT_WEAK_TERMS = [
+    r"\bagentic\b",
+    r"\bagents?\b",
+]
+_AGENT_STRONG_RE = re.compile("|".join(_AGENT_STRONG_TERMS), re.IGNORECASE)
+_AGENT_WEAK_RE = re.compile("|".join(_AGENT_WEAK_TERMS), re.IGNORECASE)
 
 
 def _agent_signal_count(body: str) -> int:
-    """Count distinct agent-related term hits in the body. Returns the unique
-    pattern count, so a body mentioning 'agents' 10 times still scores 1."""
+    """Combined unique-hit count across strong + weak terms — preserved as the
+    `agent_signal_count` exposed in state for downstream tagging. The gate
+    uses `_has_strong_agent_signal` instead for the actual drop decision."""
     if not body:
         return 0
-    return len({m.group(0).lower() for m in _AGENT_BODY_RE.finditer(body)})
+    hits = {m.group(0).lower() for m in _AGENT_STRONG_RE.finditer(body)}
+    hits |= {m.group(0).lower() for m in _AGENT_WEAK_RE.finditer(body)}
+    return len(hits)
+
+
+def _has_strong_agent_signal(body: str) -> bool:
+    """True iff the body contains at least one STRONG agent term. This is the
+    gate criterion — weak terms ("agent" / "agentic" alone) don't satisfy.
+
+    Without this, JDs containing phrases like "be a change agent in our team"
+    or "set the User-Agent header" survive the gate on weak signal alone.
+    """
+    if not body:
+        return False
+    return bool(_AGENT_STRONG_RE.search(body))
 
 
 if TYPE_CHECKING:
@@ -101,7 +137,7 @@ async def intake_filter_node(state: CompassState) -> dict:
                 job.title,
                 needle,
             )
-            return {"in_scope": False, "role_family": "out-of-scope"}
+            return {"in_scope": False, "role_family": "out-of-scope", "agent_signal_count": 0}
     for needle in rules["jd"]:
         if needle and needle in body_lc:
             _log_filtered(job.company, job.title, f"jd rejects: {needle!r}")
@@ -111,7 +147,7 @@ async def intake_filter_node(state: CompassState) -> dict:
                 job.title,
                 needle,
             )
-            return {"in_scope": False, "role_family": "out-of-scope"}
+            return {"in_scope": False, "role_family": "out-of-scope", "agent_signal_count": 0}
 
     decided, family = keyword_classify(job.title)
     if decided is True:
@@ -160,18 +196,24 @@ def _gated_by_agent_signal(company: str, title: str, body: str, role_family: str
     score) can tag/weight by signal strength.
     """
     signal_count = _agent_signal_count(body)
+    has_strong = _has_strong_agent_signal(body)
     agent_oriented = role_family in {"agent-engineer", "applied-ai", "infra-llm"}
-    if agent_oriented and signal_count == 0:
-        _log_filtered(company, title, "no-agent-signal in body")
+    # Gate: an agent-oriented title with NO strong signal is dropped. A title
+    # like "AI Engineer" whose body only says "be a change agent" counts as
+    # zero strong signal even though signal_count>=1. This is intentional —
+    # "agent" alone is too noisy in corporate JD prose.
+    if agent_oriented and not has_strong:
+        _log_filtered(company, title, "no-strong-agent-signal in body")
         logger.info(
-            "intake_filter: dropped %s — %s (agent-oriented title but body has no agent signal)",
+            "intake_filter: dropped %s — %s (agent-oriented title but body has no strong agent signal; signal_count=%d)",
             company,
             title,
+            signal_count,
         )
         return {
             "in_scope": False,
             "role_family": "out-of-scope",
-            "agent_signal_count": 0,
+            "agent_signal_count": signal_count,
         }
     return {
         "in_scope": True,
