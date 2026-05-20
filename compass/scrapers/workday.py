@@ -164,7 +164,8 @@ def _to_rawjob(
             # No usable URL at all — skip rather than write a broken vault row.
             logger.warning(
                 "workday: no usable URL for %r at %s (skipping)",
-                title, company_label,
+                title,
+                company_label,
             )
             return None
         location_str = raw.get("locationsText") or None

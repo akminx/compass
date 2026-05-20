@@ -20,7 +20,10 @@ def test_relative_externalpath_absolutized_against_base():
     instead of stored bare."""
     raw = {"title": "AI Eng", "externalPath": "/job/abc", "postedOn": "Posted Today"}
     rj = _to_rawjob(
-        "Citi", raw, "Build agents.", None,
+        "Citi",
+        raw,
+        "Build agents.",
+        None,
         base_url="https://citi.wd5.myworkdayjobs.com",
     )
     assert rj is not None

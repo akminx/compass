@@ -272,7 +272,15 @@ def regenerate(write: bool = True) -> tuple[list[GapPlanEntry], str]:
         _sync_skill_backlinks(jobs)
         _sync_company_counters(jobs)
         MASTER_GAP_PLAN_PATH.parent.mkdir(parents=True, exist_ok=True)
-        MASTER_GAP_PLAN_PATH.write_text(rendered, encoding="utf-8")
+        # Atomic write: tmp + os.replace so a process kill mid-write leaves
+        # the previous good file in place rather than a half-written one.
+        # Path.write_text uses truncate-then-write which is NOT atomic on
+        # macOS APFS — MCP get_master_gap_plan tool would read garbage.
+        import os as _os
+
+        tmp_path = MASTER_GAP_PLAN_PATH.with_suffix(".md.tmp")
+        tmp_path.write_text(rendered, encoding="utf-8")
+        _os.replace(tmp_path, MASTER_GAP_PLAN_PATH)
     return entries, rendered
 
 

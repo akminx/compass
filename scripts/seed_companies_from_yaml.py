@@ -76,7 +76,16 @@ def main() -> int:
         print("No companies found in _profile/target-companies.yaml.")
         return 1
 
-    notes = [_to_company_note(e) for e in entries]
+    # Defense against an empty-string `company:` field in YAML (would otherwise
+    # write `companies/.md` as a dotfile carrying no information). Drop with
+    # a warning rather than persist garbage.
+    valid_entries = []
+    for e in entries:
+        if not (e.get("company") or "").strip():
+            print(f"  ! skipping YAML entry with empty company name: {e!r}")
+            continue
+        valid_entries.append(e)
+    notes = [_to_company_note(e) for e in valid_entries]
     print(f"Will seed {len(notes)} CompanyNote(s):\n")
     for n in notes:
         print(f"  {n.company:25s}  tier={n.tier:14s}  diff={n.interview_difficulty}")

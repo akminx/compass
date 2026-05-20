@@ -203,9 +203,7 @@ async def run_against_judge(records: list[EvalRecord]) -> tuple[ScoreMetrics, li
         # same taxonomy folding extract_node uses so both sides are canonical.
         from compass.pipeline.nodes.extract import _normalize_skill_list
 
-        judge_skills_canonical = _normalize_skill_list(
-            list(verdict.expected_skills), r.jd_text
-        )
+        judge_skills_canonical = _normalize_skill_list(list(verdict.expected_skills), r.jd_text)
         predicted_scores.append(score.score)
         expected_scores.append(verdict.expected_score)
         predicted_skill_lists.append(extracted_skills)

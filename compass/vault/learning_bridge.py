@@ -31,13 +31,33 @@ class EvidenceArtifact:
 
 
 def _parse_uri(uri: str) -> tuple[Path, str | None]:
+    """Parse a `learning-vault://path/to/file.md[#section]` URI.
+
+    SECURITY: jails the resolved path under LEARNING_VAULT_PATH. A URI like
+    `learning-vault://../../.env` would otherwise escape the vault directory
+    and leak arbitrary host files (verified pre-fix on 2026-05-19). Path is
+    resolved + compared against the vault root; mismatch raises ValueError.
+
+    The threat model assumes the URI may come from LLM output (the assessor
+    cites evidence URIs and prompt-injection in JD bodies could in theory
+    influence cited URIs). Defense-in-depth: validate every URI even though
+    most come from the user's own files.
+    """
     if not uri.startswith(URI_PREFIX):
         raise ValueError(f"not a learning-vault URI: {uri}")
     rest = uri[len(URI_PREFIX) :]
     anchor: str | None = None
     if "#" in rest:
         rest, anchor = rest.split("#", 1)
-    return LEARNING_VAULT_PATH / rest, anchor
+    candidate = (LEARNING_VAULT_PATH / rest).resolve()
+    root = LEARNING_VAULT_PATH.resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as e:
+        raise ValueError(
+            f"learning-vault URI {uri!r} resolves outside the vault root {root}"
+        ) from e
+    return candidate, anchor
 
 
 def _kind_for(path: Path) -> str:

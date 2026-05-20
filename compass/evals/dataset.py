@@ -53,11 +53,20 @@ def load_dataset(path: Path | None = None) -> list[EvalRecord]:
 
 
 def save_dataset(records: list[EvalRecord], path: Path | None = None) -> Path:
-    """Atomically save the dataset to JSON. Pretty-printed so git diffs are
-    readable when a human adds a new example."""
+    """Save the dataset to JSON. Pretty-printed so git diffs are readable
+    when a human adds a new example.
+
+    ATOMIC: writes to a `.tmp` sibling first then `os.replace`. A SIGKILL or
+    disk-full mid-write previously truncated the JSON, making the entire
+    labeled dataset un-parseable on next load. With the atomic swap, the
+    previous good file stays in place on any failure.
+    """
+    import os as _os
+
     p = path or DATASET_PATH
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(
+    tmp_path = p.with_suffix(p.suffix + ".tmp")
+    tmp_path.write_text(
         json.dumps(
             [r.model_dump() for r in records],
             indent=2,
@@ -66,6 +75,7 @@ def save_dataset(records: list[EvalRecord], path: Path | None = None) -> Path:
         + "\n",
         encoding="utf-8",
     )
+    _os.replace(tmp_path, p)
     return p
 
 

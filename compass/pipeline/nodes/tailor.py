@@ -85,7 +85,9 @@ async def tailor_node(state: CompassState) -> dict:
         logger.info(
             "tailor_node: skipping low-score job %s (score=%.2f < threshold=%.2f) "
             "despite human_approved=True",
-            job.url, score.score, threshold,
+            job.url,
+            score.score,
+            threshold,
         )
         return {}
 

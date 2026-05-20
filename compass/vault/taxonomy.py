@@ -152,7 +152,7 @@ def _synonym_index() -> dict[str, str]:
 _CASE_SENSITIVE_CANONICALS: frozenset[str] = frozenset({"ReAct", "Go"})
 
 
-def normalize(raw_skill: str) -> str | None:
+def normalize(raw_skill: str | None) -> str | None:
     """Map an arbitrary skill string to its canonical form, or None if unknown.
 
     Strict synonym match only. The previous substring fallback produced false
@@ -165,7 +165,14 @@ def normalize(raw_skill: str) -> str | None:
     `_CASE_SENSITIVE_CANONICALS` blocks specific collisions: an input "React"
     (capital R only) won't map to canonical "ReAct" because the case patterns
     differ. The LLM has to emit the exact canonical case for those skills.
+
+    Defensive: `None` / empty / non-str inputs return `None` rather than
+    crash. A JobNote with a YAML list-entry written as `- ` parses as
+    `[None]`; without this guard, gap_aggregator.aggregate() crashes the
+    whole regenerate() call on a single malformed JobNote.
     """
+    if not raw_skill or not isinstance(raw_skill, str):
+        return None
     key = _norm_key(raw_skill)
     if not key:
         return None
@@ -191,3 +198,21 @@ def category_for(canonical: str) -> str | None:
 
 def all_canonicals() -> list[str]:
     return list(load_taxonomy().keys())
+
+
+def refresh_taxonomy() -> None:
+    """Clear the LRU caches so the next access re-reads `skill-taxonomy.md`.
+
+    Both `load_taxonomy` and `_synonym_index` are `@lru_cache(maxsize=1)` —
+    long-running processes (the MCP server, the pipeline) cache them at
+    first call and never see file edits. Tests that monkeypatch
+    `TAXONOMY_PATH` get stale data too.
+
+    Call this:
+      - From the MCP server before any analysis tool (so user edits to
+        skill-taxonomy.md are picked up between invocations)
+      - From test fixtures that swap the taxonomy file
+      - After any script that rewrites the canonical taxonomy
+    """
+    load_taxonomy.cache_clear()
+    _synonym_index.cache_clear()

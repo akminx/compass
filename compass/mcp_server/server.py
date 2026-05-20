@@ -173,8 +173,20 @@ async def add_job_from_text(
     Returns {"path": str, "score": float, ...} on success.
     """
     from datetime import date
+    from urllib.parse import urlparse
 
     from compass.pipeline.state import RawJob
+
+    # Same scheme allowlist as add_job_from_url — block file:/ftp:/javascript:
+    # /data: URLs from being persisted as JobNote.url. Without this, a typo or
+    # malicious paste could write a bogus URL into the vault.
+    scheme = (urlparse(url).scheme or "").lower()
+    if scheme not in {"http", "https"}:
+        return {"error": f"only http/https URLs allowed, got scheme={scheme!r}"}
+    if not company or not company.strip():
+        return {"error": "company must be a non-empty string"}
+    if not title or not title.strip():
+        return {"error": "title must be a non-empty string"}
 
     job = RawJob(
         company=company,
@@ -360,8 +372,24 @@ def get_skill_gaps(job_id: str) -> dict:
 
 @mcp.tool()
 def get_profile(section: str) -> str:
-    """Read a file from _profile/. section is the bare filename (e.g. 'resume', 'skill-inventory')."""
-    path = VAULT_PATH / "_profile" / f"{section}.md"
+    """Read a file from _profile/. section is the bare filename (e.g. 'resume', 'skill-inventory').
+
+    SECURITY: validates that the resolved path stays inside `_profile/`. Pre-fix,
+    a section like `../.env` resolved to the vault root and could leak the
+    user's API keys. The same path-containment pattern is used in
+    `generate_cover_letter` and `_load_jobnote` for the same threat class.
+
+    Late-binds VAULT_PATH via `cfg.VAULT_PATH` so the temp_vault test fixture's
+    monkeypatch works — see CLAUDE.md lesson #2.
+    """
+    import compass.config as cfg
+
+    profile_dir = (cfg.VAULT_PATH / "_profile").resolve()
+    path = (cfg.VAULT_PATH / "_profile" / f"{section}.md").resolve()
+    try:
+        path.relative_to(profile_dir)
+    except ValueError:
+        return f"(invalid section name — must be inside _profile/: {section!r})"
     if not path.exists():
         return f"(no such profile section: {section})"
     return path.read_text(encoding="utf-8")

@@ -28,6 +28,7 @@ def _strip_html(raw: str) -> str:
     text = html.unescape(text)
     return re.sub(r"\s+", " ", text).strip()
 
+
 logger = logging.getLogger(__name__)
 
 ASHBY_BASE = "https://api.ashbyhq.com/posting-api/job-board"
