@@ -19,7 +19,7 @@ async def test_retrieve_returns_top_k_relevant_chunks(tiny_inventory, temp_chrom
     assert len(hits) == 2
     skills = [h.skill for h in hits]
     assert "Python" in skills
-    assert any("Cisco MCP" in h.document for h in hits)
+    assert any("Production MCP" in h.document for h in hits)
     assert all(0.0 <= h.score <= 1.0 for h in hits)
 
 

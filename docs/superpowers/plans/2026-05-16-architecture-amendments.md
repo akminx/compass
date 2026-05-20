@@ -130,7 +130,7 @@ def tmp_vault(tmp_path):
     )
     (skills_dir / "Snowflake.md").write_text(
         "---\nskill: Snowflake\nmy_level: proficient\n---\n"
-        "Snowflake is a cloud data warehouse used in production at Cisco for log analysis pipelines."
+        "Snowflake is a cloud data warehouse used in production in a prior role for log analysis pipelines."
     )
     return tmp_path
 

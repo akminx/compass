@@ -30,7 +30,7 @@ async def _fake_score(req, profile_text, job=None) -> JobScore:
         reasoning="Strong MCP + Python match. Score reasoning ends with period.",
         matched_skills=["Python", "MCP"],
         missing_skills=["LangGraph"],
-        tailoring_notes="lead with Cisco MCP work",
+        tailoring_notes="lead with production MCP work",
     )
 
 

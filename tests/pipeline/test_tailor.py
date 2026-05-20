@@ -46,7 +46,7 @@ async def test_tailor_node_writes_tailored_paragraph(monkeypatch, temp_vault):
     from compass.pipeline.nodes import tailor
 
     async def fake_tailor(*a, **kw):
-        return "Lead with your Cisco MCP server work and Minx's 4-server architecture."
+        return "Lead with your production MCP server work and the multi-server architecture."
 
     monkeypatch.setattr(tailor, "_tailor", fake_tailor)
     state = _state(approved=True)

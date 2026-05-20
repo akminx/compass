@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Wire a role-family classifier into the pipeline so only in-scope engineering JDs reach the vault; remove the over-aggressive `SCORE_THRESHOLD` write gate so stretch-role gaps drive the master plan; populate `role_family` + company `tier` on every JobNote; ship `add_application` / `update_application_status` / `list_pending_actions` MCP tools backed by a real ApplicationNote lifecycle; rebuild the dashboard to render daily-actionable Dataview queries. End state: `uv run python -m compass.pipeline.graph` against the configured boards produces a vault that Akash opens every morning to decide what to apply to and what to study.
+**Goal:** Wire a role-family classifier into the pipeline so only in-scope engineering JDs reach the vault; remove the over-aggressive `SCORE_THRESHOLD` write gate so stretch-role gaps drive the master plan; populate `role_family` + company `tier` on every JobNote; ship `add_application` / `update_application_status` / `list_pending_actions` MCP tools backed by a real ApplicationNote lifecycle; rebuild the dashboard to render daily-actionable Dataview queries. End state: `uv run python -m compass.pipeline.graph` against the configured boards produces a vault that the candidate opens every morning to decide what to apply to and what to study.
 
 **Architecture:** New `intake_filter_node` between `intake` and `extract` with a three-stage classifier: (1) title-keyword pre-filter, (2) zero-LLM body-signal *family upgrader* that promotes generic engineering titles to agentic families when the JD body shows enough AI/agent keywords, (3) Gemini-Flash structured-output classifier for borderline titles. Out-of-scope JDs short-circuit to `END`; in-scope JDs carry their (possibly upgraded) `role_family` through to `vault_write_node`. New `compass/vault/target_companies.py` parses `_profile/target-companies.md` and supplies tier on write — with a read-before-write check that preserves human-edited CompanyNote tiers. New `compass/applications/lifecycle.py` exposes the three application-lifecycle functions, surfaced as MCP tools. Both Greenhouse and Lever scrapers gain a `_remote_parser.py` helper. Dashboard rewritten with five Dataview blocks. All changes TDD with fixtures-only unit tests; one final live-LLM smoke at the end.
 
@@ -105,7 +105,7 @@ Expected: 0 errors.
 
 - [ ] **Step 5: Confirm the in-scope / out-of-scope vocabulary**
 
-Re-read `docs/PHASE_0_COMPLETE.md:241-272` (the "Role-family scope definition" Akash signed off on 2026-05-18). The IN/OUT keyword lists in Task 1 must match that scope exactly. If anything is ambiguous, surface to the user BEFORE writing code.
+Re-read `docs/PHASE_0_COMPLETE.md:241-272` (the "Role-family scope definition" the candidate signed off on 2026-05-18). The IN/OUT keyword lists in Task 1 must match that scope exactly. If anything is ambiguous, surface to the user BEFORE writing code.
 
 ---
 
@@ -199,7 +199,7 @@ Returns (True, family) | (False, "out-of-scope") | (None, "") where None means
 Stage 2 (this file, bottom): a Gemini-Flash structured-output classifier called
 only when stage 1 returns None. Inclusion-biased prompt per the spec.
 
-The scope definition is Akash's, dated 2026-05-18, in PHASE_0_COMPLETE.md.
+The scope definition is the candidate's, dated 2026-05-18, in PHASE_0_COMPLETE.md.
 """
 from __future__ import annotations
 
@@ -242,7 +242,7 @@ OUT_TITLE_KEYWORDS: list[str] = [
     "conversation designer", "conversational designer",
     # marketing
     "marketing", "growth marketer", "demand gen", "lifecycle marketing",
-    # devrel / evangelism (out-of-scope per Akash's targeting)
+    # devrel / evangelism (out-of-scope per the candidate's targeting)
     "developer advocate", "developer relations", "devrel", "technical evangelist",
     # ops / HR / finance / legal
     "recruiter", "people operations", "talent acquisition", "human resources",
@@ -351,7 +351,7 @@ OUT means:
 - Marketing / growth / demand gen / lifecycle
 - Accounting / finance / operations / HR / recruiting / legal / compliance / policy-side T&S
 
-BIAS TOWARD INCLUSION. The cost of one extra LLM extract+score is far lower than the cost of dropping a role Akash would want to see. Classify OUT only when:
+BIAS TOWARD INCLUSION. The cost of one extra LLM extract+score is far lower than the cost of dropping a role the candidate would want to see. Classify OUT only when:
   (a) the title is in the OUT list, AND
   (b) the JD body shows zero engineering work.
 
@@ -663,7 +663,7 @@ sales / PM / design / CS. With MAX_JOBS_PER_RUN=50, that's ~$0.10/day saved.
 
 More importantly: it fixes the gap-aggregator bias introduced by Phase 0.B's
 SCORE_THRESHOLD write-gate. Now ALL in-scope JDs reach the vault regardless
-of current match score, so stretch-role gaps (the ones Akash should be
+of current match score, so stretch-role gaps (the ones the candidate should be
 studying toward) actually drive the master gap plan.
 """
 
@@ -1245,7 +1245,7 @@ async def test_unknown_company_tier_remains_unknown(temp_vault):
 
 
 async def test_human_edited_company_tier_preserved(temp_vault):
-    """Bug #15 regression: if Akash edits a CompanyNote's tier in Obsidian to
+    """Bug #15 regression: if the candidate edits a CompanyNote's tier in Obsidian to
     override what target-companies.md says, vault_write must NOT clobber that
     edit on the next pipeline run."""
     # 1. Seed CompanyNote on disk with tier=stretch (simulating a human edit)
@@ -2224,11 +2224,11 @@ async def test_mcp_tailor_resume_reads_existing_paragraph(temp_vault):
     write_job_note(JobNote(
         company="Sierra", title="Agent Engineer", url="https://x/sierra-agent",
         source="manual", date_found=date(2026, 5, 10), match_score=4.5,
-        tailored_paragraph="Lead with MCP project at Cisco.",
+        tailored_paragraph="Lead with MCP project in a prior role.",
     ))
     result = await tailor_resume(job_id="Sierra-Agent_Engineer")
     assert "error" not in result
-    assert result["tailored_paragraph"] == "Lead with MCP project at Cisco."
+    assert result["tailored_paragraph"] == "Lead with MCP project in a prior role."
 ```
 
 - [ ] **Step 2: Implement — replace the TODO comment block at server.py:214**
@@ -2346,7 +2346,7 @@ git commit -m "feat(mcp): expose application lifecycle tools (add/update/list/ta
 **Files:**
 - Modify: `~/Documents/compass-vault/dashboard.md`
 
-This task is human-verified (Obsidian Dataview renders aren't automatable from pytest). The plan executor writes the file; Akash verifies in Obsidian.
+This task is human-verified (Obsidian Dataview renders aren't automatable from pytest). The plan executor writes the file; the candidate verifies in Obsidian.
 
 - [ ] **Step 1: Read the existing dashboard.md**
 
@@ -2465,7 +2465,7 @@ This is the eyeball step. If any panel shows `(empty)` after a recent pipeline r
 - [ ] **Step 4: Commit**
 
 ```bash
-# The dashboard.md lives in compass-vault, not the repo — commit it in the vault repo if Akash versions the vault, otherwise just note it.
+# The dashboard.md lives in compass-vault, not the repo — commit it in the vault repo if the candidate versions the vault, otherwise just note it.
 git add ~/Documents/compass-vault/dashboard.md 2>/dev/null || echo "(vault is not git-tracked; dashboard rewrite is a non-repo change)"
 ```
 
@@ -2504,7 +2504,7 @@ ls ~/Documents/compass-vault/jobs/ | shuf -n 10 | while read f; do
 done
 ```
 
-Every one should be a role Akash would conceivably want. For each: is `role_family` plausible? Is `tier` correct? Is `skills_matched` real?
+Every one should be a role the candidate would conceivably want. For each: is `role_family` plausible? Is `tier` correct? Is `skills_matched` real?
 
 - [ ] **Step 4: Spot-check `_meta/filtered-jobs.md`**
 
@@ -2512,7 +2512,7 @@ Every one should be a role Akash would conceivably want. For each: is `role_fami
 tail -20 ~/Documents/compass-vault/_meta/filtered-jobs.md
 ```
 
-Every dropped row should be obviously out of scope. If you see an agentic-eng role in here, the classifier is wrong — surface to Akash.
+Every dropped row should be obviously out of scope. If you see an agentic-eng role in here, the classifier is wrong — surface to the candidate.
 
 - [ ] **Step 5: Manual application workflow**
 

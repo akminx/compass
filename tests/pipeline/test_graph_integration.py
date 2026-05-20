@@ -29,11 +29,11 @@ def mocked_llms(monkeypatch):
             reasoning="Strong MCP + LangGraph match",
             matched_skills=["MCP", "Python"],
             missing_skills=["LangGraph"],
-            tailoring_notes="lead with Cisco MCP work",
+            tailoring_notes="lead with production MCP work",
         )
 
     async def fake_tailor(*args, **kwargs):
-        return "Open with the Cisco MCP server work and Minx's 4-server architecture."
+        return "Open with the production MCP server work and the multi-server architecture."
 
     monkeypatch.setattr(extract, "_extract", fake_extract)
     monkeypatch.setattr(score, "_score", fake_score)
@@ -78,7 +78,7 @@ async def test_run_pipeline_end_to_end(temp_vault, mocked_llms, auto_approve_hit
     assert loaded.metadata["match_score"] == 4.2
     # The polished paragraph from tailor_node is persisted to the JobNote:
     assert loaded.metadata.get("tailored_paragraph") is not None
-    assert "Cisco MCP" in loaded.metadata["tailored_paragraph"]
+    assert "production MCP" in loaded.metadata["tailored_paragraph"]
     # The short pitch from score_node is preserved in score_reasoning:
     assert loaded.metadata.get("score_reasoning") == "Strong MCP + LangGraph match"
     # Skills were incremented

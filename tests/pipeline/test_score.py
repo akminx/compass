@@ -37,7 +37,7 @@ async def test_score_node_returns_jobscore(monkeypatch, temp_vault):
             reasoning="Strong MCP match",
             matched_skills=["MCP"],
             missing_skills=["LangGraph"],
-            tailoring_notes="Lead with Cisco MCP work.",
+            tailoring_notes="Lead with production MCP work.",
         )
 
     monkeypatch.setattr(score, "_score", fake_score)

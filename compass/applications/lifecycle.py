@@ -45,8 +45,8 @@ def find_jobnote(job_id: str) -> Path:
     Used by add_application AND by the MCP tailor_resume tool. The filename
     substring match is CASE-INSENSITIVE because Obsidian renders frontmatter
     `company` fields as written (often lowercase from ATS board_tokens), but
-    humans naturally type capitalized names — so `"Sierra-Agent_Engineer"`
-    must find a file named `2025-02-13-sierra-Agent_Engineer-<hash>.md`. The
+    humans naturally type capitalized names — so e.g. `"Acme-Agent_Engineer"`
+    must find a file named `2025-02-13-acme-Agent_Engineer-<hash>.md`. The
     URL field comparison stays exact (URLs are case-sensitive by spec).
     """
     jobs_dir = cfg.VAULT_PATH / "jobs"

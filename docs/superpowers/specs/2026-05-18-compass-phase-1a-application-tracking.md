@@ -2,7 +2,7 @@
 
 > Sub-spec of the master design doc (`2026-05-17-compass-mvp-to-portfolio-ship-design.md`). Read the master spec's Phase 1.A row and the Phase 0 handoff (`docs/PHASE_0_COMPLETE.md`) first — this spec is the contract for what 1.A actually ships.
 
-**Status:** Draft · **Date:** 2026-05-18 · **Author:** Akash + Claude
+**Status:** Draft · **Date:** 2026-05-18 · **Author:** the candidate + Claude
 **Parent spec:** `docs/superpowers/specs/2026-05-17-compass-mvp-to-portfolio-ship-design.md`
 **Previous phase:** `phase-0b-pipeline-mvp` (tag) — 81 tests passing, lint clean.
 
@@ -12,10 +12,10 @@
 
 Phase 0.B made Compass produce correct data on real ATS scrapes, but it left two interlocking problems that block daily use:
 
-1. **The vault is biased toward easy wins.** The `SCORE_THRESHOLD ≥ 3.5` gate added in bug-fix #17 keeps sales/PM/designer noise out of the vault — but it also hides agentic-engineering roles Akash currently scores 2.0–3.4 on, which are precisely the *stretch roles whose gaps inform what to study next*. The master gap plan today is therefore a "what I'm already good at" reflection, not a "what the market wants me to learn" mirror.
-2. **There is no application workflow.** Compass scores jobs and writes them to the vault. There is no way to mark "I applied," no status transitions, no next-action reminders, no dashboard view of "what should I do today." Akash cannot use it as a daily tool without leaving the vault to track applications elsewhere.
+1. **The vault is biased toward easy wins.** The `SCORE_THRESHOLD ≥ 3.5` gate added in bug-fix #17 keeps sales/PM/designer noise out of the vault — but it also hides agentic-engineering roles the candidate currently scores 2.0–3.4 on, which are precisely the *stretch roles whose gaps inform what to study next*. The master gap plan today is therefore a "what I'm already good at" reflection, not a "what the market wants me to learn" mirror.
+2. **There is no application workflow.** Compass scores jobs and writes them to the vault. There is no way to mark "I applied," no status transitions, no next-action reminders, no dashboard view of "what should I do today." the candidate cannot use it as a daily tool without leaving the vault to track applications elsewhere.
 
-Phase 1.A fixes both. The result is the first version of Compass that Akash genuinely opens every morning.
+Phase 1.A fixes both. The result is the first version of Compass that the candidate genuinely opens every morning.
 
 ---
 
@@ -23,8 +23,8 @@ Phase 1.A fixes both. The result is the first version of Compass that Akash genu
 
 A run of `uv run python -m compass.pipeline.graph` against the configured ATS boards produces a vault where:
 
-- **Every JobNote is in-scope** for Akash's target role family (engineering work touching agentic AI / production AI systems). Sales / PM / design / CS / marketing / recruiting JDs never reach `extract_node`. False-positive rate ≤ 1 per 50 JDs after manual inspection.
-- **Every in-scope JobNote is written**, regardless of `match_score`. The master gap plan reflects skills demanded by stretch roles (score 2.0+), not only roles Akash already matches.
+- **Every JobNote is in-scope** for the candidate's target role family (engineering work touching agentic AI / production AI systems). Sales / PM / design / CS / marketing / recruiting JDs never reach `extract_node`. False-positive rate ≤ 1 per 50 JDs after manual inspection.
+- **Every in-scope JobNote is written**, regardless of `match_score`. The master gap plan reflects skills demanded by stretch roles (score 2.0+), not only roles the candidate already matches.
 - **Each JobNote has a non-empty `role_family`** frontmatter field (e.g. `agent-engineer`, `applied-ai`, `swe-backend`, `fde-eng`, `infra-llm`). The Dataview dashboard groups by it.
 - **Each JobNote has the company's `tier`** copied from `_profile/target-companies.md` (no more `tier: unknown` on every Sierra / Decagon / Ramp note).
 - **Greenhouse + Lever JobNotes have a populated `remote` field** parsed from the JD's `location` string.
@@ -62,7 +62,7 @@ Tests pass (`uv run pytest -q`), ruff is clean, the post-implementation **advers
    - `list_pending_actions(through_date: date | None = None) -> list[dict]` — globs `applications/*.md`, returns ones where `next_action_date <= through_date` (default today). Sorted ascending by `next_action_date`.
    - All three exposed as MCP tools in `compass/mcp_server/server.py` (today the file has a TODO comment at line 214 noting these ship in 1.A).
 
-6. **`ApplicationNote` writer** — new `write_application_note(note: ApplicationNote) -> Path` in `compass/vault/writer.py`. Filename: `applications/YYYY-MM-DD-Company-Title-<8-char-job_ref-hash>.md`. The hash suffix prevents same-day collisions when Akash applies to two different postings at one company on the same day (different teams / URLs). Idempotency key: `(company, title, applied_date, job_ref)`. Re-running `add_application` on the same JobNote updates the existing file rather than duplicating.
+6. **`ApplicationNote` writer** — new `write_application_note(note: ApplicationNote) -> Path` in `compass/vault/writer.py`. Filename: `applications/YYYY-MM-DD-Company-Title-<8-char-job_ref-hash>.md`. The hash suffix prevents same-day collisions when the candidate applies to two different postings at one company on the same day (different teams / URLs). Idempotency key: `(company, title, applied_date, job_ref)`. Re-running `add_application` on the same JobNote updates the existing file rather than duplicating.
 
 7. **Greenhouse + Lever `remote` field parsing** — new `compass/scrapers/_remote_parser.py` with one function `infer_remote_policy(location: str | None) -> bool | None` matching common substrings (`remote`, `wfh`, `anywhere`, `usa-remote`, `remote-us`, `hybrid`, etc.). Both scrapers call it before constructing `RawJob`. Returns `None` for ambiguous strings (so we don't lie). Ashby already populates `remote` directly (fixed in bug #20) — no change there.
 
@@ -227,7 +227,7 @@ Parsing is naive on purpose: walk the markdown headings, look for `Tier \`apply-
 - **JobNote.tier** is always set to the resolved tier (a JobNote is a per-posting snapshot; if you edit `target-companies.md` later, only future JobNotes pick up the new tier — old ones keep their snapshot value, which is correct).
 - **CompanyNote.tier** is set only when the CompanyNote does not already exist with a non-default tier. The existing writer logic at `compass/vault/writer.py:130-132` only preserves human edits when the *incoming* tier is `"unknown"`, but with Phase 1.A the incoming tier is rarely `unknown` — it's whatever target-companies says. That would silently clobber a human edit in Obsidian (Phase 0 bug #15 resurfacing under a new code path). **Fix:** `vault_write_node` reads the existing CompanyNote (if any) FIRST. If it has a non-default tier set by a human, do not pass a competing tier on write. If it doesn't exist or has `tier=unknown`, pass the resolved tier so creation / first-write gets the correct value.
 
-This means: target-companies.md is the source of truth on first encounter; CompanyNote edits in Obsidian override target-companies thereafter. Akash can edit either side without one stomping the other.
+This means: target-companies.md is the source of truth on first encounter; CompanyNote edits in Obsidian override target-companies thereafter. the candidate can edit either side without one stomping the other.
 
 ### 4.4 Application lifecycle
 
@@ -265,7 +265,7 @@ Every new module that needs `VAULT_PATH` (intake_filter, target_companies, lifec
 - [2026-05-19 09:14:25] anthropic "Product Manager, Claude.ai" — title contains "product manager"
 ```
 
-Purpose: when Akash thinks the gate dropped a role it shouldn't have, he greps this file. False-negative debugging requires this log to exist.
+Purpose: when the candidate thinks the gate dropped a role it shouldn't have, he greps this file. False-negative debugging requires this log to exist.
 
 ---
 
@@ -277,7 +277,7 @@ Purpose: when Akash thinks the gate dropped a role it shouldn't have, he greps t
    ```
    uv run python -m compass.pipeline.graph
    ```
-2. Manually inspect 10 random JobNotes — every one should be a role Akash would conceivably want. Any false negative (an agentic-eng role that was dropped) is logged as a bug and the classifier prompt is tightened.
+2. Manually inspect 10 random JobNotes — every one should be a role the candidate would conceivably want. Any false negative (an agentic-eng role that was dropped) is logged as a bug and the classifier prompt is tightened.
 3. Spot-check 10 entries in `_meta/filtered-jobs.md` — every dropped JD should be obviously out of scope.
 4. Create 3 real applications via `add_application` MCP tool, transition them through `applied → screen → onsite` via `update_application_status`. Verify the linked JobNotes' status updates in Obsidian.
 5. Edit a CompanyNote's `tier` in Obsidian (e.g. force `cresta` to `apply-now`), re-run the pipeline, verify the edit is preserved AND that new JobNotes for that company inherit the edited tier.
@@ -291,9 +291,9 @@ Only after all 6 pass do we cut the `phase-1a-application-tracking` tag.
 
 | Risk | Mitigation |
 |---|---|
-| Classifier false-negatives (drops a role Akash wanted) | Inclusion-biased prompt; `_meta/filtered-jobs.md` review queue; manual inspection step in verification |
+| Classifier false-negatives (drops a role the candidate wanted) | Inclusion-biased prompt; `_meta/filtered-jobs.md` review queue; manual inspection step in verification |
 | Classifier cost balloons (Gemini Flash on every JD) | Stage-1 keyword filter catches ~70%; only borderline titles hit LLM; estimated < $0.05 per daily run |
-| `target-companies.md` parser breaks on Akash editing the file freeform | Parser is defensive (silently skips malformed tables); `_profile/target-companies.md` is human-edited but follows a stable section structure — parser tests include a fixture with deliberately-malformed rows |
+| `target-companies.md` parser breaks on the candidate editing the file freeform | Parser is defensive (silently skips malformed tables); `_profile/target-companies.md` is human-edited but follows a stable section structure — parser tests include a fixture with deliberately-malformed rows |
 | ApplicationNote idempotency collides on re-applying to a different posting at the same company | Filename includes `applied_date`; if same `(company, title, applied_date)` re-runs, update in place; different dates create different files |
 | Removing the `SCORE_THRESHOLD` write gate floods the vault with low-score in-scope roles | Acceptable — that's the point. The gap aggregator weights by `score_factor` so 0.0-score roles still contribute 0 to gap math; non-zero scores contribute proportionally. Dashboard groups by tier + role_family so the human can scan quickly. |
 | Lever / Greenhouse `remote` parser over-matches (e.g. "remote AL" → True when it means Alabama) | Substring rules are conservative ("remote-us", "remote, us", "anywhere"); ambiguous returns `None`. Test fixture covers known confusables. |
@@ -319,7 +319,7 @@ Roughly half the size of Phase 0.B. One implementation session is realistic.
 | Should out-of-scope JDs still be written to the vault (with `status: out-of-scope`)? | **No.** Vault is for in-scope roles only. Filtered-jobs log preserves auditability. Vault clutter is what Phase 1.A is trying to *remove*. |
 | Should the tier lookup happen in `intake_filter` or `vault_write`? | **`vault_write`.** Tier doesn't affect scoring (the tier weights live in `gap_aggregator`, not `score_node`). Cleaner to keep tier as a write-time decoration. |
 | Do we add `pending_approvals` MCP tool now? | **No.** That tool wraps LangGraph `interrupt()` which doesn't ship until 1.B. Adding a stub in 1.A would lie about what works. |
-| Should `add_application` accept a free-text JD paste (not just a vault job_id)? | **No, defer.** Adds a "create JobNote on the fly" code path that's another surface for bugs. If Akash wants to apply to a JD that wasn't scraped, he runs `score_jd` first, copies the result into a JobNote manually, then `add_application` on it. Revisit if friction is high. |
+| Should `add_application` accept a free-text JD paste (not just a vault job_id)? | **No, defer.** Adds a "create JobNote on the fly" code path that's another surface for bugs. If the candidate wants to apply to a JD that wasn't scraped, he runs `score_jd` first, copies the result into a JobNote manually, then `add_application` on it. Revisit if friction is high. |
 
 ---
 

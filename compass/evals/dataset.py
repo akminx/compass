@@ -16,7 +16,7 @@ Hand-labeled at first; later we can also add an LLM-judge column for cheap
 sanity checking on un-labeled JDs (see compass/evals/judge.py).
 
 Start with 20 examples covering the full tier spread — bank rotational entry,
-mid-SaaS, frontier startup, Tier 1.5 data-infra, applied-AI at Anthropic.
+mid-SaaS, frontier startup, Tier 1.5 data-infra, applied-AI at a frontier lab.
 Enough variance to surface tier-specific extract/score biases.
 """
 

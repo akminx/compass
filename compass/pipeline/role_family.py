@@ -40,10 +40,10 @@ IN_TITLE_KEYWORDS: dict[str, list[str]] = {
         "software engineer, agentic",
         "ai native engineer",
         # MTS = Member of Technical Staff. Frontier-startup flat-hierarchy
-        # signal, not literal seniority. Sierra / Decagon / Cognition / Cursor
-        # / Mistral / xAI all use it for agent-eng ICs. The MTS title alone
-        # routes to agent-engineer; if the JD body is research-flavored the
-        # body-signal upgrader can move it elsewhere.
+        # signal, not literal seniority. Many agent-eng-native startups use it
+        # for IC roles. The MTS title alone routes to agent-engineer; if the
+        # JD body is research-flavored the body-signal upgrader can move it
+        # elsewhere.
         "member of technical staff",
         "mts - agents",
         "mts, agents",
@@ -56,8 +56,8 @@ IN_TITLE_KEYWORDS: dict[str, list[str]] = {
         "ml engineer",
         "machine learning engineer",
         "genai engineer",
-        # AI Enablement = Cognition (Devin/Windsurf), Cursor — FDE-lite path
-        # explicitly named in target-roles.md as in-range.
+        # "AI Enablement" titles are an FDE-lite customer-facing path at
+        # several AI-native companies. In-range per target-roles.md.
         "ai enablement engineer",
     ],
     "infra-llm": [
@@ -220,11 +220,11 @@ ML_SIGNAL = [
 # `upgrade_family` only promotes families in this set to `agent-engineer` /
 # `applied-ai` based on JD body signals. Mobile and frontend are intentionally
 # excluded — a React Native job at an LLM-native startup whose JD mentions
-# "LangGraph" once is still a mobile job, not an agent-engineering job. The
-# user isn't a mobile or frontend specialist; promoting these clutters the
-# vault. Backend / fullstack / founding / other-eng are kept eligible because
-# "Software Engineer, Product" at Sierra is a real agent-eng role posted
-# under a generic SWE title.
+# "LangGraph" once is still a mobile job, not an agent-engineering job.
+# Mobile and frontend specialization is out of scope per candidate config;
+# promoting these clutters the vault. Backend / fullstack / founding /
+# other-eng are kept eligible because real agent-eng work is often posted
+# under a generic SWE title at AI-native companies.
 GENERIC_FAMILIES = {
     "swe-backend",
     "swe-fullstack",

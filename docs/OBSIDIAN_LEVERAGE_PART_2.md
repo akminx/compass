@@ -76,10 +76,10 @@ You get a recruiter screen for Sierra Agent Engineer. You need to know which of 
 Create `compass-vault/interview-prep/stories/*.md` — one note per STAR story (Situation, Task, Action, Result). Each story links to the skills it demonstrates:
 
 ```markdown
-# Cisco MCP Servers — 4-server architecture
+# production MCP Servers — 4-server architecture
 
 ## Situation
-Cisco needed natural-language access to their internal observability stack...
+a prior employer needed natural-language access to their internal observability stack...
 
 ## Task
 Build MCP servers for [[Splunk]], [[Grafana]], [[Datadog]], [[ServiceNow]]...
@@ -129,7 +129,7 @@ After every interview, a retro note in `learning-vault/interview-prep/postmortem
 Result: passed → onsite
 
 ## What worked
-- Led with Cisco MCP story for the agent-orchestration question
+- Led with production MCP story for the agent-orchestration question
 - "Show me a hard debugging session" → described the C1 audit-trail
   divergence we fixed in Compass 1.B.1
 
@@ -406,7 +406,7 @@ Each `skills/X.md` already has `last_assessed: datetime` and `my_level: int`. Ad
 ```yaml
 level_history:
   - {date: 2026-01-15, level: 1, note: "first MCP server"}
-  - {date: 2026-03-20, level: 3, note: "Cisco 4-server architecture shipped"}
+  - {date: 2026-03-20, level: 3, note: "a 4-server MCP architecture shipped"}
   - {date: 2026-05-19, level: 4, note: "Compass MCP server with production HITL"}
 ```
 

@@ -131,8 +131,8 @@ LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 
 # ── Vaults ───────────────────────────────────────────────────────────────────
-VAULT_PATH=/Users/akmini/Documents/compass-vault
-LEARNING_VAULT_PATH=/Users/akmini/Documents/learning-vault
+VAULT_PATH=/Users/<user>/Documents/compass-vault
+LEARNING_VAULT_PATH=/Users/<user>/Documents/learning-vault
 
 # ── RAG ──────────────────────────────────────────────────────────────────────
 CHROMA_PATH=~/.compass/chroma

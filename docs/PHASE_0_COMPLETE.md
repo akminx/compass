@@ -8,7 +8,7 @@
 
 ## What Compass is (one-paragraph recap)
 
-Compass is an agentic career-coaching system. It scrapes ATS job boards, scores each posting against a candidate profile, identifies skill gaps, and generates a weekly study plan. The candidate profile + every JD + every skill grade + every gap-plan output lives in an Obsidian-readable vault at `~/Documents/compass-vault/`. Akash builds and uses it himself; it's both a daily tool and a public portfolio artifact for tier-2 agentic-AI hiring (Sierra Agent Engineer, Decagon MTS, Ramp ADP, etc.).
+Compass is an agentic career-coaching system. It scrapes ATS job boards, scores each posting against a candidate profile, identifies skill gaps, and generates a weekly study plan. The candidate profile + every JD + every skill grade + every gap-plan output lives in an Obsidian-readable vault at `~/Documents/compass-vault/`. the candidate builds and uses it himself; it's both a daily tool and a public portfolio artifact for tier-2 agentic-AI hiring (Sierra Agent Engineer, Decagon MTS, Ramp ADP, etc.).
 
 **Authoritative spec:** `docs/superpowers/specs/2026-05-17-compass-mvp-to-portfolio-ship-design.md`
 
@@ -68,7 +68,7 @@ The pattern that surfaced over and over: **unit tests passed, smoke tests passed
 ✅ **Scrapers return real JD content** across all 3 ATSes (Greenhouse, Lever, Ashby) — 1023+ jobs sampled, 0 silent-empty bugs
 ✅ **Extract** produces canonical-typed skills, drops hallucinations against JD text
 ✅ **Score** is constrained to JD universe; matched/missing overlap deduped
-✅ **Tailor** fires only on `human_approved=True`; references real candidate projects (verified on Sierra/Decagon/Cresta/Ramp JobNotes — "Cisco MCP", "Minx", concrete numbers)
+✅ **Tailor** fires only on `human_approved=True`; references real candidate projects (verified on Sierra/Decagon/Cresta/Ramp JobNotes — "production MCP", "a personal local-first OS project", concrete numbers)
 ✅ **Vault writes** are idempotent on URL; filenames collision-free; human Obsidian edits preserved
 ✅ **gap_aggregator** weights correctly; counts are derived (no drift); creates missing skill notes; zeros below-rubric scores
 ✅ **skill_assessor agent** constructs without error (was broken before)
@@ -225,7 +225,7 @@ uv run python -m compass.pipeline.graph                       # re-score with cu
 
 The bug #17 fix (enforcing `SCORE_THRESHOLD` on vault writes) cleaned up vault clutter but introduced a **gap-aggregator bias**: only roles you'd score ≥3.5 on contribute to the master gap plan. This is the **wrong filter** for the project's goal.
 
-**What Akash actually wants** — and what the gap aggregator should reflect — is "the skills every agentic-engineering JD asks for, even the ones I'd score 2.0 on today, because those are the ones I should be studying toward." Filtering by match score hides exactly the stretch roles whose gaps are most informative for study planning.
+**What the candidate actually wants** — and what the gap aggregator should reflect — is "the skills every agentic-engineering JD asks for, even the ones I'd score 2.0 on today, because those are the ones I should be studying toward." Filtering by match score hides exactly the stretch roles whose gaps are most informative for study planning.
 
 The right filter is **role family** (agentic-eng vs sales/marketing/design), applied **before** scoring so non-relevant JDs never burn an LLM call. Sales/PM/designer JDs drop out at the gate; agentic-eng JDs all reach the vault regardless of current match score; the gap aggregator reads everything.
 
@@ -236,9 +236,9 @@ The right filter is **role family** (agentic-eng vs sales/marketing/design), app
 3. **Populate `role_family`** on the JobNote (currently `''` on every note — dead field) from the gate's classification. Phase 1.A's Dataview dashboard groups by it.
 4. **Re-cleanup** the vault one more time after this change ships and re-run the pipeline so the master gap plan reflects all agentic-eng roles in the wild.
 
-Skipping step 2 means continuing to ship a gap plan that's biased toward easy wins instead of stretch targets — directly contrary to what Akash said he wants the tool to do.
+Skipping step 2 means continuing to ship a gap plan that's biased toward easy wins instead of stretch targets — directly contrary to what the candidate said he wants the tool to do.
 
-### Role-family scope definition (Akash, 2026-05-18)
+### Role-family scope definition (the candidate, 2026-05-18)
 
 **IN-SCOPE — keep these in the vault, contribute to gap plan, eligible for tailoring:**
 
@@ -263,13 +263,13 @@ The unifying criterion is **"engineering work that touches agentic AI or product
 - Marketing / Content / Growth / Demand Gen / Lifecycle
 - Accounting / Finance / Operations / HR / People / Recruiting
 - Legal / Compliance / Trust & Safety policy-side
-- Internships (filter separately — most are out-of-scope for Akash's stage)
+- Internships (filter separately — most are out-of-scope for the candidate's stage)
 
 **Borderline rule — when in doubt, classify IN and let HiTL filter:**
 
-The cost of one extra LLM extract+score (~$0.003) is far lower than the cost of silently filtering out a role Akash would have wanted to see. So the classifier should be biased toward inclusion, and the rejection prompt should require explicit evidence (job title in OUT list OR JD body shows zero engineering work) rather than the default.
+The cost of one extra LLM extract+score (~$0.003) is far lower than the cost of silently filtering out a role the candidate would have wanted to see. So the classifier should be biased toward inclusion, and the rejection prompt should require explicit evidence (job title in OUT list OR JD body shows zero engineering work) rather than the default.
 
-**Verification after implementing:** run the pipeline on `sierra,decagon,ramp,langchain,posthog,linear,gleanwork,cresta,databricks,anthropic`. Manually scan the resulting JobNotes — every one should be a role Akash would conceivably want. Any false negatives (an agentic-eng role that got dropped) is a worse bug than a false positive (a borderline role that got scored).
+**Verification after implementing:** run the pipeline on `sierra,decagon,ramp,langchain,posthog,linear,gleanwork,cresta,databricks,anthropic`. Manually scan the resulting JobNotes — every one should be a role the candidate would conceivably want. Any false negatives (an agentic-eng role that got dropped) is a worse bug than a false positive (a borderline role that got scored).
 
 ---
 
@@ -289,7 +289,7 @@ Phase 1.A scope per spec:
 - Role-family gate before scoring (cost optimization)
 
 Expected: 1 build session, ~250 LoC across ~8 files.
-End state: Akash opens `compass-vault/dashboard.md` every morning to
+End state: the candidate opens `compass-vault/dashboard.md` every morning to
 decide applications.
 ```
 

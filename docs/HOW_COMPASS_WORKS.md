@@ -400,7 +400,7 @@ At 7 runs/week that's $3.50/week. Modal compute is free at this scale.
 
 - **Modal cron deploy** — daily scrape + weekly skill-assessor.
   Not deployed. Manual runs work fine for the 2-month sprint.
-- **Cisco-internal manual tracker** — AI Hub / Outshift / Webex AI /
+- **a prior employer-internal manual tracker** — AI Hub / Outshift / Webex AI /
   ThousandEyes AI. Need to come from a manager referral, not the
   ATS scrape.
 - **Banks/consulting beyond the 5 Workday tenants** — JPM Oracle Cloud,

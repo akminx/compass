@@ -61,7 +61,7 @@ The two HiTL cleanups (msgpack + checkpoint purge) are intentionally Tasks 1 and
 - [ ] **Step 1: Verify clean tree on `phase-1b1-hitl` tag**
 
 ```bash
-cd /Users/akmini/Documents/compass
+cd /Users/<user>/Documents/compass
 git status                       # expected: clean
 git describe --tags --abbrev=0   # expected: phase-1b1-hitl
 uv run pytest -q                 # expected: 239 passed
@@ -496,7 +496,7 @@ def tiny_inventory(temp_vault, monkeypatch: pytest.MonkeyPatch) -> Path:
         "# Skill Inventory\n\n"
         "## Python\n\n"
         "Level 4. 5 years building backends and agents in Python. "
-        "Cisco MCP server, LangGraph pipelines, FastAPI services.\n\n"
+        "production MCP servers, LangGraph pipelines, FastAPI services.\n\n"
         "## LangGraph\n\n"
         "Level 3. Built Compass pipeline with stateful graph, conditional "
         "edges, interrupt()+AsyncSqliteSaver checkpointing for HITL.\n\n"
@@ -839,7 +839,7 @@ async def test_retrieve_returns_top_k_relevant_chunks(tiny_inventory, temp_chrom
     # The real contract is "Python ranks in the top-2", not "exactly first".
     skills = [h.skill for h in hits]
     assert "Python" in skills
-    assert any("Cisco MCP" in h.document for h in hits)  # body content present
+    assert any("production MCP" in h.document for h in hits)  # body content present
     assert all(0.0 <= h.score <= 1.0 for h in hits)  # normalized similarity scores
 
 
@@ -1199,7 +1199,7 @@ uv run python -c "
 import asyncio
 from compass.mcp_server.server import score_jd
 async def main():
-    jd_text = open('/Users/akmini/Documents/compass-vault/jobs/2024-10-05-cognition-Special_Projects_Engineer-5343fadf.md').read()
+    jd_text = open('/Users/<user>/Documents/compass-vault/jobs/2024-10-05-cognition-Special_Projects_Engineer-5343fadf.md').read()
     result = await score_jd(jd_text)
     print(f'RAG score: {result[\"score\"][\"score\"]}')
     print(f'matched: {result[\"score\"][\"matched_skills\"]}')

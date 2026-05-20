@@ -2,18 +2,18 @@
 
 > Date: 2026-05-17
 > Status: Approved (user)
-> Author: Akash Aedavelli + Claude
+> Author: the candidate Aedavelli + Claude
 > Related: `compass/CLAUDE.md`, `compass/docs/ARCHITECTURE.md`, `compass-vault/_profile/target-companies.md`
 
 ## Problem Statement
 
-Akash is targeting tier-2 agentic-AI startups (Sierra, Decagon, Ramp, Hebbia, Glean, etc.) and big-tech L3/L4 agentic roles (NVIDIA, Apple, Google Cloud) in 2026. He has 1.5 YoE at Cisco, strong MCP/Minx portfolio artifacts, and a calibrated skill inventory in `compass-vault/_profile/`. He needs:
+the candidate is targeting tier-2 agentic-AI startups (Sierra, Decagon, Ramp, Hebbia, Glean, etc.) and big-tech L3/L4 agentic roles (NVIDIA, Apple, Google Cloud) in 2026. He has 1.5 YoE in a prior role, strong MCP/a personal local-first OS project portfolio artifacts, and a calibrated skill inventory in `compass-vault/_profile/`. He needs:
 
 1. A working tool that helps him find, score, and decide on jobs every morning — replacing manual LinkedIn browsing.
 2. A portfolio artifact impressive enough to link from his resume.
 3. A skill-tracking loop that closes the gap between "I have notes in learning-vault" and "my resume reflects what I've actually shipped."
 
-**FDE-track roles (Anthropic FDE, OpenAI FDE, Salesforce AI FDE) are explicitly OUT OF SCOPE for this project's audience** — Akash has insufficient YoE and will revisit after another 12–18 months. The design optimizes for tier-2 product engineering and tier-3 big-tech L4 audiences (Sierra Agent Engineer, Decagon MTS, Ramp Agent Developer Platform, Hebbia/Glean Applied AI, Cognition AI Enablement, NVIDIA/Apple/Google Cloud L4).
+**FDE-track roles (Anthropic FDE, OpenAI FDE, Salesforce AI FDE) are explicitly OUT OF SCOPE for this project's audience** — the candidate has insufficient YoE and will revisit after another 12–18 months. The design optimizes for tier-2 product engineering and tier-3 big-tech L4 audiences (Sierra Agent Engineer, Decagon MTS, Ramp Agent Developer Platform, Hebbia/Glean Applied AI, Cognition AI Enablement, NVIDIA/Apple/Google Cloud L4).
 
 > **Note on CLAUDE.md drift:** `compass/CLAUDE.md` was previously written with Sierra/Scale/Databricks FDE as the named portfolio audience. That framing is stale — this spec supersedes it. CLAUDE.md updated in the same commit to reflect the tier-2 product-engineering audience.
 
@@ -22,10 +22,10 @@ Akash is targeting tier-2 agentic-AI startups (Sierra, Decagon, Ramp, Hebbia, Gl
 A single agentic system, **Compass**, that:
 
 1. Scrapes Greenhouse/Lever/Ashby job boards for tier-2 + apply-now companies
-2. Scores each job against Akash's profile + skill inventory
+2. Scores each job against the candidate's profile + skill inventory
 3. Tracks application lifecycle (applied → screen → onsite → offer/reject) with next-action reminders
-4. Generates a master gap plan: which skills appear most in high-score jobs that Akash currently lacks
-5. Grades Akash's skill levels from evidence URIs in his learning-vault, regenerating the gap plan as he ships things
+4. Generates a master gap plan: which skills appear most in high-score jobs that the candidate currently lacks
+5. Grades the candidate's skill levels from evidence URIs in his learning-vault, regenerating the gap plan as he ships things
 6. Runs daily via Modal cron with traces logged to Langfuse
 7. Reaches "genuinely impressive to any recruiter" via README polish, public Langfuse trace URL, 30-JD eval set, blog post
 
@@ -42,7 +42,7 @@ A single agentic system, **Compass**, that:
 
 ## Approach
 
-**Vertical-slice-first sequencing across four phases.** Each phase produces a shippable, demoable thing. Akash can stop after any phase and have a coherent portfolio item.
+**Vertical-slice-first sequencing across four phases.** Each phase produces a shippable, demoable thing. the candidate can stop after any phase and have a coherent portfolio item.
 
 | Phase | Goal | Sessions | End state |
 |---|---|---|---|
@@ -71,8 +71,8 @@ Outer loop (daily, automatic):
   Write to compass-vault/jobs/  →  master-gap-plan.md regenerates
 
 
-Inner loop (on demand, when Akash ships something):
-  Akash writes a note in learning-vault (e.g. projects/compass/postmortem.md)
+Inner loop (on demand, when the candidate ships something):
+  the candidate writes a note in learning-vault (e.g. projects/compass/postmortem.md)
       ↓
   Adds learning-vault:// URI to evidence: in compass-vault/skills/<Skill>.md
       ↓
@@ -179,7 +179,7 @@ All nodes implemented as the simplest version that works end-to-end. Ends with `
 6.   score_node        → Gemini Flash → JobScore{score: 4.2, matched: ["MCP", ...], missing: ["LangGraph"]}
 7.   reflect_node      → no-op (score above threshold, no reflection needed)
 8.   hitl_node         → auto-approve since 4.2 ≥ 3.5
-9.   tailor_node       → Sonnet → "Lead with your Cisco MCP work and Minx's 4-server pattern..."
+9.   tailor_node       → Sonnet → "Lead with your production MCP work and the candidate's local-first OS 4-server pattern..."
 10.  vault_write_node  → writes compass-vault/jobs/2026-05-18-Sierra-Agent-Engineer.md
                        → updates compass-vault/companies/Sierra.md
                        → increments compass-vault/skills/LangGraph.md appears_in_jobs
@@ -258,7 +258,7 @@ Every criterion below is verifiable (testable, observable, or has a concrete art
 | Pydantic AI structured extraction fails on unusual JD format | Medium | Retry once with stricter prompt; on second failure, mark job `errors` and skip — never crash batch. |
 | Skill assessor over-grades from weak evidence | Medium | Adversarial-grader prompt + asymmetric promotion (jumping 2+ levels requires HiTL). Already designed in. |
 | Eval set becomes stale as JD market shifts | High over 6 months | Eval harness logs per-month accuracy; flag drift; refresh labels quarterly. |
-| Akash gets caught up in scope-creep on Phase 3+ instead of applying to jobs | High | Phase 2.C marks "applying" as the next priority; roadmap NOW.md should enforce. |
+| the candidate gets caught up in scope-creep on Phase 3+ instead of applying to jobs | High | Phase 2.C marks "applying" as the next priority; roadmap NOW.md should enforce. |
 | **Secrets leak to public repo** (Compass repo is going public) | Medium | `.gitignore` includes `.env`, `.compass/`, `*.db`; pre-commit hook scans for `sk-or-`, `sk-ant-`, `pk-lf-`, `sk-lf-`; Modal Secrets used for cloud (no env file in deployment); README `.env.example` contains only placeholders. Audit `git log -p` before first `git push origin main`. |
 | **Modal cron fires at wrong wall-clock time** (TZ default = UTC) | Medium | Pin `timezone="America/Chicago"` on every `Cron()` schedule. Verify first three fires by checking `_meta/agent-log.md` timestamps match expected wall-clock. |
 | **Langfuse self-hosted goes down** mid-pipeline | Low | Callback handler swallows trace failures by default; pipeline keeps running. Add a healthcheck on Langfuse before each batch; if down, log warning and continue (don't block scoring). |

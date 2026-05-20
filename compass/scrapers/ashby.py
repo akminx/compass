@@ -2,7 +2,7 @@
 Ashby public API scraper.
 
 Endpoint: GET https://api.ashbyhq.com/posting-api/job-board/{slug}?includeCompensation=true
-No authentication required. Covers Sierra, Decagon, Cognition, Ramp, OpenAI, Cursor, and many more.
+No authentication required. Many agent-eng-native AI companies host their boards on Ashby.
 """
 
 from __future__ import annotations

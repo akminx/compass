@@ -654,7 +654,7 @@ async def test_score_node_returns_jobscore(monkeypatch, temp_vault):
         return JobScore(
             score=4.2, reasoning="Strong MCP match",
             matched_skills=["MCP"], missing_skills=["LangGraph"],
-            tailoring_notes="Lead with Cisco MCP work.",
+            tailoring_notes="Lead with production MCP work.",
         )
 
     monkeypatch.setattr(score, "_score", fake_score)
@@ -857,7 +857,7 @@ async def test_tailor_node_writes_tailored_paragraph(monkeypatch, temp_vault):
     from compass.pipeline.nodes import tailor
 
     async def fake_tailor(*a, **kw):
-        return "Lead with your Cisco MCP server work and Minx's 4-server architecture."
+        return "Lead with your production MCP servers work and a 4-server MCP architecture."
 
     monkeypatch.setattr(tailor, "_tailor", fake_tailor)
     state = _state(approved=True)
@@ -1462,11 +1462,11 @@ def mocked_llms(monkeypatch):
         return JobScore(
             score=4.2, reasoning="Strong MCP + LangGraph match",
             matched_skills=["MCP", "Python"], missing_skills=["LangGraph"],
-            tailoring_notes="lead with Cisco MCP work",
+            tailoring_notes="lead with production MCP work",
         )
 
     async def fake_tailor(*args, **kwargs):
-        return "Open with the Cisco MCP server work and Minx's 4-server architecture."
+        return "Open with the production MCP servers work and a 4-server MCP architecture."
 
     monkeypatch.setattr(extract, "_extract", fake_extract)
     monkeypatch.setattr(score, "_score", fake_score)
@@ -1496,7 +1496,7 @@ async def test_run_pipeline_end_to_end(temp_vault, mocked_llms):
     assert loaded.metadata["match_score"] == 4.2
     # The polished paragraph from tailor_node is persisted to the JobNote:
     assert loaded.metadata.get("tailored_paragraph") is not None
-    assert "Cisco MCP" in loaded.metadata["tailored_paragraph"]
+    assert "production MCP" in loaded.metadata["tailored_paragraph"]
     # The short pitch from score_node is preserved in score_reasoning OR matched_skills logic;
     # score.tailoring_notes from the fake is not overwritten:
     assert loaded.metadata.get("score_reasoning") == "Strong MCP + LangGraph match"

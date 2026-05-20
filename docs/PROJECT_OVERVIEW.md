@@ -154,7 +154,7 @@ The interesting one. Three branches:
 
 Only runs if the human approved. Uses Sonnet 4.6 to write a custom paragraph for that JD, referencing the candidate's real projects. The output is recruiter-grade prose, not LLM slop. Example from a real run:
 
-> "Position yourself as the ideal founder-mindset candidate who has already built and deployed real-world AI agents at scale. Lead with your MCP server portfolio at Cisco where you created natural language interfaces..."
+> "Position yourself as the ideal founder-mindset candidate who has already built and deployed real-world AI agents at scale. Lead with your production MCP server portfolio where you created natural language interfaces..."
 
 ### Step 8: `vault_write_node`
 
@@ -205,7 +205,7 @@ This pattern became the project's most expensive lesson and is repeated through 
 
 Two big themes:
 
-**1. Role-family gating + removing the score-write gate.** Phase 0.B had `SCORE_THRESHOLD=3.5` as a vault-write gate — only jobs scoring above that got written. This was the wrong filter. Akash wants the gap plan to include skills from stretch roles (jobs he'd score 2.0 on), because *those gaps are the most informative for study planning*. Filtering on match score hid exactly the right signal.
+**1. Role-family gating + removing the score-write gate.** Phase 0.B had `SCORE_THRESHOLD=3.5` as a vault-write gate — only jobs scoring above that got written. This was the wrong filter. the candidate wants the gap plan to include skills from stretch roles (jobs he'd score 2.0 on), because *those gaps are the most informative for study planning*. Filtering on match score hid exactly the right signal.
 
 The fix:
 - **Role-family gate at intake** (the `intake_filter_node` above) drops out-of-scope JDs cheaply
@@ -341,7 +341,7 @@ After wiring 4 skills to actual evidence URIs:
 | Eval_harness | 0 | 0 | "Hamel reading material status=queued, read_count=0. No applied work." |
 | HiTL | 1 | 1 | "Decision log template without actual HiTL decisions or artifacts." |
 
-**This is the value working as intended.** The grader correctly refused to credit Akash's actual MCP/LangGraph/HiTL work — because the *learning vault* doesn't yet document it. The work itself lives in the compass codebase. Filling `learning-vault/projects/compass/decisions.md` with the real architectural decisions from Phases 0-1.B.2 will raise the grades on next run.
+**This is the value working as intended.** The grader correctly refused to credit the candidate's actual MCP/LangGraph/HiTL work — because the *learning vault* doesn't yet document it. The work itself lives in the compass codebase. Filling `learning-vault/projects/compass/decisions.md` with the real architectural decisions from Phases 0-1.B.2 will raise the grades on next run.
 
 This is the loop: study/build → write it down → cite the writeup as evidence → agent regrades → gap plan reprioritizes. It closes the feedback loop between "what the market wants" and "what I can credibly claim."
 
@@ -361,7 +361,7 @@ This is the loop: study/build → write it down → cite the writeup as evidence
 
 **Decision**: the human approves paused jobs via MCP tools called from Claude Code, not via a separate web app.
 
-**Why**: Akash already lives in Claude Code daily. Building a Flask UI to surface 5 pending approvals would be over-engineered. MCP tools (`pending_approvals()`, `approve(tid, True, "LGTM")`) are zero-friction from his existing workflow.
+**Why**: the candidate already lives in Claude Code daily. Building a Flask UI to surface 5 pending approvals would be over-engineered. MCP tools (`pending_approvals()`, `approve(tid, True, "LGTM")`) are zero-friction from his existing workflow.
 
 **Trade-off**: the dashboard doesn't surface pending approvals (Dataview can't read SQLite). Phase 2.B may add a thin web view if this becomes a daily-flow friction point.
 
@@ -369,7 +369,7 @@ This is the loop: study/build → write it down → cite the writeup as evidence
 
 **Decision**: agent-written content goes to `~/Documents/compass-vault/`. Personal notes stay in `~/Documents/learning-vault/`. The pipeline code only writes to compass-vault.
 
-**Why**: separation of concerns. The agent can rewrite anything in compass-vault freely — it's the system's output. The learning-vault is Akash's brain — the agent never touches it; it only resolves `learning-vault://` URIs to read evidence.
+**Why**: separation of concerns. The agent can rewrite anything in compass-vault freely — it's the system's output. The learning-vault is the candidate's brain — the agent never touches it; it only resolves `learning-vault://` URIs to read evidence.
 
 **Trade-off**: cross-vault evidence requires the URI protocol (`compass/vault/learning_bridge.py`). Slight indirection. But preserves the cognitive model: "the agent doesn't read my journal."
 

@@ -470,7 +470,7 @@ def add_application(
 ) -> dict:
     """Create an ApplicationNote linked to a JobNote. Marks the JobNote as applied.
 
-    job_id: substring of the JobNote filename (e.g. 'Sierra-Agent_Engineer') or
+    job_id: substring of the JobNote filename (e.g. 'acme-Agent_Engineer') or
             the JobNote's url field. Returns an error dict if zero or >1 match.
 
     force: pass True to overwrite an existing ApplicationNote (use for reposted

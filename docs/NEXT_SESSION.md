@@ -87,10 +87,10 @@ User-facing edits to two files in `~/Documents/compass-vault/_profile/`:
    every JD they're targeting reads "LangGraph / MCP / agentic AI" as the
    primary keyword line. Free ATS-keyword + recruiter-scan improvement.
 
-2. **`skill-inventory.md`** — confirm the Cisco scope description matches
+2. **`skill-inventory.md`** — confirm the a prior employer scope description matches
    `role-clarifications.md` (test development engineer, not security).
-   Verify the MCP cluster at level 4 reflects the production Cisco work +
-   Minx 4 servers. Consider bumping LangGraph 1→3 to match the just-applied
+   Verify the MCP cluster at level 4 reflects the production a prior employer work +
+   a personal local-first OS project 4 servers. Consider bumping LangGraph 1→3 to match the just-applied
    assessor proposal (user can also approve via MCP).
 
 This is YOUR job tomorrow morning to walk them through. Don't run the
@@ -101,7 +101,7 @@ refresh until this is done — it directly affects every score.
 ## Pre-flight check (run before anything)
 
 ```bash
-cd /Users/akmini/Documents/compass
+cd /Users/<user>/Documents/compass
 git status                                  # expect: clean on phase-1b2-rag
 git log --oneline -3                        # confirm HEAD = 7971630
 uv run pytest -q 2>&1 | tail -3             # expect: 411 passed
@@ -130,7 +130,7 @@ If anything is red, **STOP** and diagnose before proceeding.
 | 1:00 | **Approve HiTL-paused jobs** | Each paused thread_id needs an MCP `approve_job(thread_id, decision)` call. Currently no MCP tool for this — uses `compass.hitl.resume.resume_pending` programmatically. If you find this is awkward, that's the signal to ship an `approve_job` MCP tool. |
 | 1:30 | **Label 10 JobNotes** | `uv run python -m scripts.label_jd <filename>` for the 10 strongest-fit JobNotes — the agent's extract output displays, user provides expected_score (their gut read) + expected_skills (keep agent's or override). One-keystroke labeling for cases where the agent got it right. |
 | 2:15 | **Rigorous eval baseline** | `uv run python -m compass.evals.runner --labels` — now you have measured numbers vs hand-labels. Record in `docs/EVAL_BASELINE.md` |
-| 2:30 | **First applications** | Generate cover letters for 3 strongest fits via `generate_cover_letter(filename)` MCP tool. Apply via company portals. Track in `applications/` via `add_application` MCP tool (codepath untested in production — first real use). Cisco internal first (highest EV, no LC). |
+| 2:30 | **First applications** | Generate cover letters for 3 strongest fits via `generate_cover_letter(filename)` MCP tool. Apply via company portals. Track in `applications/` via `add_application` MCP tool (codepath untested in production — first real use). an internal-portal track first (highest EV, no LC). |
 | 3:00 | **Done for day 1** | First measurement + first applications + first real Compass run on disk |
 
 ---
@@ -256,8 +256,8 @@ Modal compute: $0 (not deployed).
 
 1. **This doc** (you just read it) — start state + plan
 2. **`docs/HOW_COMPASS_WORKS.md`** (441 lines) — what Compass is, current architecture
-3. **`/Users/akmini/.claude/CLAUDE.md`** (user's global preferences)
-4. **`/Users/akmini/Documents/compass/CLAUDE.md`** (repo conventions)
+3. **`/Users/<user>/.claude/CLAUDE.md`** (user's global preferences)
+4. **`/Users/<user>/Documents/compass/CLAUDE.md`** (repo conventions)
 5. **`docs/KNOWN_DATA_QUALITY_ISSUES.md`** — deferred bugs with severity + fix path
 6. **`docs/TWO_WEEK_SPRINT.md`** — the previous sprint plan (mostly executed in last session, but useful for sequencing context)
 7. **`compass-vault/_profile/target-companies.yaml`** — the targeting source of truth (96 companies tracked)
@@ -270,7 +270,7 @@ Modal compute: $0 (not deployed).
 | Deferred | Why it's deferred |
 |---|---|
 | Modal cron deploy | Wait until daily-cron makes sense at observed volume |
-| Cisco internal tracker | User getting info from former boss; manual checklist for now |
+| an internal-portal track tracker | User getting info from former boss; manual checklist for now |
 | `claim_pending` callers fully exercised | The atomic-claim infrastructure ships but resume.py is the only caller; MCP `approve_job` tool not yet wired (tomorrow's HiTL approval needs this OR direct programmatic resume) |
 | Chunk-per-skill RAG | Current per-category chunking works for realistic queries. Defer until eval shows it's a bottleneck. |
 | Strip markdown table noise from chunks | Same — defer until measurement |

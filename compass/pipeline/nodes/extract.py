@@ -101,8 +101,8 @@ def _normalize_skill_list(
     """Map each raw skill to canonical; drop unknowns AND skills absent from the JD body.
 
     The LLM occasionally hallucinates plausible-but-absent skills based on
-    company name (e.g. "Federated Learning" for an Anthropic sales JD that
-    mentions only Spanish + Salesforce). This filter requires that the
+    company brand (e.g. emitting "Federated Learning" for an AI-lab sales JD
+    that only mentions language + CRM skills). This filter requires that the
     canonical name (or one of its synonyms) actually appears as a substring
     of the JD text — otherwise the LLM made it up.
 

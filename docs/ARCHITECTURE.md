@@ -312,9 +312,9 @@ async def weekly_digest():
 | Obsidian vault | Human-readable, git-trackable, queryable with Dataview. Karpathy wiki pattern. Not locked into any app. |
 | MCP server | Exposes entire system to Claude Code/Cursor. First-class portfolio artifact — demonstrates MCP server design skills. |
 | Modal | Serverless Python, easy cron scheduling, no infrastructure to manage. Demonstrates production deployment. |
-| uv | Fast, lockfile-based, consistent with Minx. |
+| uv | Fast, lockfile-based, consistent with a personal local-first OS project. |
 | ATS public APIs | No ToS violations, reliable, structured JSON. Greenhouse/Lever/Ashby cover most quality AI companies. |
-| SQLite (if needed) | If vault + JSON isn't sufficient for deduplication state, add SQLite with the same migration pattern as Minx. |
+| SQLite (if needed) | If vault + JSON isn't sufficient for deduplication state, add SQLite with the same migration pattern as a personal local-first OS project. |
 
 ---
 

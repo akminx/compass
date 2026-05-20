@@ -71,12 +71,12 @@
 
 ## Required reading (in order, before Day 1)
 
-1. **`/Users/akmini/Documents/compass/CLAUDE.md`** — repo conventions, what you can/can't do
-2. **`/Users/akmini/Documents/compass/docs/PROJECT_OVERVIEW.md`** — the 510-line plain-language walkthrough of the whole project. Get the architecture in your head.
-3. **`/Users/akmini/Documents/compass/docs/KNOWN_DATA_QUALITY_ISSUES.md`** — what's documented as deferred, with severity + fix surface
-4. **`/Users/akmini/Documents/compass/docs/OBSIDIAN_LEVERAGE.md`** — P1-P8 foundation proposals; **Day 1-2 work uses P1+P2+P3 from here**
-5. **`/Users/akmini/Documents/compass/docs/OBSIDIAN_LEVERAGE_PART_2.md`** — deeper use-case ideas; **Day 11-12 folds in Ideas 9.1 + 1.1 + 8.1 from here**
-6. **`/Users/akmini/Documents/compass/docs/superpowers/specs/2026-05-17-compass-mvp-to-portfolio-ship-design.md`** — the authoritative master spec; the Definition of Done lives there
+1. **`/Users/<user>/Documents/compass/CLAUDE.md`** — repo conventions, what you can/can't do
+2. **`/Users/<user>/Documents/compass/docs/PROJECT_OVERVIEW.md`** — the 510-line plain-language walkthrough of the whole project. Get the architecture in your head.
+3. **`/Users/<user>/Documents/compass/docs/KNOWN_DATA_QUALITY_ISSUES.md`** — what's documented as deferred, with severity + fix surface
+4. **`/Users/<user>/Documents/compass/docs/OBSIDIAN_LEVERAGE.md`** — P1-P8 foundation proposals; **Day 1-2 work uses P1+P2+P3 from here**
+5. **`/Users/<user>/Documents/compass/docs/OBSIDIAN_LEVERAGE_PART_2.md`** — deeper use-case ideas; **Day 11-12 folds in Ideas 9.1 + 1.1 + 8.1 from here**
+6. **`/Users/<user>/Documents/compass/docs/superpowers/specs/2026-05-17-compass-mvp-to-portfolio-ship-design.md`** — the authoritative master spec; the Definition of Done lives there
 
 You can skim PHASE_0_COMPLETE.md / PHASE_1A_COMPLETE.md / phase-1b1 plan / phase-1b2-rag plan for context but the PROJECT_OVERVIEW.md is the consolidated version.
 
@@ -342,7 +342,7 @@ Each plan needs 2 adversarial review passes minimum. Compress from the previous 
 - **Phase 1.B.2 plan** (for plan format calibration): `docs/superpowers/plans/2026-05-19-compass-phase-1b2-rag.md`
 - **Phase 1.B.1 plan**: `docs/superpowers/plans/2026-05-18-compass-phase-1b1-hitl.md`
 - **Master spec**: `docs/superpowers/specs/2026-05-17-compass-mvp-to-portfolio-ship-design.md`
-- **CLAUDE.md**: `/Users/akmini/Documents/compass/CLAUDE.md`
+- **CLAUDE.md**: `/Users/<user>/Documents/compass/CLAUDE.md`
 - **The user's vault**: `~/Documents/compass-vault/`
 - **The user's learning vault**: `~/Documents/learning-vault/` (read-only via `learning-vault://` URIs)
 
@@ -353,7 +353,7 @@ Each plan needs 2 adversarial review passes minimum. Compress from the previous 
 Run this:
 
 ```bash
-cd /Users/akmini/Documents/compass
+cd /Users/<user>/Documents/compass
 git status                           # expect: clean
 git branch --show-current            # expect: phase-1b2-rag
 git log --oneline -5                 # confirm: 19bcf16 is HEAD

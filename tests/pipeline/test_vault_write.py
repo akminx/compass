@@ -113,11 +113,11 @@ async def test_vault_write_node_persists_tailored_paragraph(temp_vault):
     from compass.pipeline.nodes.vault_write import vault_write_node
 
     state = _build_state_for_score(skills_required=["MCP"], skills_matched=["MCP"])
-    state["tailored_paragraph"] = "Lead with your Cisco MCP server work."
+    state["tailored_paragraph"] = "Lead with your production MCP server work."
     await vault_write_node(state)
     job_files = list((temp_vault / "jobs").glob("*.md"))
     loaded = frontmatter.load(job_files[0])
-    assert loaded.metadata["tailored_paragraph"] == "Lead with your Cisco MCP server work."
+    assert loaded.metadata["tailored_paragraph"] == "Lead with your production MCP server work."
 
 
 async def test_vault_write_node_persists_full_jd_body(temp_vault):
@@ -203,9 +203,9 @@ async def test_unknown_company_tier_remains_unknown(temp_vault):
 
 
 async def test_human_edited_company_tier_preserved(temp_vault):
-    """Bug #15 regression: if Akash edits a CompanyNote's tier in Obsidian to
-    override what target-companies.md says, vault_write must NOT clobber that
-    edit on the next pipeline run."""
+    """Bug #15 regression: if the operator edits a CompanyNote's tier in
+    Obsidian to override what target-companies.md says, vault_write must NOT
+    clobber that edit on the next pipeline run."""
     from compass.vault.schemas import CompanyNote
     from compass.vault.writer import write_company_note
 

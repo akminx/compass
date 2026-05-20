@@ -1,8 +1,8 @@
 """Regression: a React Native job at an LLM-native startup whose JD body
 mentions LangGraph + multi-agent in passing used to get upgraded from
 swe-mobile to agent-engineer (and same for swe-frontend). Mobile and
-frontend specialists aren't who Akash is — they're not promotion-eligible
-anymore. 2026-05-19 adversarial review (wave 2)."""
+frontend specialization is out of candidate scope — these families aren't
+promotion-eligible anymore."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def test_swe_frontend_not_promotion_eligible():
 
 def test_swe_mobile_stays_mobile_even_with_strong_agent_body():
     """A mobile job whose JD mentions LangGraph + multi-agent should still
-    be classified as swe-mobile — Akash isn't a mobile dev."""
+    be classified as swe-mobile — mobile is out of scope."""
     body = (
         "Build React Native iOS apps. Backend team uses LangGraph for "
         "multi-agent orchestration but you'll integrate via REST API."

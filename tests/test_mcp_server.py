@@ -327,9 +327,9 @@ async def test_mcp_tailor_resume_reads_existing_paragraph(temp_vault):
             source="manual",
             date_found=date(2026, 5, 10),
             match_score=4.5,
-            tailored_paragraph="Lead with MCP project at Cisco.",
+            tailored_paragraph="Lead with production MCP project.",
         )
     )
     result = await tailor_resume(job_id="Sierra-Agent_Engineer")
     assert "error" not in result
-    assert result["tailored_paragraph"] == "Lead with MCP project at Cisco."
+    assert result["tailored_paragraph"] == "Lead with production MCP project."

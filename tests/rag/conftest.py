@@ -29,7 +29,7 @@ def tiny_inventory(temp_vault) -> Path:
         "# Skill Inventory\n\n"
         "## Python\n\n"
         "Level 4. 5 years building backends and agents in Python. "
-        "Cisco MCP server, LangGraph pipelines, FastAPI services.\n\n"
+        "Production MCP server, LangGraph pipelines, FastAPI services.\n\n"
         "## LangGraph\n\n"
         "Level 3. Built Compass pipeline with stateful graph, conditional "
         "edges, interrupt()+AsyncSqliteSaver checkpointing for HITL.\n\n"

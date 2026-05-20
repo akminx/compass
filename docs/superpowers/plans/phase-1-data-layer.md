@@ -51,7 +51,7 @@ MAX_CONCURRENT_JOBS: int = int(os.getenv("MAX_CONCURRENT_JOBS", "5"))
 - [ ] **Step 2: Verify config loads without error**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run python -c "from compass.config import CHROMA_PATH, EMBEDDING_MODEL, HITL_STATE_DB, MAX_CONCURRENT_JOBS; print(CHROMA_PATH, EMBEDDING_MODEL)"
+cd /Users/<user>/Documents/compass && uv run python -c "from compass.config import CHROMA_PATH, EMBEDDING_MODEL, HITL_STATE_DB, MAX_CONCURRENT_JOBS; print(CHROMA_PATH, EMBEDDING_MODEL)"
 ```
 
 Expected: prints the path and model name without ImportError.
@@ -74,7 +74,7 @@ git commit -m "feat: add RAG and HiTL config entries"
 - [ ] **Step 1: Run the existing tests to confirm they fail**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run pytest tests/test_scrapers.py::test_scrape_greenhouse_returns_jobs -v
+cd /Users/<user>/Documents/compass && uv run pytest tests/test_scrapers.py::test_scrape_greenhouse_returns_jobs -v
 ```
 
 Expected: `FAILED` with `NotImplementedError`.
@@ -175,7 +175,7 @@ async def scrape_greenhouse_many(board_tokens: list[str]) -> list[RawJob]:
 - [ ] **Step 3: Run the Greenhouse tests**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run pytest tests/test_scrapers.py -k "greenhouse" -v
+cd /Users/<user>/Documents/compass && uv run pytest tests/test_scrapers.py -k "greenhouse" -v
 ```
 
 Expected: 4 tests PASS. (These hit the real Greenhouse API — needs internet.)
@@ -237,7 +237,7 @@ async def test_scrape_lever_many():
 - [ ] **Step 2: Run to verify failure**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run pytest tests/test_scrapers.py -k "lever" -v
+cd /Users/<user>/Documents/compass && uv run pytest tests/test_scrapers.py -k "lever" -v
 ```
 
 Expected: `FAILED` with `NotImplementedError`.
@@ -311,7 +311,7 @@ async def scrape_lever_many(companies: list[str]) -> list[RawJob]:
 - [ ] **Step 4: Run Lever tests**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run pytest tests/test_scrapers.py -k "lever" -v
+cd /Users/<user>/Documents/compass && uv run pytest tests/test_scrapers.py -k "lever" -v
 ```
 
 Expected: 4 tests PASS.
@@ -373,7 +373,7 @@ async def test_scrape_ashby_many():
 - [ ] **Step 2: Run to verify failure**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run pytest tests/test_scrapers.py -k "ashby" -v
+cd /Users/<user>/Documents/compass && uv run pytest tests/test_scrapers.py -k "ashby" -v
 ```
 
 Expected: `FAILED` with `NotImplementedError`.
@@ -465,7 +465,7 @@ async def scrape_ashby_many(board_names: list[str]) -> list[RawJob]:
 - [ ] **Step 4: Run Ashby tests**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run pytest tests/test_scrapers.py -k "ashby" -v
+cd /Users/<user>/Documents/compass && uv run pytest tests/test_scrapers.py -k "ashby" -v
 ```
 
 Expected: 4 tests PASS.
@@ -537,7 +537,7 @@ async def test_scrape_jobspy_graceful_on_error():
 - [ ] **Step 2: Run to verify failure**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run pytest tests/test_scrapers.py -k "jobspy" -v
+cd /Users/<user>/Documents/compass && uv run pytest tests/test_scrapers.py -k "jobspy" -v
 ```
 
 Expected: `FAILED` with `NotImplementedError`.
@@ -606,7 +606,7 @@ async def scrape_jobspy(
 - [ ] **Step 4: Run JobSpy tests**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run pytest tests/test_scrapers.py -k "jobspy" -v
+cd /Users/<user>/Documents/compass && uv run pytest tests/test_scrapers.py -k "jobspy" -v
 ```
 
 Expected: 3 tests PASS.
@@ -614,7 +614,7 @@ Expected: 3 tests PASS.
 - [ ] **Step 5: Run all scraper tests**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run pytest tests/test_scrapers.py -v
+cd /Users/<user>/Documents/compass && uv run pytest tests/test_scrapers.py -v
 ```
 
 Expected: All 11+ tests PASS.
@@ -715,7 +715,7 @@ def test_write_company_note(tmp_path, monkeypatch):
 - [ ] **Step 2: Run to verify failures**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run pytest tests/test_vault.py -k "write or update" -v
+cd /Users/<user>/Documents/compass && uv run pytest tests/test_vault.py -k "write or update" -v
 ```
 
 Expected: FAILED with `NotImplementedError`.
@@ -814,7 +814,7 @@ def write_company_note(note: CompanyNote) -> Path:
 - [ ] **Step 4: Run writer tests**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run pytest tests/test_vault.py -k "write or update" -v
+cd /Users/<user>/Documents/compass && uv run pytest tests/test_vault.py -k "write or update" -v
 ```
 
 Expected: 5 tests PASS.
@@ -895,7 +895,7 @@ def test_list_job_notes(tmp_path, monkeypatch):
 - [ ] **Step 2: Run to verify failures**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run pytest tests/test_vault.py -k "read or url or list_job" -v
+cd /Users/<user>/Documents/compass && uv run pytest tests/test_vault.py -k "read or url or list_job" -v
 ```
 
 Expected: FAILED with `NotImplementedError`.
@@ -955,7 +955,7 @@ def list_job_notes() -> list[Path]:
 - [ ] **Step 4: Run all vault tests**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run pytest tests/test_vault.py -v
+cd /Users/<user>/Documents/compass && uv run pytest tests/test_vault.py -v
 ```
 
 Expected: All tests PASS.
@@ -1060,7 +1060,7 @@ def test_retrieve_relevant_skills_no_index_returns_empty(tmp_path, monkeypatch):
 - [ ] **Step 2: Run to verify failures**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run pytest tests/test_rag.py -v
+cd /Users/<user>/Documents/compass && uv run pytest tests/test_rag.py -v
 ```
 
 Expected: `ERROR` or `FAILED` (modules don't exist yet).
@@ -1153,7 +1153,7 @@ def retrieve_relevant_skills(query: str, n_results: int = 10) -> list[str]:
 - [ ] **Step 5: Run RAG tests**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run pytest tests/test_rag.py -v
+cd /Users/<user>/Documents/compass && uv run pytest tests/test_rag.py -v
 ```
 
 Expected: 5 tests PASS. (First run downloads the `all-MiniLM-L6-v2` model — ~80MB, takes ~30 seconds.)
@@ -1175,7 +1175,7 @@ git commit -m "feat: implement RAG indexer and retriever"
 - [ ] **Step 1: Run the full test suite**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run pytest tests/test_scrapers.py tests/test_vault.py tests/test_rag.py -v
+cd /Users/<user>/Documents/compass && uv run pytest tests/test_scrapers.py tests/test_vault.py tests/test_rag.py -v
 ```
 
 Expected: All tests PASS. Fix any remaining failures before continuing.
@@ -1183,7 +1183,7 @@ Expected: All tests PASS. Fix any remaining failures before continuing.
 - [ ] **Step 2: Smoke test — scrape a real board end-to-end**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run python -c "
+cd /Users/<user>/Documents/compass && uv run python -c "
 import asyncio
 from compass.scrapers.greenhouse import scrape_greenhouse
 jobs = asyncio.run(scrape_greenhouse('databricks'))
@@ -1197,7 +1197,7 @@ Expected: prints job count (typically 50-200) and first job title.
 - [ ] **Step 3: Smoke test — build RAG index from real vault**
 
 ```bash
-cd /Users/akmini/Documents/compass && uv run python -c "
+cd /Users/<user>/Documents/compass && uv run python -c "
 from compass.rag.indexer import build_index
 from compass.rag.retriever import retrieve_relevant_skills
 n = build_index()

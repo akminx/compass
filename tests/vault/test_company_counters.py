@@ -90,11 +90,11 @@ def test_sync_company_counters_zeroes_orphan_companies(temp_vault):
 
 
 def test_invalid_tier_in_existing_file_does_not_crash(temp_vault, caplog):
-    """Regression: if Akash types `tier: favorite` (typo, not a valid Tier value)
-    in Obsidian, the next pipeline run used to crash with Pydantic ValidationError
-    when write_company_note tried to model_copy the invalid string into a Tier
-    Literal field. Now the invalid value is logged and ignored — pipeline
-    continues with whatever tier the pipeline computed."""
+    """Regression: if the operator types `tier: favorite` (typo, not a valid
+    Tier value) in Obsidian, the next pipeline run used to crash with
+    Pydantic ValidationError when write_company_note tried to model_copy the
+    invalid string into a Tier Literal field. Now the invalid value is logged
+    and ignored — pipeline continues with whatever tier the pipeline computed."""
     import logging
 
     path = temp_vault / "companies" / "sierra.md"
@@ -151,7 +151,7 @@ def test_human_edits_preserved_through_resync(temp_vault):
             company="sierra",
             tier="stretch",  # human override
             roles_seen=0,
-            why_interesting="They love Cisco MCP work",  # human edit
+            why_interesting="They love production MCP work",  # human edit
         )
     )
     # JobNote for sierra
@@ -172,4 +172,4 @@ def test_human_edits_preserved_through_resync(temp_vault):
     md = frontmatter.load(temp_vault / "companies" / "sierra.md").metadata
     assert md["roles_seen"] == 1  # updated
     assert md["tier"] == "stretch"  # preserved
-    assert md["why_interesting"] == "They love Cisco MCP work"  # preserved
+    assert md["why_interesting"] == "They love production MCP work"  # preserved
