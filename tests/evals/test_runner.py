@@ -36,16 +36,20 @@ async def _fake_score(req, profile_text, job=None) -> JobScore:
 
 @pytest.mark.asyncio
 async def test_run_against_labels_computes_aggregate(temp_vault):
+    """JD bodies must mention the skills the stub returns — production
+    `_normalize_skill_list` drops skills the LLM emits but the JD doesn't
+    actually contain (anti-hallucination guard). Keep tests aligned with
+    production behavior."""
     records = [
         EvalRecord(
             id="eval-001",
-            jd_text="Build LangGraph agents.",
+            jd_text="Build LangGraph agents in Python with MCP servers.",
             expected_score=4.0,
             expected_skills=["Python", "MCP", "LangGraph"],
         ),
         EvalRecord(
             id="eval-002",
-            jd_text="Senior systems engineer.",
+            jd_text="Senior systems engineer working with Python MCP and LangGraph.",
             expected_score=1.0,
             expected_skills=["Kubernetes", "Go"],
         ),
@@ -61,10 +65,10 @@ async def test_run_against_labels_computes_aggregate(temp_vault):
     assert metrics.score_mae == 1.5
     # Bias: ((4-4)+(4-1))/2 = 1.5 — Compass over-scores eval-002 (1.0 → 4.0)
     assert metrics.score_bias == 1.5
+    # Both JDs mention Python+MCP+LangGraph (post-normalization).
     # Record 1: extracted=[Python, MCP, LangGraph], expected=[Python, MCP, LangGraph] → recall 1.0
-    # Record 2: extracted=[Python, MCP, LangGraph], expected=[Kubernetes, Go]      → recall 0.0
+    # Record 2: extracted=[Python, MCP, LangGraph], expected=[Kubernetes, Go]        → recall 0.0
     assert metrics.extract_skill_recall == 0.5
-    # Per-record output has missed/extra skills
     assert per_record[0]["missed_skills"] == []
     assert "kubernetes" in per_record[1]["missed_skills"]
     assert "go" in per_record[1]["missed_skills"]
@@ -103,6 +107,95 @@ async def test_run_against_judge_uses_judge_verdict(temp_vault):
     assert metrics.score_mae == 0.0
     assert "judge_reasoning" in per_record[0]
     assert per_record[0]["judge_reasoning"] == "Agent did fine."
+
+
+@pytest.mark.asyncio
+async def test_runner_applies_extract_normalization(temp_vault):
+    """Regression: runner used to call `_extract` raw, skipping
+    `_normalize_skill_list`. That made the recall metric measure something
+    DIFFERENT from what the production pipeline persists. Now the runner
+    runs the same normalization extract_node does — skills the LLM emits
+    that don't appear in the JD body are dropped (anti-hallucination)."""
+
+    async def hallucinating_extract(jd_text):
+        # Stub emits skills the JD doesn't actually contain — production
+        # drops these as likely-hallucinated.
+        return JobRequirements(
+            required_skills=["Python", "Kubernetes", "Federated Learning"],
+            nice_to_have_skills=[],
+            years_experience=2,
+            seniority="mid",
+            remote_policy="hybrid",
+            summary="x",
+        )
+
+    records = [
+        EvalRecord(
+            id="eval-001",
+            jd_text="Build a Python service that calls our API.",
+            expected_score=3.0,
+            expected_skills=["Python"],
+        ),
+    ]
+    with (
+        patch("compass.evals.runner._extract", new=hallucinating_extract),
+        patch("compass.evals.runner._score", new=_fake_score),
+    ):
+        metrics, per_record = await run_against_labels(records)
+
+    # The stub returned ["Python", "Kubernetes", "Federated Learning"] but only
+    # "Python" appears in the JD. Production drops the other two as hallucinations.
+    extracted_n = per_record[0]["extracted_skills_n"]
+    assert extracted_n == 1, f"expected 1 extracted skill after normalization, got {extracted_n}"
+    assert "kubernetes" not in per_record[0].get("extra_skills", [])
+    assert metrics.extract_skill_recall == 1.0  # "Python" found
+
+
+@pytest.mark.asyncio
+async def test_runner_applies_score_constraint(temp_vault):
+    """Regression: runner used to skip `_constrain_to_jd_skills`, letting
+    score_node hallucinations through to the metrics. Now matched/missing
+    are filtered to the JD's actual skill universe before comparison."""
+
+    async def hallucinating_score(req, profile_text, job=None):
+        return JobScore(
+            score=4.0,
+            reasoning="Real reasoning ending with terminal punctuation.",
+            # JD requested only Python — but the score LLM claims candidate
+            # also has matches in skills the JD didn't list.
+            matched_skills=["Python", "Rust", "Erlang"],
+            missing_skills=["Haskell"],
+            tailoring_notes="",
+        )
+
+    async def fake_extract_python_only(jd_text):
+        return JobRequirements(
+            required_skills=["Python"],
+            nice_to_have_skills=[],
+            years_experience=2,
+            seniority="mid",
+            remote_policy="hybrid",
+            summary="x",
+        )
+
+    records = [
+        EvalRecord(
+            id="eval-001",
+            jd_text="Build a Python service.",
+            expected_score=4.0,
+            expected_skills=["Python"],
+        ),
+    ]
+    with (
+        patch("compass.evals.runner._extract", new=fake_extract_python_only),
+        patch("compass.evals.runner._score", new=hallucinating_score),
+    ):
+        metrics, _per = await run_against_labels(records)
+
+    # match_skill_recall uses score_result.matched_skills — production
+    # constrains to the JD universe. So "Rust" and "Erlang" are filtered
+    # out; only "Python" remains; recall against expected=["Python"] is 1.0.
+    assert metrics.match_skill_recall == 1.0
 
 
 @pytest.mark.asyncio

@@ -43,17 +43,50 @@ RESULTS_DIR = Path(__file__).parent
 async def _run_extract_and_score(
     record: EvalRecord,
 ) -> tuple[JobRequirements | None, JobScore | None, float]:
-    """Run extract → score on one JD. Returns (req, score, wall_seconds).
-    On error, returns (None, None, elapsed) — caller decides how to aggregate.
+    """Run the SAME extract → score logic the production graph runs, against
+    one labeled JD. Returns (req, score, wall_seconds).
+
+    Production fidelity matters here — earlier versions called `_extract` and
+    `_score` directly, which skipped the post-LLM normalization and constraint
+    layers, making the metrics measure something other than what the user
+    actually experiences. Now we apply:
+
+      extract: `_normalize_skill_list` (taxonomy folding) + seniority-from-title
+               fallback.  Matches `extract_node`.
+      score:   `_score_with_retry` (truncated-reasoning retry) +
+               `_constrain_to_jd_skills` (drop hallucinated matched/missing).
+               Matches `score_node`.
+
+    We still call `_extract` and `_score` as the patchable surface so tests
+    can stub them; the post-processing wraps the stub output.
     """
+    from compass.pipeline.nodes.extract import (
+        _normalize_skill_list,
+        _seniority_with_title_fallback,
+    )
+    from compass.pipeline.nodes.score import _constrain_to_jd_skills, _reasoning_complete
+
     start = time.monotonic()
     try:
-        req = await _extract(record.jd_text)
+        raw_req = await _extract(record.jd_text)
     except Exception as e:
         logger.warning("extract failed for %s: %s", record.id, e)
         return None, None, time.monotonic() - start
 
-    # `_score` requires a profile_text + optional job. Build them.
+    # Mirror extract_node: canonicalize skills, fall-back seniority.
+    unknown: list[str] = []
+    title_hint = ""  # eval JDs don't carry titles — seniority stays as LLM said
+    req = JobRequirements(
+        required_skills=_normalize_skill_list(raw_req.required_skills, record.jd_text, unknown),
+        nice_to_have_skills=_normalize_skill_list(
+            raw_req.nice_to_have_skills, record.jd_text, unknown
+        ),
+        years_experience=raw_req.years_experience,
+        seniority=_seniority_with_title_fallback(raw_req.seniority, title_hint),
+        remote_policy=raw_req.remote_policy,
+        summary=raw_req.summary,
+    )
+
     profile = f"{read_resume()}\n\n{read_profile_section('role-clarifications')}"
     fake_job = RawJob(
         company="(eval)",
@@ -63,12 +96,22 @@ async def _run_extract_and_score(
         description=record.jd_text,
     )
     try:
-        score = await _score(req, profile, fake_job)
+        raw_score = await _score(req, profile, fake_job)
     except Exception as e:
         logger.warning("score failed for %s: %s", record.id, e)
         return req, None, time.monotonic() - start
 
-    return req, score, time.monotonic() - start
+    # Mirror score_node: retry on truncated reasoning, constrain matched/missing
+    # to the JD's actual skill universe. Without this the metric measures
+    # un-constrained LLM output rather than what the pipeline actually persists.
+    if not _reasoning_complete(raw_score.reasoning):
+        logger.info("eval: reasoning looked truncated for %s — retrying once", record.id)
+        try:
+            raw_score = await _score(req, profile, fake_job)
+        except Exception as e:
+            logger.warning("score retry failed for %s: %s", record.id, e)
+    constrained = _constrain_to_jd_skills(raw_score, req)
+    return req, constrained, time.monotonic() - start
 
 
 async def run_against_labels(records: list[EvalRecord]) -> tuple[ScoreMetrics, list[dict]]:
