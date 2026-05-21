@@ -28,10 +28,12 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from compass.evals.costs import estimate_cost
 from compass.evals.dataset import EvalRecord, load_dataset
-from compass.evals.metrics import ScoreMetrics, aggregate
+from compass.evals.metrics import ScoreMetrics, aggregate, top_k_precision
+from compass.llm import get_model_id
 from compass.pipeline.nodes.extract import _extract
-from compass.pipeline.nodes.score import _score
+from compass.pipeline.nodes.score import _profile_text, _score
 from compass.pipeline.state import JobRequirements, JobScore, RawJob
 from compass.vault.reader import read_profile_section, read_resume
 
@@ -87,7 +89,13 @@ async def _run_extract_and_score(
         summary=raw_req.summary,
     )
 
-    profile = f"{read_resume()}\n\n{read_profile_section('role-clarifications')}"
+    # PRODUCTION FIDELITY: the score node uses `_profile_text(req)` which
+    # composes resume + RAG-retrieved top-k skill chunks. The previous eval
+    # path used a flat `resume + role-clarifications` stitch which gave the
+    # scorer LESS context than production. Measuring with less context
+    # systematically degraded the eval and made the production scorer look
+    # worse than it actually is. Wire the same path here.
+    profile = await _profile_text(req)
     fake_job = RawJob(
         company="(eval)",
         title="(eval)",
@@ -122,6 +130,9 @@ async def run_against_labels(records: list[EvalRecord]) -> tuple[ScoreMetrics, l
     predicted_skill_lists: list[list[str]] = []
     expected_skill_lists: list[list[str]] = []
     matched_skill_lists: list[list[str]] = []
+    missing_skill_lists: list[list[str]] = []
+    total_cost: float = 0.0
+    profile = f"{read_resume()}\n\n{read_profile_section('role-clarifications')}"
 
     for r in records:
         req, score, elapsed = await _run_extract_and_score(r)
@@ -136,6 +147,9 @@ async def run_against_labels(records: list[EvalRecord]) -> tuple[ScoreMetrics, l
         predicted_skill_lists.append(extracted_skills)
         expected_skill_lists.append(r.expected_skills)
         matched_skill_lists.append(list(score.matched_skills))
+        missing_skill_lists.append(list(score.missing_skills))
+        cost = _estimate_record_cost(r.jd_text, profile, req, score)
+        total_cost += cost["cost_usd"]
         per_record.append(
             {
                 "id": r.id,
@@ -145,6 +159,8 @@ async def run_against_labels(records: list[EvalRecord]) -> tuple[ScoreMetrics, l
                 "score_delta": round(score.score - r.expected_score, 2),
                 "expected_skills_n": len(r.expected_skills),
                 "extracted_skills_n": len(extracted_skills),
+                "matched_skills_n": len(score.matched_skills),
+                "missing_skills_n": len(score.missing_skills),
                 "missed_skills": sorted(
                     {s.lower() for s in r.expected_skills} - {s.lower() for s in extracted_skills}
                 ),
@@ -152,6 +168,7 @@ async def run_against_labels(records: list[EvalRecord]) -> tuple[ScoreMetrics, l
                     {s.lower() for s in extracted_skills} - {s.lower() for s in r.expected_skills}
                 ),
                 "elapsed_s": round(elapsed, 2),
+                **cost,
             }
         )
 
@@ -161,8 +178,40 @@ async def run_against_labels(records: list[EvalRecord]) -> tuple[ScoreMetrics, l
         predicted_skill_lists,
         expected_skill_lists,
         matched_skill_lists,
+        missing_skill_lists,
     )
+    metrics._total_cost_usd = total_cost  # type: ignore[attr-defined]
+    metrics._top_k_p_at_3 = top_k_precision(predicted_scores, expected_scores, min(3, len(predicted_scores)))  # type: ignore[attr-defined]
     return metrics, per_record
+
+
+def _estimate_record_cost(
+    jd_text: str, profile: str, req: JobRequirements | None, score: JobScore | None
+) -> dict:
+    """Per-record cost estimate across extract + score nodes. Uses the
+    chars-per-token approximation from costs.estimate_cost — accurate enough
+    for cost/accuracy Pareto reporting; would need real-usage hooks for a
+    billing dashboard.
+    """
+    import json as _json
+
+    extract_in = jd_text  # taxonomy injection adds ~constant overhead — folded into estimate margin
+    extract_out = _json.dumps(req.model_dump() if req is not None else {}) if req else ""
+    score_in = f"{profile}\n{jd_text}\n{extract_out}"
+    score_out = _json.dumps(score.model_dump() if score is not None else {}) if score else ""
+
+    extract_cost = estimate_cost(get_model_id("extract"), extract_in, extract_out)
+    score_cost = estimate_cost(get_model_id("score"), score_in, score_out)
+    total = extract_cost.cost_usd + score_cost.cost_usd
+    return {
+        "extract_model": extract_cost.model,
+        "extract_tokens_in": extract_cost.input_tokens,
+        "extract_tokens_out": extract_cost.output_tokens,
+        "score_model": score_cost.model,
+        "score_tokens_in": score_cost.input_tokens,
+        "score_tokens_out": score_cost.output_tokens,
+        "cost_usd": round(total, 6),
+    }
 
 
 async def run_against_judge(records: list[EvalRecord]) -> tuple[ScoreMetrics, list[dict]]:
@@ -181,6 +230,8 @@ async def run_against_judge(records: list[EvalRecord]) -> tuple[ScoreMetrics, li
     predicted_skill_lists: list[list[str]] = []
     expected_skill_lists: list[list[str]] = []
     matched_skill_lists: list[list[str]] = []
+    missing_skill_lists: list[list[str]] = []
+    total_cost: float = 0.0
 
     for r in records:
         req, score, elapsed = await _run_extract_and_score(r)
@@ -209,6 +260,9 @@ async def run_against_judge(records: list[EvalRecord]) -> tuple[ScoreMetrics, li
         predicted_skill_lists.append(extracted_skills)
         expected_skill_lists.append(judge_skills_canonical)
         matched_skill_lists.append(list(score.matched_skills))
+        missing_skill_lists.append(list(score.missing_skills))
+        cost = _estimate_record_cost(r.jd_text, profile, req, score)
+        total_cost += cost["cost_usd"]
         per_record.append(
             {
                 "id": r.id,
@@ -218,12 +272,15 @@ async def run_against_judge(records: list[EvalRecord]) -> tuple[ScoreMetrics, li
                 "score_delta": round(score.score - verdict.expected_score, 2),
                 "judge_skills_n": len(verdict.expected_skills),
                 "extracted_skills_n": len(extracted_skills),
+                "matched_skills_n": len(score.matched_skills),
+                "missing_skills_n": len(score.missing_skills),
                 "judge_skills_missed": sorted(
                     {s.lower() for s in verdict.expected_skills}
                     - {s.lower() for s in extracted_skills}
                 ),
                 "judge_reasoning": verdict.reasoning,
                 "elapsed_s": round(elapsed, 2),
+                **cost,
             }
         )
 
@@ -233,20 +290,38 @@ async def run_against_judge(records: list[EvalRecord]) -> tuple[ScoreMetrics, li
         predicted_skill_lists,
         expected_skill_lists,
         matched_skill_lists,
+        missing_skill_lists,
     )
+    # Stash cost + ranking helpers on the metrics object for the summary.
+    # We don't widen ScoreMetrics for these because they're aggregate-only
+    # (not per-JD) and don't belong in the JSON snapshot schema.
+    metrics._total_cost_usd = total_cost  # type: ignore[attr-defined]
+    metrics._top_k_p_at_3 = top_k_precision(predicted_scores, expected_scores, min(3, len(predicted_scores)))  # type: ignore[attr-defined]
     return metrics, per_record
 
 
 def _format_summary(metrics: ScoreMetrics, mode: str) -> str:
+    cost_line = (
+        f"  total eval cost (USD):      ${getattr(metrics, '_total_cost_usd', 0):.4f}\n"
+        if getattr(metrics, "_total_cost_usd", None) is not None
+        else ""
+    )
+    top_k = getattr(metrics, "_top_k_p_at_3", None)
+    top_k_line = f"  top-3 precision:            {top_k:.1%}\n" if top_k is not None else ""
     return (
         f"\n=== Eval results ({mode}) ===\n"
         f"  n records:                  {metrics.n}\n"
-        f"  score MAE:                  {metrics.score_mae:.2f}    (0 = perfect)\n"
+        f"  score MAE:                  {metrics.score_mae:.2f}    (0 = perfect; industry bar < 0.40)\n"
         f"  score RMSE:                 {metrics.score_rmse:.2f}\n"
         f"  score bias (signed):        {metrics.score_bias:+.2f}   (+ = over-scores, - = under-scores)\n"
-        f"  extract skill recall:       {metrics.extract_skill_recall:.1%}  (B1 detector)\n"
+        f"  spearman rank correlation:  {metrics.score_spearman:+.2f}   (+1 = ordering matches judge perfectly)\n"
+        f"{top_k_line}"
+        f"  extract skill recall:       {metrics.extract_skill_recall:.1%}  (B1 detector: did we see what the JD asks?)\n"
         f"  extract skill precision:    {metrics.extract_skill_precision:.1%}\n"
-        f"  match skill recall:         {metrics.match_skill_recall:.1%}  (score_node attribution accuracy)\n"
+        f"  skill-universe recall:      {metrics.skill_universe_recall:.1%}  (SYSTEM: matched∪missing covers judge skills)\n"
+        f"  skill-universe precision:   {metrics.skill_universe_precision:.1%}\n"
+        f"  candidate-match recall:     {metrics.candidate_match_recall:.1%}  (CANDIDATE: matched ∩ judge / judge — coverage signal)\n"
+        f"{cost_line}"
     )
 
 
@@ -285,9 +360,14 @@ async def run_evals(*, mode: str = "labels", limit: int | None = None) -> dict:
                     "score_mae": metrics.score_mae,
                     "score_rmse": metrics.score_rmse,
                     "score_bias": metrics.score_bias,
+                    "score_spearman": metrics.score_spearman,
                     "extract_skill_recall": metrics.extract_skill_recall,
                     "extract_skill_precision": metrics.extract_skill_precision,
-                    "match_skill_recall": metrics.match_skill_recall,
+                    "skill_universe_recall": metrics.skill_universe_recall,
+                    "skill_universe_precision": metrics.skill_universe_precision,
+                    "candidate_match_recall": metrics.candidate_match_recall,
+                    "top_k_p_at_3": getattr(metrics, "_top_k_p_at_3", None),
+                    "total_cost_usd": getattr(metrics, "_total_cost_usd", None),
                 },
                 "per_record": per_record,
             },
@@ -298,6 +378,35 @@ async def run_evals(*, mode: str = "labels", limit: int | None = None) -> dict:
         encoding="utf-8",
     )
     return {"metrics": metrics, "per_record": per_record, "results_path": str(out_path)}
+
+
+def _format_failure_breakdown(per_record: list[dict], mode: str) -> str:
+    """Worst-N analysis: surface records with largest |score_delta| + reasoning.
+
+    For an interview-grade portfolio piece, the failure-mode table beats the
+    aggregate number. "MAE 0.58" is a number; "the 3 worst records are all
+    high-YoE asks where the scorer ignored the years_experience gap" is a
+    LESSON. The reader sees what's actually broken and what you'd fix next.
+    """
+    expected_key = "expected_score" if mode == "labels" else "judge_score"
+    scored = [r for r in per_record if "error" not in r and expected_key in r]
+    if not scored:
+        return ""
+    worst = sorted(scored, key=lambda r: abs(r["score_delta"]), reverse=True)[:3]
+    lines = ["\n=== Worst-3 records (largest |Δ|) ==="]
+    for r in worst:
+        rid = r["id"]
+        src = r.get("source", "")[:50]
+        exp = r[expected_key]
+        pred = r["predicted_score"]
+        delta = r["score_delta"]
+        reason = r.get("judge_reasoning", "(no judge reasoning — labels mode)")[:140]
+        lines.append(
+            f"  {rid}  {src}\n"
+            f"    expected={exp:.2f}  predicted={pred:.2f}  Δ={delta:+.2f}\n"
+            f"    reason: {reason}..."
+        )
+    return "\n".join(lines) + "\n"
 
 
 def main() -> int:
@@ -321,7 +430,9 @@ def main() -> int:
         return 1
 
     metrics = result["metrics"]
-    print(_format_summary(metrics, "judge" if args.judge else "labels"))
+    mode = "judge" if args.judge else "labels"
+    print(_format_summary(metrics, mode))
+    print(_format_failure_breakdown(result["per_record"], mode))
     print(f"Results written to: {result['results_path']}")
     return 0
 

@@ -108,7 +108,9 @@ class TestAggregate:
         assert m.score_rmse == 0.0
 
     def test_match_lists_default_to_predicted(self):
-        """When matched_skill_lists is None, match_skill_recall === extract_skill_recall."""
+        """When matched_skill_lists is None, candidate_match_recall falls back
+        to extract recall (pre-split behavior). skill_universe_recall stays 1.0
+        in this degenerate case because matched=predicted; missing defaults to []."""
         m = aggregate(
             predicted_scores=[4.0],
             expected_scores=[4.0],
@@ -116,7 +118,8 @@ class TestAggregate:
             expected_skill_lists=[["Python"]],
             matched_skill_lists=None,
         )
-        assert m.match_skill_recall == 1.0
+        assert m.candidate_match_recall == 1.0
+        assert m.skill_universe_recall == 1.0
 
 
 def test_zip_strict_catches_length_mismatch():

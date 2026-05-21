@@ -192,10 +192,10 @@ async def test_runner_applies_score_constraint(temp_vault):
     ):
         metrics, _per = await run_against_labels(records)
 
-    # match_skill_recall uses score_result.matched_skills — production
+    # candidate_match_recall uses score_result.matched_skills — production
     # constrains to the JD universe. So "Rust" and "Erlang" are filtered
     # out; only "Python" remains; recall against expected=["Python"] is 1.0.
-    assert metrics.match_skill_recall == 1.0
+    assert metrics.candidate_match_recall == 1.0
 
 
 @pytest.mark.asyncio

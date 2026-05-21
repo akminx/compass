@@ -50,6 +50,8 @@ _CATEGORY_HEADERS: dict[str, str] = {
     "Browser / Computer Use": "browser-use",
     "Voice Stack (optional — skip unless voice-targeting)": "voice",
     "Fine-Tuning (awareness only)": "fine-tuning",
+    "Systems & Distributed": "systems",
+    "Inference & Serving": "inference",
 }
 
 

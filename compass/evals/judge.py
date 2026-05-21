@@ -62,26 +62,80 @@ If you disagree with the agent, say so plainly in the reasoning.
 
 
 def _build_agent():
-    # Use SCORE_MODEL by default — Gemini Flash is plenty for judging accuracy
-    # of another LLM call. Override via env if you want a stronger judge.
-    return make_agent("score", output_type=JudgeVerdict, system_prompt=_SYSTEM_PROMPT)
+    # Route judge through REFLECT_MODEL (claude-sonnet) — using the same model
+    # for both scorer and judge masks shared biases (under-scoring, taxonomy
+    # blind-spots). A stronger, different-family judge is a more honest signal.
+    return make_agent("reflect", output_type=JudgeVerdict, system_prompt=_SYSTEM_PROMPT)
 
 
 async def judge_jd(
     jd_text: str,
     profile_text: str,
     agent_predicted_skills: list[str],
-    agent_predicted_score: float,
+    agent_predicted_score: float,  # kept in signature for API stability; no longer shown to judge
+    *,
+    ensemble_n: int = 3,
 ) -> JudgeVerdict:
-    """Single-JD judgment. Tests patch this function (the pydantic-ai Agent
-    itself is harder to stub)."""
+    """Single-JD judgment with optional ensembling for stability.
+
+    NOTE: The agent's predicted score is intentionally NOT shown to the judge.
+    Anchoring is real even with "don't anchor" instructions; the judge must
+    produce its score blind. The skills list IS shown — the judge needs to
+    know what the agent extracted in order to fairly assess extract quality.
+
+    ENSEMBLING (`ensemble_n=3`): even at temp=0, the OpenRouter provider
+    layer + Sonnet's structured-output retry mechanism can produce small
+    variance across runs. We call the judge N times and take the median
+    score + the most-frequent skill list. This is industry-standard for
+    LLM-as-judge — eliminates the residual provider noise and gives a
+    true measurement signal. Cost scales linearly with N; N=3 catches
+    most variance, N=5 catches the long tail.
+
+    Set ensemble_n=1 to disable (faster, cheaper, noisier — useful for
+    smoke tests or when iterating on the scorer).
+    """
+    import statistics
+
+    if ensemble_n < 1:
+        raise ValueError(f"ensemble_n must be >= 1, got {ensemble_n}")
+
     agent = _build_agent()
     prompt = (
         f"# CANDIDATE PROFILE\n{profile_text}\n\n"
         f"# JOB DESCRIPTION\n{jd_text}\n\n"
-        f"# AGENT OUTPUT (to be evaluated, not to anchor on)\n"
+        f"# AGENT EXTRACTION (for skill-list comparison only — no score shown)\n"
         f"agent_extracted_skills: {', '.join(agent_predicted_skills) or '(none)'}\n"
-        f"agent_score: {agent_predicted_score:.2f}\n"
     )
-    result = await agent.run(prompt)
-    return result.output
+
+    verdicts: list[JudgeVerdict] = []
+    for _ in range(ensemble_n):
+        result = await agent.run(prompt, model_settings={"temperature": 0.0})
+        verdicts.append(result.output)
+
+    if ensemble_n == 1:
+        return verdicts[0]
+
+    # Median score across the N verdicts. Skills: take the union of skills
+    # that appear in at least ceil(N/2) verdicts ("majority vote per skill").
+    # Reasoning: pick the verdict closest to the median score, so the
+    # rationale stays internally consistent with the reported number.
+    scores = [v.expected_score for v in verdicts]
+    median_score = statistics.median(scores)
+    # Skill vote: count each skill across verdicts (case-insensitive), keep
+    # those that show up in >= half. Preserves stable JD-skill detection
+    # while filtering out one-off LLM noise.
+    threshold = (ensemble_n + 1) // 2  # majority
+    skill_counts: dict[str, int] = {}
+    canonical_form: dict[str, str] = {}  # lowered -> first-seen casing
+    for v in verdicts:
+        for s in v.expected_skills:
+            key = s.lower()
+            skill_counts[key] = skill_counts.get(key, 0) + 1
+            canonical_form.setdefault(key, s)
+    majority_skills = [canonical_form[k] for k, c in skill_counts.items() if c >= threshold]
+    closest_verdict = min(verdicts, key=lambda v: abs(v.expected_score - median_score))
+    return JudgeVerdict(
+        expected_skills=majority_skills,
+        expected_score=median_score,
+        reasoning=f"[ensemble-{ensemble_n} median] {closest_verdict.reasoning}",
+    )

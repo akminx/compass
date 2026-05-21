@@ -31,7 +31,37 @@ Score 0.0–5.0:
 - 1.0 = poor match, fundamental skill gaps
 - 0.0 = wrong field entirely
 
-Be honest. Score conservatively when evidence is conceptual rather than shipped.
+Calibration:
+- Use the FULL 0–5 range. A 3.5 means "realistic apply" — don't hedge it down to 3.0.
+- A candidate with most required skills + evidence of building real systems with them
+  is a 4.0, not a 3.5. Reserve 5.0 for exact-stack matches at the right seniority.
+- Use 0.25 granularity (3.25, 3.75) when between rubric anchors — flat .0/.5 clustering
+  is a calibration smell.
+- "Conceptual but not shipped" knocks ONE skill down, not the whole score. Score the
+  whole-candidate fit, not the worst gap.
+
+YEARS-OF-EXPERIENCE NUDGE (small, offsettable):
+The JD's `years_experience` is the minimum-years ask. Compare against the
+candidate's actual YoE (from the profile). The penalty is intentionally small
+because exact-stack match can offset YoE in real hiring loops — deployed-
+engineer / agent-engineer roles in particular often hire below the nominal YoE
+when the candidate has shipped the exact stack.
+
+Base nudge (applied AFTER rubric anchors):
+- candidate YoE >= ask:                no nudge
+- candidate YoE = ask - 1 or - 2:      subtract 0.25
+- candidate YoE = ask - 3 or - 4:      subtract 0.5
+- candidate YoE <= ask - 5:            subtract 0.75
+
+Offsets (REDUCE the nudge by this much):
+- Candidate has shipped 2+ of the JD's required tools at production:  +0.25
+- Candidate has the exact-stack signal the JD describes (e.g., MCP    +0.25
+  servers for an MCP role, LangGraph for a LangGraph role):
+- Role tier is "apply-now" with case/hackerrank loop (loop > YoE):    +0.25
+
+Cap the net nudge at 0 (never positive). If `years_experience` is None or
+0, skip entirely. The point is to dampen "100% skill + half the YoE" from
+scoring 4.5 down to a more realistic 3.5–4.0 — NOT to crater it to 2.5.
 
 Return a JobScore with:
 - score: float 0.0–5.0
@@ -63,6 +93,61 @@ HARD CONSTRAINTS on matched_skills and missing_skills:
 4. If the JD has no required or nice_to_have skills, matched_skills and missing_skills MUST both be empty lists.
 
 Use the EXACT skill names from the JD's required/nice_to_have lists (don't paraphrase).
+
+CALIBRATION EXAMPLES (apply this calibration, don't just acknowledge it):
+
+Example 1 — exact-stack tier-2 agentic startup, candidate below YoE:
+  JD: "Deployed Engineer, LangChain — work with customers shipping LangGraph
+       agents in production. 3+ yrs eng experience. Bonus: MCP, evals."
+  Candidate: 1.5 YoE; shipped 2 production MCP servers at Cisco; built a
+       LangGraph + Pydantic AI agentic pipeline (Compass) with Langfuse traces.
+  → score: 4.25  (rubric: 5.0 perfect-stack − 0.25 YoE nudge + 0.0 net offset.
+                  Exact-stack + shipped match the rubric's "4.0 = strong match
+                  with real evidence" anchor; the YoE gap is small for a
+                  deployed-engineer loop.)
+
+Example 2 — adjacent-stack tier-2 SaaS, candidate has 80% skill match:
+  JD: "Senior Software Engineer — Python, REST APIs, Postgres, AWS.
+       5+ yrs. Bonus: LangChain experience."
+  Candidate: 1.5 YoE; Python + FastAPI + Postgres + AWS Lambda at Cisco.
+       Some LangChain in side projects, no production.
+  → score: 3.0   (skill match strong but YoE 3.5 years short → -0.5 base;
+                  no exact-stack offset because LangChain is bonus-only.
+                  Rubric "decent match with core skills, missing some required"
+                  applies; the YoE gap drags it from 3.5 to 3.0.)
+
+Example 3 — tier-3 systems/infra role, candidate domain mismatch:
+  JD: "ML Engineer — Inference Engine. PyTorch, vLLM, CUDA, distributed
+       systems, 3+ yrs HPC. Build production inference services."
+  Candidate: 1.5 YoE; Python + PyTorch from coursework; no CUDA, no
+       inference engine experience, no distributed systems work.
+  → score: 1.5   (only matches Python + PyTorch; missing all core
+                  infrastructure skills; YoE gap exists but isn't the primary
+                  blocker — the skill mismatch is. Rubric "stretch with
+                  adjacent skills but lacks several required" applies.)
+
+Example 4 — tier-3 big-tech generalist SWE, candidate adjacent:
+  JD: "Software Engineer — backend services. Java/Kotlin, distributed
+       systems, 2+ yrs. Some AI work a plus."
+  Candidate: 1.5 YoE; Python-primary, no Java production; built a
+       single-machine LangGraph pipeline (not distributed); MCP/agents.
+  → score: 2.5   (rubric "stretch, adjacent skills but lacks several
+                  required" — Java + distributed systems are foundational
+                  and the candidate lacks both. AI work is a plus, not a
+                  primary signal.)
+
+Example 5 — anti-fit, off-target role:
+  JD: "Senior Frontend Engineer — React, TypeScript, design systems.
+       5+ yrs frontend experience."
+  Candidate: 1.5 YoE backend/AI; no frontend production, basic TypeScript.
+  → score: 1.0   (rubric "poor match, fundamental skill gaps" —
+                  category mismatch, not just YoE.)
+
+PATTERN: the residual under-scoring on exact-stack matches has been the
+biggest calibration error. When the candidate has SHIPPED the exact tools
+the JD asks about (MCP, LangGraph, agent frameworks), score in the 4.0+
+range even when YoE is below ask. Reserve scores below 3.0 for true
+skill-mismatch or category-mismatch cases, NOT for "good skills, light YoE."
 """
 
 
@@ -193,20 +278,50 @@ def _constrain_to_jd_skills(score: JobScore, req: JobRequirements) -> JobScore:
     count the skill as a gap even though it's also "matched". We resolve
     overlaps in favor of matched (the LLM is more likely to over-flag gaps
     than over-claim matches).
+
+    CANONICAL FOLDING: The LLM occasionally emits a JD-raw phrase ("LangGraph
+    framework", "pydantic-ai") while the extract layer canonicalized the same
+    skill ("LangGraph", "Pydantic AI"). An exact-string subset check would
+    drop the legitimate match. We fold BOTH sides through `taxonomy.normalize`
+    before the subset check, then return the SCORE's spelling (so downstream
+    consumers see the LLM's chosen form, not the canonical, in matched_skills
+    — that matters for tailoring_notes which references matched skills).
     """
-    jd_universe = set(req.required_skills) | set(req.nice_to_have_skills)
-    matched_set = {s for s in score.matched_skills if s in jd_universe}
-    missing_set = {s for s in score.missing_skills if s in jd_universe} - matched_set
-    dropped = (set(score.matched_skills) | set(score.missing_skills)) - jd_universe
-    if dropped:
+    from compass.vault.taxonomy import normalize as _canon
+
+    def _key(s: str) -> str:
+        # Fold to canonical; fall back to lowercased raw if not in taxonomy.
+        return (_canon(s) or s).lower()
+
+    jd_universe_keys = {_key(s) for s in (*req.required_skills, *req.nice_to_have_skills)}
+
+    matched_keys: set[str] = set()
+    matched_out: list[str] = []
+    for s in score.matched_skills:
+        k = _key(s)
+        if k in jd_universe_keys and k not in matched_keys:
+            matched_keys.add(k)
+            matched_out.append(s)
+
+    missing_out: list[str] = []
+    seen_missing: set[str] = set()
+    for s in score.missing_skills:
+        k = _key(s)
+        if k in jd_universe_keys and k not in matched_keys and k not in seen_missing:
+            seen_missing.add(k)
+            missing_out.append(s)
+
+    dropped_matched = [s for s in score.matched_skills if _key(s) not in jd_universe_keys]
+    dropped_missing = [s for s in score.missing_skills if _key(s) not in jd_universe_keys]
+    if dropped_matched or dropped_missing:
         logger.info(
-            "score_node: dropped %d skills not in JD universe (LLM ignored prompt constraint): %s",
-            len(dropped),
-            sorted(dropped),
+            "score_node: dropped %d matched + %d missing skills not in JD universe "
+            "(post-canonical-fold). dropped_matched=%s dropped_missing=%s",
+            len(dropped_matched),
+            len(dropped_missing),
+            dropped_matched,
+            dropped_missing,
         )
     return score.model_copy(
-        update={
-            "matched_skills": [s for s in score.matched_skills if s in matched_set],
-            "missing_skills": [s for s in score.missing_skills if s in missing_set],
-        }
+        update={"matched_skills": matched_out, "missing_skills": missing_out}
     )
