@@ -26,7 +26,7 @@ A run of `uv run python -m compass.pipeline.graph` against the configured ATS bo
 - **Every JobNote is in-scope** for the candidate's target role family (engineering work touching agentic AI / production AI systems). Sales / PM / design / CS / marketing / recruiting JDs never reach `extract_node`. False-positive rate ≤ 1 per 50 JDs after manual inspection.
 - **Every in-scope JobNote is written**, regardless of `match_score`. The master gap plan reflects skills demanded by stretch roles (score 2.0+), not only roles the candidate already matches.
 - **Each JobNote has a non-empty `role_family`** frontmatter field (e.g. `agent-engineer`, `applied-ai`, `swe-backend`, `fde-eng`, `infra-llm`). The Dataview dashboard groups by it.
-- **Each JobNote has the company's `tier`** copied from `_profile/target-companies.md` (no more `tier: unknown` on every Sierra / Decagon / Ramp note).
+- **Each JobNote has the company's `tier`** copied from `_profile/target-companies.md` (no more `tier: unknown` on every target-company note).
 - **Greenhouse + Lever JobNotes have a populated `remote` field** parsed from the JD's `location` string.
 
 And the human-facing side:
@@ -193,7 +193,7 @@ def upgrade_family(family: str, body: str) -> str:
     return family
 ```
 
-A `swe-backend` posting at a non-AI fintech with zero AI keywords stays `swe-backend`, still in_scope, still scored, still vaulted. Only mis-labeled generic titles (e.g. `"Software Engineer, Platform"` at Sierra) get pulled into the correct agentic family for dashboard grouping.
+A `swe-backend` posting at a non-AI fintech with zero AI keywords stays `swe-backend`, still in_scope, still scored, still vaulted. Only mis-labeled generic titles (e.g. `"Software Engineer, Platform"` at an agentic-AI startup) get pulled into the correct agentic family for dashboard grouping.
 
 **Stage 2 — Gemini-Flash classifier (borderline only):**
 
@@ -220,7 +220,7 @@ def refresh() -> None:
     """Re-parse target-companies.md. Call from MCP server / tests if you edit the file mid-process."""
 ```
 
-Parsing is naive on purpose: walk the markdown headings, look for `Tier \`apply-now\`` / `Tier \`6-month\`` / `Tier \`stretch\``, then read company names from the first column of any `| Company |` table that follows. Company-name normalization: lowercase, strip non-alphanumerics. `Sierra` ↔ `sierra`; `Glean` ↔ `glean`. Single match wins; if a company appears in multiple tiers (it shouldn't), highest tier wins (`apply-now > 6-month > stretch > skip > unknown`).
+Parsing is naive on purpose: walk the markdown headings, look for `Tier \`apply-now\`` / `Tier \`6-month\`` / `Tier \`stretch\``, then read company names from the first column of any `| Company |` table that follows. Company-name normalization: lowercase, strip non-alphanumerics. `CompanyA` ↔ `companya`; `CompanyB` ↔ `companyb`. Single match wins; if a company appears in multiple tiers (it shouldn't), highest tier wins (`apply-now > 6-month > stretch > skip > unknown`).
 
 `vault_write_node` calls `get_tier(job.company)` and uses the result as follows:
 
@@ -261,7 +261,7 @@ Every new module that needs `VAULT_PATH` (intake_filter, target_companies, lifec
 `_meta/filtered-jobs.md` — append-only markdown. One entry per filtered JD:
 
 ```markdown
-- [2026-05-19 09:14:23] sierra "Account Executive, Enterprise" — title contains "account executive"
+- [2026-05-19 09:14:23] companya "Account Executive, Enterprise" — title contains "account executive"
 - [2026-05-19 09:14:25] anthropic "Product Manager, Claude.ai" — title contains "product manager"
 ```
 
@@ -280,7 +280,7 @@ Purpose: when the candidate thinks the gate dropped a role it shouldn't have, he
 2. Manually inspect 10 random JobNotes — every one should be a role the candidate would conceivably want. Any false negative (an agentic-eng role that was dropped) is logged as a bug and the classifier prompt is tightened.
 3. Spot-check 10 entries in `_meta/filtered-jobs.md` — every dropped JD should be obviously out of scope.
 4. Create 3 real applications via `add_application` MCP tool, transition them through `applied → screen → onsite` via `update_application_status`. Verify the linked JobNotes' status updates in Obsidian.
-5. Edit a CompanyNote's `tier` in Obsidian (e.g. force `cresta` to `apply-now`), re-run the pipeline, verify the edit is preserved AND that new JobNotes for that company inherit the edited tier.
+5. Edit a CompanyNote's `tier` in Obsidian (e.g. force `companyx` to `apply-now`), re-run the pipeline, verify the edit is preserved AND that new JobNotes for that company inherit the edited tier.
 6. Open `dashboard.md` in Obsidian — every Dataview query renders ≥ 1 row from real data; no `(empty)` panels.
 
 Only after all 6 pass do we cut the `phase-1a-application-tracking` tag.

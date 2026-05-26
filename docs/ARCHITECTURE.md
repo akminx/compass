@@ -58,7 +58,7 @@ It is explicitly NOT an auto-apply system. Every application is a human decision
 **Sources (in priority order):**
 1. **Greenhouse public API** — `GET https://boards-api.greenhouse.io/v1/boards/{token}/jobs` — unauthenticated, no ToS issues, returns structured JSON
 2. **Lever public API** — `GET https://api.lever.co/v0/postings/{company}?mode=json` — same
-3. **Ashby public API** — `GET https://api.ashbyhq.com/posting-api/job-board/{board}` — covers many top AI startups (LangChain, PostHog, Linear, Notion, Ramp)
+3. **Ashby public API** — `GET https://api.ashbyhq.com/posting-api/job-board/{board}` — covers many top AI startups (LangChain, PostHog, Linear, Notion)
 4. **JobSpy** — aggregator covering LinkedIn, Indeed, Glassdoor, ZipRecruiter. Rate-limited on LinkedIn; use as supplemental not primary.
 
 **Output:** A list of `RawJob` Pydantic objects:
@@ -337,7 +337,7 @@ The piece that makes Compass an actual career coach instead of a job aggregator.
 6. Next pipeline run sees the higher `my_level` → that skill no longer counts toward the gap → study plan reorders.
 
 **Why this matters for the portfolio:**
-"I built an agent that grades my own skills against the live JD market and tells me what to study next" is a meta-loop story that pattern-matches what Sierra/Decagon/Anthropic Applied AI explicitly value. Worth a blog post (flagged in the job-market report as the highest-leverage missing artifact).
+"I built an agent that grades my own skills against the live JD market and tells me what to study next" is a meta-loop story that pattern-matches what tier-2 agent-eng employers explicitly value. Worth a blog post (flagged in the job-market report as the highest-leverage missing artifact).
 
 ---
 

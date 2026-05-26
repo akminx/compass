@@ -7,17 +7,17 @@ def test_write_application_note_creates_file(temp_vault):
     from compass.vault.writer import write_application_note
 
     note = ApplicationNote(
-        company="Sierra",
+        company="AgentCo",
         title="Agent Engineer",
-        job_ref="https://x/sierra",
+        job_ref="https://x/agentco",
         applied_date=date(2026, 5, 18),
     )
     path = write_application_note(note)
     assert path.exists()
-    assert path.name.startswith("2026-05-18-Sierra-Agent_Engineer-")
+    assert path.name.startswith("2026-05-18-AgentCo-Agent_Engineer-")
     assert path.name.endswith(".md")
     # 8-char hash suffix present
-    stem = path.stem  # "2026-05-18-Sierra-Agent_Engineer-<hash>"
+    stem = path.stem  # "2026-05-18-AgentCo-Agent_Engineer-<hash>"
     suffix = stem.rsplit("-", 1)[-1]
     assert len(suffix) == 8
 
@@ -27,9 +27,9 @@ def test_write_application_idempotent_same_jobref_same_day(temp_vault):
     from compass.vault.writer import write_application_note
 
     note = ApplicationNote(
-        company="Sierra",
+        company="AgentCo",
         title="Agent Engineer",
-        job_ref="https://x/sierra-team-a",
+        job_ref="https://x/agentco-team-a",
         applied_date=date(2026, 5, 18),
     )
     p1 = write_application_note(note)
@@ -50,15 +50,15 @@ def test_write_application_same_company_title_same_day_different_jobref(temp_vau
     from compass.vault.writer import write_application_note
 
     n1 = ApplicationNote(
-        company="Sierra",
+        company="AgentCo",
         title="Agent Engineer",
-        job_ref="https://x/sierra-team-a",
+        job_ref="https://x/agentco-team-a",
         applied_date=date(2026, 5, 18),
     )
     n2 = ApplicationNote(
-        company="Sierra",
+        company="AgentCo",
         title="Agent Engineer",
-        job_ref="https://x/sierra-team-b",
+        job_ref="https://x/agentco-team-b",
         applied_date=date(2026, 5, 18),
     )
     assert write_application_note(n1) != write_application_note(n2)
@@ -69,15 +69,15 @@ def test_write_application_separate_files_per_date(temp_vault):
     from compass.vault.writer import write_application_note
 
     n1 = ApplicationNote(
-        company="Sierra",
+        company="AgentCo",
         title="Agent Engineer",
-        job_ref="https://x/sierra",
+        job_ref="https://x/agentco",
         applied_date=date(2026, 1, 1),
     )
     n2 = ApplicationNote(
-        company="Sierra",
+        company="AgentCo",
         title="Agent Engineer",
-        job_ref="https://x/sierra",
+        job_ref="https://x/agentco",
         applied_date=date(2026, 5, 18),
     )
     assert write_application_note(n1) != write_application_note(n2)

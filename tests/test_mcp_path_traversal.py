@@ -30,7 +30,7 @@ async def test_generate_cover_letter_accepts_valid_filename(temp_vault):
     the path-traversal guard should pass; only the not-found error fires."""
     from compass.mcp_server.server import generate_cover_letter
 
-    out = await generate_cover_letter("2026-05-19-Sierra-Engineer-abc.md")
+    out = await generate_cover_letter("2026-05-19-AgentCo-Engineer-abc.md")
     # Path passes the traversal check but file doesn't exist
     assert "error" in out
     assert "JobNote not found" in out["error"]

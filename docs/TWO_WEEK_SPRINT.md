@@ -172,7 +172,7 @@ A JobNote written by `write_job_note` should look like:
 ---
 ... frontmatter ...
 ---
-# Sierra — Software Engineer, Agent Architecture
+# CompanyA — Software Engineer, Agent Architecture
 
 ...jd_summary text...
 
@@ -270,8 +270,8 @@ Once Day 1 is committed:
    ```markdown
    ## Jobs requiring this skill
 
-   - [[2026-03-27-sierra-Software_Engineer_Agent_Architecture-04a9b65f|Sierra — Software Engineer, Agent Architecture]] · score 3.0 · apply-now
-   - [[2026-05-06-cognition-Software_Engineer-7c26fdaf|Cognition — Software Engineer]] · score 3.0 · apply-now
+   - [[2026-03-27-companya-Software_Engineer_Agent_Architecture-04a9b65f|CompanyA — Software Engineer, Agent Architecture]] · score 3.0 · apply-now
+   - [[2026-05-06-companyb-Software_Engineer-7c26fdaf|CompanyB — Software Engineer]] · score 3.0 · apply-now
    ```
 
 2. **Dashboard panels** (`~/Documents/compass-vault/dashboard.md`): add two Dataview blocks. See `docs/OBSIDIAN_LEVERAGE.md` P2 for the exact queries.

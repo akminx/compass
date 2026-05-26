@@ -218,7 +218,7 @@ The fix:
 
 Same pattern as Phase 0. A few highlights:
 
-- **Bug #1**: parallel writes to `companies/Sierra.md` (5 concurrent jobs reading `roles_seen=0`, incrementing to 1, last writer wins) — fixed by deriving `roles_seen` at gap-plan time, never incrementing
+- **Bug #1**: parallel writes to `companies/CompanyA.md` (5 concurrent jobs reading `roles_seen=0`, incrementing to 1, last writer wins) — fixed by deriving `roles_seen` at gap-plan time, never incrementing
 - **Bug #2**: invalid manual `tier` value in Obsidian (user typing `tier: applynow` instead of `apply-now`) crashed the next pipeline run — fixed by tolerating invalid Literal values
 - **Bug #B**: body-signal upgrader triple-counted `"agent" ⊂ "agentic" ⊂ "agentic ai"` — fixed by longest-first word-bounded matching
 - **Bug #F**: `add_application` silently overwrote in-flight ApplicationNotes — fixed with `force=True` default-off
@@ -249,7 +249,7 @@ The plan went through **6 adversarial review iterations** before execution. Foun
 
 - **C1 (silent data divergence)**: state_store said "approved" but JobNote said "auto_rejected" for the same thread — because the resume process used the default `SCORE_THRESHOLD=3.5` while the original run used `1.5`, so `hitl_node` short-circuited on resume without consuming the `interrupt()` value. Two-part fix: derive resume status from the FINAL graph state, AND make the threshold check sticky by capturing it in state at score time.
 - **C2 (run-log column drift)**: pre-1.B.1 `pipeline-runs.md` header was 5-col, new code wrote 6-col rows. Dataview rendered misaligned. Self-healing migration added.
-- **C3 (counter drift on resume paths)**: `gap_aggregator.regenerate()` was only called at end of `run_pipeline()`. Resume paths bypassed it. Cognition CompanyNote showed `roles_seen: 3` while 9 cognition JobNotes existed on disk. Fixed by calling regen at end of `resume_pending`.
+- **C3 (counter drift on resume paths)**: `gap_aggregator.regenerate()` was only called at end of `run_pipeline()`. Resume paths bypassed it. A CompanyNote showed `roles_seen: 3` while 9 matching JobNotes existed on disk. Fixed by calling regen at end of `resume_pending`.
 - **I2 (thread_id collision)**: `_thread_id_for()` hashed `(url, batch_started_at)` — two cross-process pipelines starting at the same microsecond would collide. Added `os.getpid()` to the hash.
 
 The plan-review pattern: each adversarial pass rolled back the previous "ready" verdict. Six iterations was the diminishing-returns line.
@@ -268,7 +268,7 @@ Two themes:
 - `compass/rag/retriever.py` exposes `retrieve(query, k=8) -> list[RetrievedChunk]` with lazy index init
 - `score_node` builds a query string from the JD's `required_skills + nice_to_have + summary` and retrieves the 8 most relevant skill-inventory chunks; injects those instead of the full file
 - Token savings: ~2,500 → ~750 per scored JD
-- Real-data verification: the same Sierra JobNote that scored 3.0 pre-RAG scored 3.0 post-RAG — no quality regression, just smaller context
+- Real-data verification: the same target-company JobNote that scored 3.0 pre-RAG scored 3.0 post-RAG — no quality regression, just smaller context
 
 **2. Phase 1.B.1 carryover fixes.**
 
@@ -302,7 +302,7 @@ The spec made RAG a portfolio-claim requirement. But the engineering rationale i
 
 Adversarial post-smoke review surfaced four LLM-behavior bug classes — documented in [`KNOWN_DATA_QUALITY_ISSUES.md`](KNOWN_DATA_QUALITY_ISSUES.md):
 
-- **B1**: `extract_node` under-extracts `skills_required` on best-fit roles. Sierra Agent Architecture JD scored 3.0 because `skills_required: []` left no signal for matched_skills.
+- **B1**: `extract_node` under-extracts `skills_required` on best-fit roles. One target-company agent-architecture JD scored 3.0 because `skills_required: []` left no signal for matched_skills.
 - **B2**: `extract_node` mis-reads OR-lists ("languages such as Python, TypeScript, Go") as AND-lists.
 - **B3**: `score_node` occasionally marks candidate-strong skills as missing (Python listed missing despite candidate's Python=3).
 - **B4 (FIXED)**: `intake_filter` title-keyword list was leaky. 5 false-negatives migrated post-fix.

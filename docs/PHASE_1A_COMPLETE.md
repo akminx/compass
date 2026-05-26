@@ -48,7 +48,7 @@ Phase 0 found 23 silent data-correctness bugs across 4 audit passes — Phase 1.
 | 4 | `run_pipeline` aggregate dict missing the new state keys (`in_scope`, `role_family`) — would `KeyError` on access | Quality review, Task 2 | Add both keys to the aggregate literal |
 | 5 | Routing test ran the full graph including real `extract_node` (LLM-touching) — non-hermetic | Quality review, Task 3 | Replace with direct unit tests of `_route_after_filter` predicate |
 | 6 | Module docstring on `graph.py` still described Phase 0.B topology | Quality review, Task 3 | Update to reflect new `intake_filter` flow |
-| 7 | `target_companies._normalize` stripped only whitespace; spec says strip non-alphanumerics — `"Hebbia/Glean"`-style names wouldn't roundtrip | Quality review, Task 4 | `re.sub(r"[^a-z0-9]", "", ...)` |
+| 7 | `target_companies._normalize` stripped only whitespace; spec says strip non-alphanumerics — `"CompanyA/CompanyB"`-style names wouldn't roundtrip | Quality review, Task 4 | `re.sub(r"[^a-z0-9]", "", ...)` |
 | 8 | `target_companies.get_tier` re-parsed on every call when companies dict was empty `{}` (truthiness gotcha) | Quality review, Task 4 | Sentinel `_company_to_tier: dict | None = None` with `is None` guard |
 | 9 | `vault_write.py` module docstring claimed `update_skill_note` is called — stale from Phase 0 (gap_aggregator owns this now) | Quality review, Task 5 | Update docstring; clarify skill counters are derived |
 | 10 | `_state(...)` test helper didn't include `in_scope` / `role_family` keys, masking potential future regressions | Quality review, Task 5 | Add both with defaults |
@@ -68,15 +68,15 @@ Three review passes on the cut tag turned up 7 more bugs that the in-loop review
 
 | # | Bug | Commit | What |
 |---|---|---|---|
-| A | `target_companies.get_tier` failed for 8 of 9 vault companies because scraper board_tokens (`gleanwork`, `nvidia`, `apple`, `vapi`, `anduril`) don't equal target-companies.md descriptive names (`Glean`, `NVIDIA Agentic AI`, `Vapi, Retell, Wispr Flow`, etc.) | `c2e01a9` | Bidirectional substring match with 4-char min-length floor |
+| A | `target_companies.get_tier` failed for 8 of 9 vault companies because scraper board_tokens (e.g. lower-case board slug) don't equal target-companies.md descriptive names (mixed-case multi-word strings) | `c2e01a9` | Bidirectional substring match with 4-char min-length floor |
 | B | `upgrade_family` over-promoted plain backend roles to `agent-engineer` whenever a JD body mentioned `"agentic AI"` once — `"agent"` ⊂ `"agentic"` ⊂ `"agentic ai"` triple-counted | `bcd2478` | Longest-first word-bounded regex with distinct-phrase dedup |
-| 3 | `find_jobnote` case-sensitive substring match — `"Sierra-..."` failed against `"sierra-..."` filenames | `330980d` | Lowercase both sides of filename match |
+| 3 | `find_jobnote` case-sensitive substring match — `"CompanyA-..."` failed against `"companya-..."` filenames | `330980d` | Lowercase both sides of filename match |
 | E | Same case-sensitivity bug in `_find_application` and `get_skill_gaps` | `5ce4418` | Same fix pattern |
 | F | `add_application` silently overwrote in-flight ApplicationNotes when called twice — destroyed status transitions, contacts, next_action history | `2a219ad` | Refuse overwrite unless `force=True`; raise `FileExistsError` |
 | #1 | `CompanyNote.roles_seen` race under `MAX_CONCURRENT_JOBS=5` — 5 parallel writers all read `roles_seen=0`, all incremented to 1, last writer won → lost 4 increments. Dashboard sort by `roles_seen` lied. | `be1fa91` | Stop incrementing in `write_company_note`; derive from `len(JobNotes for company)` in new `gap_aggregator._sync_company_counters` (same pattern as bug-#12 skill-counter fix) |
 | #2 | Invalid manual `tier` value in Obsidian (typo like `tier: applynow` or `tier: favorite`) crashed `write_company_note` with `ValidationError` on the next pipeline run — `CompanyNote.tier` is a `Literal`, `model_copy(update={"tier": "favorite"})` rejects. | `d40f36e` | Validate `existing.tier` against the Literal value set; log+ignore invalid values so the pipeline-computed tier wins |
 
-Plus a vault cleanup: deleted 18 pre-Phase-1A JobNotes with empty `role_family`, backfilled CompanyNote tiers (decagon/glean/ramp → apply-now, cresta → 6-month), and deleted 1 JobNote mis-labeled by the pre-fix `upgrade_family`. Re-ran pipeline; all 8 surviving JobNotes have classifications consistent with current code.
+Plus a vault cleanup: deleted 18 pre-Phase-1A JobNotes with empty `role_family`, backfilled CompanyNote tiers across several target-company notes, and deleted 1 JobNote mis-labeled by the pre-fix `upgrade_family`. Re-ran pipeline; all 8 surviving JobNotes have classifications consistent with current code.
 
 **Total committed bugs across in-loop + post-tag reviews: 20.** None silent-shipped to production use.
 
@@ -84,7 +84,7 @@ Plus a vault cleanup: deleted 18 pre-Phase-1A JobNotes with empty `role_family`,
 
 ## What we know works (verified empirically on real data)
 
-Live pipeline run on 2026-05-18T15:48 against `anthropic,hebbia,gleanwork,cresta` (Greenhouse) + `sierra,decagon,ramp` (Ashby), `MAX_JOBS_PER_RUN=20`:
+Live pipeline run on 2026-05-18T15:48 against `acme,exampleco,democorp,companyx` (Greenhouse) + `companya,companyb,companyc` (Ashby), `MAX_JOBS_PER_RUN=20`:
 
 ```
 Processed: 20 | Written: 3 | Errors: 0   (16.3s, ~$0.05 OpenRouter cost)
@@ -95,13 +95,13 @@ Processed: 20 | Written: 3 | Errors: 0   (16.3s, ~$0.05 OpenRouter cost)
 - LLM rescues: "Sales Director" → *"implies sales, not building"*; "Amazon GTM Partnership" → *"GTM partnerships role, not engineering"*
 
 ✅ **Body-signal upgrader promotes generic SWE titles to agentic families.** The 3 written JobNotes:
-- `sierra-Software_Engineer_Platform` (2024-08-28) → keyword `swe-backend`, no upgrade
-- `sierra-Software_Engineer_Agent` (2025-02-13) → keyword start + body promotion → `agent-engineer`
-- `sierra-Software_Engineer_Product` (2026-03-27) → keyword `swe-fullstack` + body promotion → `applied-ai`
+- `companya-Software_Engineer_Platform` (2024-08-28) → keyword `swe-backend`, no upgrade
+- `companya-Software_Engineer_Agent` (2025-02-13) → keyword start + body promotion → `agent-engineer`
+- `companya-Software_Engineer_Product` (2026-03-27) → keyword `swe-fullstack` + body promotion → `applied-ai`
 
-✅ **SCORE_THRESHOLD write gate is removed.** The 0.0-score Sierra Product job was written to the vault — Phase 0.B would have dropped it. The master gap plan now considers it.
+✅ **SCORE_THRESHOLD write gate is removed.** The 0.0-score Company-A Product job was written to the vault — Phase 0.B would have dropped it. The master gap plan now considers it.
 
-✅ **CompanyNote.tier resolves from target-companies.md.** `companies/sierra.md` correctly has `tier: apply-now`.
+✅ **CompanyNote.tier resolves from target-companies.md.** `companies/companya.md` correctly has `tier: apply-now`.
 
 ✅ **Master gap plan reflects stretch-role demand.** TypeScript (#3) and Go (#5) both show `apply-now: 2` — exactly the kind of stretch-role gap signal Phase 1.A was built to surface.
 
@@ -124,7 +124,7 @@ Carryover from the Phase 1.A spec's "Out of scope" section plus issues surfaced 
 | RAG via Chroma for profile retrieval (replaces string-injection in `score_node`) | Portfolio claim | **1.B** | String injection works for the current profile size |
 | **Langfuse callback API mismatch** — every run logs `LangchainCallbackHandler.__init__() got an unexpected keyword argument 'host'`. Pipeline degrades gracefully, no traces recorded. | Observability | **1.B** | Bug #23 carryover from Phase 0; dedicated 1.B observability work |
 | Taxonomy expansion (PostgreSQL, Redis, Kafka, ClickHouse, etc.) | Coverage | **1.B** | Weekly review of unknown-skills-log will surface candidates |
-| **Hebbia Greenhouse board 404s** — they moved off Greenhouse. Logged warning, no impact on the run. | Coverage | **1.B** | Update ATS-board config when restructuring for Modal Secrets |
+| **One target-company Greenhouse board 404s** — they moved off Greenhouse. Logged warning, no impact on the run. | Coverage | **1.B** | Update ATS-board config when restructuring for Modal Secrets |
 | CLI env vars don't override `.env` for ATS board lists | Config UX | **1.B** | Low impact; resolve when restructuring config for Modal |
 | 30-JD labeled eval set + score-MAE / skill-recall harness | Portfolio claim | **2.A** | We now have ~24 scored JDs to draw from |
 | Public Langfuse trace URL in README | Portfolio claim | **2.B** | After 1.B Langfuse fix lands |
@@ -170,7 +170,7 @@ Carryover from the Phase 1.A spec's "Out of scope" section plus issues surfaced 
 ├── dashboard.md                              # rewritten — 5 Dataview panels (apply-now / in-flight / today's actions / top gaps / stretch)
 ├── _meta/
 │   └── filtered-jobs.md                      # NEW auto-appending log (intake_filter writes here)
-└── jobs/                                     # 3 new Sierra JobNotes with proper role_family + tier
+└── jobs/                                     # 3 new target-company JobNotes with proper role_family + tier
 ```
 
 ---
@@ -182,8 +182,8 @@ cd ~/Documents/compass
 
 # Morning: scrape, score, write, regenerate gap plan
 MAX_JOBS_PER_RUN=20 \
-  GREENHOUSE_BOARDS=anthropic,gleanwork,cresta \
-  ASHBY_BOARDS=sierra,decagon,ramp \
+  GREENHOUSE_BOARDS=acme,exampleco,democorp \
+  ASHBY_BOARDS=companya,companyb,companyc \
   uv run python -m compass.pipeline.graph
 
 # Open the dashboard in Obsidian
@@ -195,13 +195,13 @@ MAX_JOBS_PER_RUN=20 \
 #   • Stretch roles (in-scope, score < 3.5)
 
 # Pick a role to apply to. In Claude Code / Cursor (via compass MCP server):
-#   add_application(job_id="Sierra-Software_Engineer_Agent")
+#   add_application(job_id="CompanyA-Software_Engineer_Agent")
 #   → JobNote.status becomes "applied"
-#   → ApplicationNote created at applications/2026-05-18-sierra-Software_Engineer_Agent-<hash>.md
+#   → ApplicationNote created at applications/2026-05-18-companya-Software_Engineer_Agent-<hash>.md
 
 # After the recruiter screen:
 #   update_application_status(
-#     app_id="2026-05-18-sierra",
+#     app_id="2026-05-18-companya",
 #     status="screen",
 #     next_action="prep onsite case study",
 #     next_action_date="2026-05-25"
@@ -272,7 +272,7 @@ worked in 1.A:
 |---|---|---|
 | JobNotes in vault | 8 | After cleanup of 18 pre-Phase-1A stale entries; all surviving notes correctly classified |
 | SkillNotes | 99 | +4 (LLMs, Large Language Models, Machine Learning, Deep Learning from Phase 0.B retro) |
-| CompanyNotes | 9 | tier resolution working: sierra/decagon/glean/ramp → apply-now; anthropic/cresta → 6-month |
+| CompanyNotes | 9 | tier resolution working across the apply-now and 6-month target lists |
 | Pipeline runs logged | 19 | +6 |
 | Filtered-jobs log entries | ~30 | NEW (didn't exist before 1.A) |
 | Master gap plan top-3 | TypeScript · Go · RAG (all apply-now demand) | Stretch-role weighting working |

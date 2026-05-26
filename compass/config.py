@@ -53,6 +53,18 @@ HITL_TIMEOUT_HOURS: int = int(os.getenv("HITL_TIMEOUT_HOURS", "4"))
 MAX_JOBS_PER_RUN: int = int(os.getenv("MAX_JOBS_PER_RUN", "50"))
 SCORE_THRESHOLD: float = float(os.getenv("SCORE_THRESHOLD", "3.5"))
 MAX_CONCURRENT_JOBS: int = int(os.getenv("MAX_CONCURRENT_JOBS", "5"))
+# Scorer self-consistency: number of independent score samples per JD.
+# 1 = production default (single call, lowest cost).
+# 3 = eval / high-stakes default (median of 3 — smooths random LLM variance).
+SCORE_ENSEMBLE_N: int = int(os.getenv("SCORE_ENSEMBLE_N", "1"))
+
+# Isotonic calibrator: opt-in. When true, score_node applies the calibrator
+# saved at compass/evals/calibrator.json to every score. When false (default),
+# the calibrator is a no-op — useful for tests, debugging, and running the
+# eval harness against the un-calibrated scorer to measure the calibrator's
+# contribution. Set CALIBRATOR_ENABLED=1 in production .env after the first
+# `python -m compass.evals.calibrator fit` run.
+CALIBRATOR_ENABLED: bool = os.getenv("CALIBRATOR_ENABLED", "").lower() in ("1", "true", "yes")
 
 # ── Tier weights (gap_aggregator) — overrides from preferences.md at runtime ─
 DEFAULT_TIER_WEIGHTS: dict[str, float] = {

@@ -132,7 +132,7 @@ async def fetch_rawjob_from_url(
     if not inferred_company:
         host = (urlparse(url).hostname or "").lower()
         # Cheap heuristic: pull the company from the host's first label.
-        # E.g. jobs.ashbyhq.com/sierra/... → use page_title; jpmc.fa.oraclecloud.com
+        # E.g. jobs.ashbyhq.com/acme/... → use page_title; jpmc.fa.oraclecloud.com
         # → 'jpmc'. The user is encouraged to pass `company` explicitly when this
         # is wrong.
         parts = host.split(".")

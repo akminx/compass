@@ -2,20 +2,20 @@
 
 > Date: 2026-05-17
 > Status: Approved (user)
-> Author: the candidate Aedavelli + Claude
+> Author: the candidate + Claude
 > Related: `compass/CLAUDE.md`, `compass/docs/ARCHITECTURE.md`, `compass-vault/_profile/target-companies.md`
 
 ## Problem Statement
 
-the candidate is targeting tier-2 agentic-AI startups (Sierra, Decagon, Ramp, Hebbia, Glean, etc.) and big-tech L3/L4 agentic roles (NVIDIA, Apple, Google Cloud) in 2026. He has 1.5 YoE in a prior role, strong MCP/a personal local-first OS project portfolio artifacts, and a calibrated skill inventory in `compass-vault/_profile/`. He needs:
+the candidate is targeting tier-2 agentic-AI startups and big-tech L3/L4 agentic roles in 2026. He has prior eng experience, strong MCP/a personal local-first OS project portfolio artifacts, and a calibrated skill inventory in `compass-vault/_profile/`. He needs:
 
 1. A working tool that helps him find, score, and decide on jobs every morning — replacing manual LinkedIn browsing.
 2. A portfolio artifact impressive enough to link from his resume.
 3. A skill-tracking loop that closes the gap between "I have notes in learning-vault" and "my resume reflects what I've actually shipped."
 
-**FDE-track roles (Anthropic FDE, OpenAI FDE, Salesforce AI FDE) are explicitly OUT OF SCOPE for this project's audience** — the candidate has insufficient YoE and will revisit after another 12–18 months. The design optimizes for tier-2 product engineering and tier-3 big-tech L4 audiences (Sierra Agent Engineer, Decagon MTS, Ramp Agent Developer Platform, Hebbia/Glean Applied AI, Cognition AI Enablement, NVIDIA/Apple/Google Cloud L4).
+**FDE-track roles are explicitly OUT OF SCOPE for this project's audience** — the candidate has insufficient YoE and will revisit later. The design optimizes for tier-2 product engineering and tier-3 big-tech L4 audiences.
 
-> **Note on CLAUDE.md drift:** `compass/CLAUDE.md` was previously written with Sierra/Scale/Databricks FDE as the named portfolio audience. That framing is stale — this spec supersedes it. CLAUDE.md updated in the same commit to reflect the tier-2 product-engineering audience.
+> **Note on CLAUDE.md drift:** `compass/CLAUDE.md` was previously written with an FDE-focused portfolio audience. That framing is stale — this spec supersedes it. CLAUDE.md updated in the same commit to reflect the tier-2 product-engineering audience.
 
 ## Goals
 
@@ -37,7 +37,7 @@ A single agentic system, **Compass**, that:
 - Workday / Apple / Google Cloud / AWS / Microsoft / Workable scrapers in MVP — deferred to Phase 3+
 - Real-time job alerting beyond daily cron — daily cadence is the right rhythm for considered application
 - LinkedIn / Indeed / Glassdoor scraping — ToS risk + recruiter spam noise outweighs marginal coverage
-- Voice-stack roles (Vapi/Retell/Livekit) — not targeting voice companies
+- Voice-stack roles — not targeting voice companies
 - Eval harness with labeled set in MVP — needs real jobs to label first
 
 ## Approach
@@ -171,7 +171,7 @@ All nodes implemented as the simplest version that works end-to-end. Ends with `
 ## Data Flow Example (one job through the pipeline)
 
 ```
-1. Greenhouse scraper returns RawJob{company: "Sierra", title: "Agent Engineer", ...}
+1. Greenhouse scraper returns RawJob{company: "AgentCo", title: "Agent Engineer", ...}
 2. run_pipeline.dedup() checks compass-vault/jobs/ for URL match → not found
 3. graph.ainvoke(state={current_job: RawJob, ...})
 4.   intake_node       → no-op, returns {}
@@ -180,8 +180,8 @@ All nodes implemented as the simplest version that works end-to-end. Ends with `
 7.   reflect_node      → no-op (score above threshold, no reflection needed)
 8.   hitl_node         → auto-approve since 4.2 ≥ 3.5
 9.   tailor_node       → Sonnet → "Lead with your production MCP work and the candidate's local-first OS 4-server pattern..."
-10.  vault_write_node  → writes compass-vault/jobs/2026-05-18-Sierra-Agent-Engineer.md
-                       → updates compass-vault/companies/Sierra.md
+10.  vault_write_node  → writes compass-vault/jobs/2026-05-18-AgentCo-Agent-Engineer.md
+                       → updates compass-vault/companies/AgentCo.md
                        → increments compass-vault/skills/LangGraph.md appears_in_jobs
 11. After batch: gap_aggregator.regenerate() → master-gap-plan.md shows LangGraph rank #1
 ```
@@ -196,7 +196,7 @@ All nodes implemented as the simplest version that works end-to-end. Ends with `
 
 ## Testing Strategy
 
-- **MVP**: Real-run smoke test only. `MAX_JOBS_PER_RUN=5 uv run python -m compass.pipeline.graph` against 2 Greenhouse boards (`anthropic`, `hebbia`) + 1 Ashby (`sierra`). Verify 5 jobs in vault + non-empty master-gap-plan.
+- **MVP**: Real-run smoke test only. `MAX_JOBS_PER_RUN=5 uv run python -m compass.pipeline.graph` against 2 Greenhouse boards (`acme`, `exampleco`) + 1 Ashby (`democorp`). Verify 5 jobs in vault + non-empty master-gap-plan.
 - **Phase 1+**: Pytest unit tests for scrapers (mock httpx) + vault writer (in-memory) + skill_assessor (mock LLM). Integration test for end-to-end pipeline on a frozen sample JD.
 - **Phase 2**: Eval harness IS the regression test. Nightly Modal cron runs eval against labeled set, alerts if MAE > 0.5.
 

@@ -72,7 +72,7 @@ async def test_timeout_checker_resumes_old_pending_as_rejected(monkeypatch):
     from compass.pipeline.graph import run_pipeline
 
     job = RawJob(
-        company="Sierra",
+        company="AgentCo",
         title="SWE",
         url="https://x/1",
         source="ashby",
@@ -113,7 +113,7 @@ async def test_timeout_checker_leaves_young_pending_alone():
     from compass.pipeline.graph import run_pipeline
 
     job = RawJob(
-        company="Sierra",
+        company="AgentCo",
         title="SWE",
         url="https://x/2",
         source="ashby",

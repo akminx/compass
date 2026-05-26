@@ -33,7 +33,14 @@ from compass.evals.dataset import EvalRecord, load_dataset
 from compass.evals.metrics import ScoreMetrics, aggregate, top_k_precision
 from compass.llm import get_model_id
 from compass.pipeline.nodes.extract import _extract
-from compass.pipeline.nodes.score import _profile_text, _score
+from compass.pipeline.nodes.score import (
+    _apply_clearance_gate,
+    _apply_role_family_cap,
+    _profile_text,
+    _score,
+    _score_ensemble,
+)
+from compass.pipeline.role_family import keyword_classify, llm_classify, upgrade_family
 from compass.pipeline.state import JobRequirements, JobScore, RawJob
 from compass.vault.reader import read_profile_section, read_resume
 
@@ -42,87 +49,148 @@ logger = logging.getLogger(__name__)
 RESULTS_DIR = Path(__file__).parent
 
 
+async def _classify_role_family_from_body(jd_text: str) -> str:
+    """Eval helper: classify a JD's role family without a title (eval records
+    intentionally don't carry titles). Falls through to the LLM classifier
+    using the JD body as the signal. Returns the canonical family string
+    used by `ROLE_FAMILY_SCORE_CAP`.
+    """
+    # Try the first ~3 lines as a pseudo-title — many synthetic JDs start
+    # with the role name on line 1. Saves an LLM call on the easy cases.
+    head = jd_text.strip().splitlines()[:3]
+    pseudo_title = " ".join(head)[:200]
+    in_scope, family = keyword_classify(pseudo_title)
+    if in_scope is False:
+        return "out-of-scope"
+    if in_scope is True:
+        return upgrade_family(family, jd_text)
+    try:
+        result = await llm_classify(pseudo_title, jd_text[:500])
+        family = result.role_family if result.in_scope else "out-of-scope"
+        return upgrade_family(family, jd_text)
+    except Exception as e:
+        logger.warning("eval: role_family LLM classify failed: %s", e)
+        return "other-eng"  # neutral fallback — no cap applied
+
+
+def _eval_trace_context(record: EvalRecord):
+    """Tag every eval span with session_id=record.id + the `eval` feature tag
+    so eval traces filter separately from production pipeline runs in the
+    Langfuse UI."""
+    import contextlib
+
+    try:
+        from compass.config import LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY
+
+        if not (LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY):
+            return contextlib.nullcontext()
+        from langfuse import propagate_attributes
+
+        return propagate_attributes(
+            session_id=f"eval-{record.id}",
+            tags=["eval", "harness"],
+            metadata={"source": record.source[:80]},
+        )
+    except Exception:
+        return contextlib.nullcontext()
+
+
 async def _run_extract_and_score(
     record: EvalRecord,
-) -> tuple[JobRequirements | None, JobScore | None, float]:
-    """Run the SAME extract → score logic the production graph runs, against
-    one labeled JD. Returns (req, score, wall_seconds).
+    *,
+    ensemble_n: int = 3,
+) -> tuple[JobRequirements | None, JobScore | None, float, str | None]:
+    """Run the SAME extract → role-family → score → cap logic the production
+    graph runs, against one labeled JD. Returns (req, score, wall_seconds,
+    role_family).
 
     Production fidelity matters here — earlier versions called `_extract` and
     `_score` directly, which skipped the post-LLM normalization and constraint
     layers, making the metrics measure something other than what the user
     actually experiences. Now we apply:
 
-      extract: `_normalize_skill_list` (taxonomy folding) + seniority-from-title
-               fallback.  Matches `extract_node`.
-      score:   `_score_with_retry` (truncated-reasoning retry) +
-               `_constrain_to_jd_skills` (drop hallucinated matched/missing).
-               Matches `score_node`.
+      extract:       `_normalize_skill_list` (taxonomy folding) + seniority-
+                     from-title fallback. Matches `extract_node`.
+      classify:      `_classify_role_family_from_body` — derives role_family
+                     from JD body (eval records lack titles). Matches the
+                     `intake_filter` signal that production score_node sees
+                     in `state["role_family"]`.
+      score:         `_score_ensemble` (median of `ensemble_n` samples,
+                     majority-vote on matched/missing) — matches `score_node`
+                     when `SCORE_ENSEMBLE_N>1`. Wraps the per-sample
+                     `_score_with_retry` (truncated-reasoning retry) and
+                     `_constrain_to_jd_skills` is applied below.
+      cap:           `_apply_role_family_cap` — caps the score when role
+                     family is out-of-scope / mobile / frontend-only.
+                     Matches the production `score_node`.
 
-    We still call `_extract` and `_score` as the patchable surface so tests
-    can stub them; the post-processing wraps the stub output.
+    `_extract` and `_score` remain the patchable surface for tests; the
+    post-processing wraps the stub output. The whole body runs inside an
+    `_eval_trace_context` so every Langfuse span emitted by the inner LLM
+    calls gets tagged with `session_id=eval-<id>` and the `eval` feature
+    tag — keeps eval traces filterable away from production runs.
     """
     from compass.pipeline.nodes.extract import (
         _normalize_skill_list,
         _seniority_with_title_fallback,
     )
-    from compass.pipeline.nodes.score import _constrain_to_jd_skills, _reasoning_complete
+    from compass.pipeline.nodes.score import _constrain_to_jd_skills
 
     start = time.monotonic()
-    try:
-        raw_req = await _extract(record.jd_text)
-    except Exception as e:
-        logger.warning("extract failed for %s: %s", record.id, e)
-        return None, None, time.monotonic() - start
-
-    # Mirror extract_node: canonicalize skills, fall-back seniority.
-    unknown: list[str] = []
-    title_hint = ""  # eval JDs don't carry titles — seniority stays as LLM said
-    req = JobRequirements(
-        required_skills=_normalize_skill_list(raw_req.required_skills, record.jd_text, unknown),
-        nice_to_have_skills=_normalize_skill_list(
-            raw_req.nice_to_have_skills, record.jd_text, unknown
-        ),
-        years_experience=raw_req.years_experience,
-        seniority=_seniority_with_title_fallback(raw_req.seniority, title_hint),
-        remote_policy=raw_req.remote_policy,
-        summary=raw_req.summary,
-    )
-
-    # PRODUCTION FIDELITY: the score node uses `_profile_text(req)` which
-    # composes resume + RAG-retrieved top-k skill chunks. The previous eval
-    # path used a flat `resume + role-clarifications` stitch which gave the
-    # scorer LESS context than production. Measuring with less context
-    # systematically degraded the eval and made the production scorer look
-    # worse than it actually is. Wire the same path here.
-    profile = await _profile_text(req)
-    fake_job = RawJob(
-        company="(eval)",
-        title="(eval)",
-        url=f"eval://{record.id}",
-        source="manual",
-        description=record.jd_text,
-    )
-    try:
-        raw_score = await _score(req, profile, fake_job)
-    except Exception as e:
-        logger.warning("score failed for %s: %s", record.id, e)
-        return req, None, time.monotonic() - start
-
-    # Mirror score_node: retry on truncated reasoning, constrain matched/missing
-    # to the JD's actual skill universe. Without this the metric measures
-    # un-constrained LLM output rather than what the pipeline actually persists.
-    if not _reasoning_complete(raw_score.reasoning):
-        logger.info("eval: reasoning looked truncated for %s — retrying once", record.id)
+    with _eval_trace_context(record):
         try:
-            raw_score = await _score(req, profile, fake_job)
+            raw_req = await _extract(record.jd_text)
         except Exception as e:
-            logger.warning("score retry failed for %s: %s", record.id, e)
-    constrained = _constrain_to_jd_skills(raw_score, req)
-    return req, constrained, time.monotonic() - start
+            logger.warning("extract failed for %s: %s", record.id, e)
+            return None, None, time.monotonic() - start, None
+
+        # Mirror extract_node: canonicalize skills, fall-back seniority.
+        unknown: list[str] = []
+        title_hint = ""  # eval JDs don't carry titles — seniority stays as LLM said
+        req = JobRequirements(
+            required_skills=_normalize_skill_list(
+                raw_req.required_skills, record.jd_text, unknown
+            ),
+            nice_to_have_skills=_normalize_skill_list(
+                raw_req.nice_to_have_skills, record.jd_text, unknown
+            ),
+            years_experience=raw_req.years_experience,
+            seniority=_seniority_with_title_fallback(raw_req.seniority, title_hint),
+            remote_policy=raw_req.remote_policy,
+            summary=raw_req.summary,
+        )
+
+        role_family = await _classify_role_family_from_body(record.jd_text)
+
+        # PRODUCTION FIDELITY: the score node uses `_profile_text(req)` which
+        # composes resume + RAG-retrieved top-k skill chunks. The previous eval
+        # path used a flat `resume + role-clarifications` stitch which gave the
+        # scorer LESS context than production. Measuring with less context
+        # systematically degraded the eval and made the production scorer look
+        # worse than it actually is. Wire the same path here.
+        profile = await _profile_text(req)
+        fake_job = RawJob(
+            company="(eval)",
+            title="(eval)",
+            url=f"eval://{record.id}",
+            source="manual",
+            description=record.jd_text,
+        )
+        try:
+            raw_score = await _score_ensemble(req, profile, fake_job, n=ensemble_n)
+        except Exception as e:
+            logger.warning("score failed for %s: %s", record.id, e)
+            return req, None, time.monotonic() - start, role_family
+
+        constrained = _constrain_to_jd_skills(raw_score, req)
+        family_capped = _apply_role_family_cap(constrained, role_family)
+        clearance_capped = _apply_clearance_gate(family_capped, record.jd_text)
+        return req, clearance_capped, time.monotonic() - start, role_family
 
 
-async def run_against_labels(records: list[EvalRecord]) -> tuple[ScoreMetrics, list[dict]]:
+async def run_against_labels(
+    records: list[EvalRecord], *, ensemble_n: int = 3
+) -> tuple[ScoreMetrics, list[dict]]:
     """Run Compass on each record, compare to EvalRecord.expected_*."""
     per_record: list[dict] = []
     predicted_scores: list[float] = []
@@ -135,7 +203,7 @@ async def run_against_labels(records: list[EvalRecord]) -> tuple[ScoreMetrics, l
     profile = f"{read_resume()}\n\n{read_profile_section('role-clarifications')}"
 
     for r in records:
-        req, score, elapsed = await _run_extract_and_score(r)
+        req, score, elapsed, role_family = await _run_extract_and_score(r, ensemble_n=ensemble_n)
         if req is None or score is None:
             per_record.append(
                 {"id": r.id, "error": "extract or score failed", "elapsed_s": elapsed}
@@ -148,12 +216,13 @@ async def run_against_labels(records: list[EvalRecord]) -> tuple[ScoreMetrics, l
         expected_skill_lists.append(r.expected_skills)
         matched_skill_lists.append(list(score.matched_skills))
         missing_skill_lists.append(list(score.missing_skills))
-        cost = _estimate_record_cost(r.jd_text, profile, req, score)
+        cost = _estimate_record_cost(r.jd_text, profile, req, score, ensemble_n=ensemble_n)
         total_cost += cost["cost_usd"]
         per_record.append(
             {
                 "id": r.id,
                 "source": r.source,
+                "role_family": role_family,
                 "expected_score": r.expected_score,
                 "predicted_score": score.score,
                 "score_delta": round(score.score - r.expected_score, 2),
@@ -186,12 +255,20 @@ async def run_against_labels(records: list[EvalRecord]) -> tuple[ScoreMetrics, l
 
 
 def _estimate_record_cost(
-    jd_text: str, profile: str, req: JobRequirements | None, score: JobScore | None
+    jd_text: str,
+    profile: str,
+    req: JobRequirements | None,
+    score: JobScore | None,
+    *,
+    ensemble_n: int = 1,
 ) -> dict:
     """Per-record cost estimate across extract + score nodes. Uses the
     chars-per-token approximation from costs.estimate_cost — accurate enough
     for cost/accuracy Pareto reporting; would need real-usage hooks for a
     billing dashboard.
+
+    `ensemble_n`: number of score samples per JD. The extract call is single-
+    shot; only score-side cost is multiplied.
     """
     import json as _json
 
@@ -202,7 +279,7 @@ def _estimate_record_cost(
 
     extract_cost = estimate_cost(get_model_id("extract"), extract_in, extract_out)
     score_cost = estimate_cost(get_model_id("score"), score_in, score_out)
-    total = extract_cost.cost_usd + score_cost.cost_usd
+    total = extract_cost.cost_usd + (score_cost.cost_usd * max(ensemble_n, 1))
     return {
         "extract_model": extract_cost.model,
         "extract_tokens_in": extract_cost.input_tokens,
@@ -210,11 +287,14 @@ def _estimate_record_cost(
         "score_model": score_cost.model,
         "score_tokens_in": score_cost.input_tokens,
         "score_tokens_out": score_cost.output_tokens,
+        "score_ensemble_n": ensemble_n,
         "cost_usd": round(total, 6),
     }
 
 
-async def run_against_judge(records: list[EvalRecord]) -> tuple[ScoreMetrics, list[dict]]:
+async def run_against_judge(
+    records: list[EvalRecord], *, ensemble_n: int = 3
+) -> tuple[ScoreMetrics, list[dict]]:
     """Run Compass on each record, compare to an LLM-as-judge verdict.
 
     No EvalRecord.expected_* needed — the judge produces them on the fly.
@@ -234,7 +314,7 @@ async def run_against_judge(records: list[EvalRecord]) -> tuple[ScoreMetrics, li
     total_cost: float = 0.0
 
     for r in records:
-        req, score, elapsed = await _run_extract_and_score(r)
+        req, score, elapsed, role_family = await _run_extract_and_score(r, ensemble_n=ensemble_n)
         if req is None or score is None:
             per_record.append(
                 {"id": r.id, "error": "extract or score failed", "elapsed_s": elapsed}
@@ -261,12 +341,13 @@ async def run_against_judge(records: list[EvalRecord]) -> tuple[ScoreMetrics, li
         expected_skill_lists.append(judge_skills_canonical)
         matched_skill_lists.append(list(score.matched_skills))
         missing_skill_lists.append(list(score.missing_skills))
-        cost = _estimate_record_cost(r.jd_text, profile, req, score)
+        cost = _estimate_record_cost(r.jd_text, profile, req, score, ensemble_n=ensemble_n)
         total_cost += cost["cost_usd"]
         per_record.append(
             {
                 "id": r.id,
                 "source": r.source,
+                "role_family": role_family,
                 "judge_score": verdict.expected_score,
                 "predicted_score": score.score,
                 "score_delta": round(score.score - verdict.expected_score, 2),
@@ -325,11 +406,28 @@ def _format_summary(metrics: ScoreMetrics, mode: str) -> str:
     )
 
 
-async def run_evals(*, mode: str = "labels", limit: int | None = None) -> dict:
+async def run_evals(
+    *,
+    mode: str = "labels",
+    limit: int | None = None,
+    ensemble_n: int = 3,
+    scorer_model: str | None = None,
+) -> dict:
     """Programmatic entry point — used by the MCP tool wrapper.
 
     Returns a dict with `metrics`, `per_record`, and `results_path`.
+
+    `scorer_model`: overrides the SCORE_MODEL env at runtime by monkey-patching
+    `compass.config.SCORE_MODEL`. Used by `--scorer-model` for head-to-head
+    Pareto comparisons (e.g. flash-scorer vs sonnet-scorer at same n).
     """
+    if scorer_model is not None:
+        import compass.config as _cfg
+
+        original = _cfg.SCORE_MODEL
+        _cfg.SCORE_MODEL = scorer_model
+        logger.info("eval: overriding SCORE_MODEL %s → %s", original, scorer_model)
+
     records = load_dataset()
     if not records:
         return {
@@ -343,9 +441,19 @@ async def run_evals(*, mode: str = "labels", limit: int | None = None) -> dict:
         records = random.sample(records, limit)
 
     if mode == "judge":
-        metrics, per_record = await run_against_judge(records)
+        metrics, per_record = await run_against_judge(records, ensemble_n=ensemble_n)
     else:
-        metrics, per_record = await run_against_labels(records)
+        metrics, per_record = await run_against_labels(records, ensemble_n=ensemble_n)
+
+    # Flush Langfuse buffers so eval traces actually land before the script
+    # exits. Without this, the SDK's background batcher can drop traces.
+    # Per the Langfuse skill's instrumentation reference.
+    try:
+        from compass.pipeline.graph import _langfuse_flush as _flush
+
+        _flush()
+    except Exception:  # pragma: no cover — observability is best-effort
+        pass
 
     # Include microseconds so two runs within the same second don't overwrite.
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
@@ -422,9 +530,30 @@ def main() -> int:
         default=None,
         help="Sample N records instead of running the full dataset.",
     )
+    parser.add_argument(
+        "--ensemble-n",
+        type=int,
+        default=3,
+        help="Number of scorer samples per JD (median + majority-vote). "
+        "Default 3. Set 1 to disable self-consistency (faster, noisier).",
+    )
+    parser.add_argument(
+        "--scorer-model",
+        type=str,
+        default=None,
+        help="Override SCORE_MODEL for this run (e.g. anthropic/claude-sonnet-4-6). "
+        "Used for Pareto comparisons against the default flash scorer.",
+    )
     args = parser.parse_args()
 
-    result = asyncio.run(run_evals(mode="judge" if args.judge else "labels", limit=args.limit))
+    result = asyncio.run(
+        run_evals(
+            mode="judge" if args.judge else "labels",
+            limit=args.limit,
+            ensemble_n=args.ensemble_n,
+            scorer_model=args.scorer_model,
+        )
+    )
     if "error" in result:
         print(result["error"], file=sys.stderr)
         return 1

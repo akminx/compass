@@ -70,13 +70,13 @@ def checkpoint_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return db
 
 
-def _job(url: str = "https://jobs.example.com/sierra-1") -> RawJob:
+def _job(url: str = "https://jobs.example.com/agentco-1") -> RawJob:
     return RawJob(
-        company="Sierra",
+        company="AgentCo",
         title="SWE, Agent",
         url=url,
         source="ashby",
-        description="An agent engineering role at Sierra.",
+        description="An agent engineering role at AgentCo.",
         date_posted=_dt.date(2026, 5, 18),
     )
 
@@ -95,9 +95,9 @@ async def test_above_threshold_job_pauses_and_registers_in_state_store(monkeypat
     assert result["jobs_paused"] == 1
     rows = await state_store.list_pending()
     assert len(rows) == 1
-    assert rows[0]["company"] == "Sierra"
+    assert rows[0]["company"] == "AgentCo"
     assert rows[0]["score"] == pytest.approx(4.2)
-    assert rows[0]["job_url"] == "https://jobs.example.com/sierra-1"
+    assert rows[0]["job_url"] == "https://jobs.example.com/agentco-1"
 
 
 @pytest.mark.usefixtures("temp_hitl_db", "checkpoint_db", "stub_llm_nodes", "temp_vault")

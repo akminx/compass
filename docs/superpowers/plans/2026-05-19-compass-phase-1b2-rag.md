@@ -250,7 +250,7 @@ async def test_run_pipeline_emits_no_unregistered_warnings(checkpoint_db, monkey
 
     from compass.pipeline.graph import run_pipeline
     await run_pipeline(raw_jobs=[RawJob(
-        company="Sierra", title="SWE", url="u://x/1", source="ashby",
+        company="AgentCo", title="SWE", url="u://x/1", source="ashby",
         description="...", date_posted=_dt.date(2026, 5, 19),
     )])
 
@@ -354,7 +354,7 @@ async def test_resume_purges_thread_checkpoint_blobs(stub_llm_nodes):
     from compass.hitl.resume import resume_pending
     from compass.pipeline.graph import run_pipeline
 
-    job = RawJob(company="Sierra", title="SWE", url="u://purge-probe",
+    job = RawJob(company="AgentCo", title="SWE", url="u://purge-probe",
                  source="ashby", description="...", date_posted=_dt.date(2026, 5, 19))
     pre = await run_pipeline(raw_jobs=[job])
     assert pre["jobs_paused"] == 1
@@ -1191,7 +1191,7 @@ Expected: top-5 results include skills like Python, MCP, LangGraph, Agent Framew
 
 - [ ] **Step 4: Re-score one existing JobNote with the new pipeline**
 
-Pick any previously-approved JobNote (e.g. `~/Documents/compass-vault/jobs/2024-10-05-cognition-Special_Projects_Engineer-5343fadf.md` from the Phase 1.B.1 smoke, if it still exists; otherwise pick any JobNote with a known pre-RAG match_score). Note the pre-RAG score; expect the post-RAG score to land within ±0.5.
+Pick any previously-approved JobNote (e.g. `~/Documents/compass-vault/jobs/2024-10-05-devco-Special_Projects_Engineer-5343fadf.md` from the Phase 1.B.1 smoke, if it still exists; otherwise pick any JobNote with a known pre-RAG match_score). Note the pre-RAG score; expect the post-RAG score to land within ±0.5.
 
 ```bash
 # Re-score via the MCP score_jd tool — bypasses vault writes
@@ -1199,7 +1199,7 @@ uv run python -c "
 import asyncio
 from compass.mcp_server.server import score_jd
 async def main():
-    jd_text = open('/Users/<user>/Documents/compass-vault/jobs/2024-10-05-cognition-Special_Projects_Engineer-5343fadf.md').read()
+    jd_text = open('/Users/<user>/Documents/compass-vault/jobs/2024-10-05-devco-Special_Projects_Engineer-5343fadf.md').read()
     result = await score_jd(jd_text)
     print(f'RAG score: {result[\"score\"][\"score\"]}')
     print(f'matched: {result[\"score\"][\"matched_skills\"]}')
@@ -1216,7 +1216,7 @@ Expected: score within 2.5–3.5 (pre-RAG was 3.0). If the new score is wildly d
 MAX_JOBS_PER_RUN=5 \
   GREENHOUSE_BOARDS=anthropic \
   LEVER_COMPANIES= \
-  ASHBY_BOARDS=decagon \
+  ASHBY_BOARDS=botco \
   uv run python -m compass.pipeline.graph
 ```
 

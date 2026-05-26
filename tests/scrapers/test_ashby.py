@@ -96,7 +96,7 @@ async def test_scrape_ashby_drops_empty_description(httpx_mock):
 
 
 async def test_scrape_ashby_prefers_location_over_locationname(httpx_mock):
-    """Regression: live Ashby boards (Sierra, Posthog, Ramp) populate `location`,
+    """Regression: live Ashby boards (AgentCo, Posthog, Ramp) populate `location`,
     not `locationName`. The pre-fix scraper read `locationName` only and dropped
     location for every job. Also captures `isRemote` into the remote field."""
     httpx_mock.add_response(

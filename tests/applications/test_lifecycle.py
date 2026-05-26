@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 
-def _seed_jobnote(vault: Path, company="Sierra", title="Agent Engineer", url="https://x/s") -> Path:
+def _seed_jobnote(vault: Path, company="AgentCo", title="Agent Engineer", url="https://x/s") -> Path:
     """Write a minimal JobNote frontmatter that the lifecycle can find."""
     from compass.vault.schemas import JobNote
     from compass.vault.writer import write_job_note
@@ -25,16 +25,16 @@ class TestAddApplication:
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application
 
-        app = add_application(job_id="Sierra-Agent_Engineer")
-        assert app.company == "Sierra"
+        app = add_application(job_id="AgentCo-Agent_Engineer")
+        assert app.company == "AgentCo"
         assert app.status == "applied"
-        assert any((temp_vault / "applications").glob("*Sierra*"))
+        assert any((temp_vault / "applications").glob("*AgentCo*"))
 
     def test_marks_jobnote_status_applied(self, temp_vault):
         job_path = _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application
 
-        add_application(job_id="Sierra-Agent_Engineer")
+        add_application(job_id="AgentCo-Agent_Engineer")
         import frontmatter
 
         md = frontmatter.load(job_path)
@@ -48,39 +48,39 @@ class TestAddApplication:
             add_application(job_id="not-a-real-job")
 
     def test_ambiguous_job_raises(self, temp_vault):
-        _seed_jobnote(temp_vault, company="Sierra", title="Agent Engineer", url="x1")
-        _seed_jobnote(temp_vault, company="Sierra", title="Agent Engineer II", url="x2")
+        _seed_jobnote(temp_vault, company="AgentCo", title="Agent Engineer", url="x1")
+        _seed_jobnote(temp_vault, company="AgentCo", title="Agent Engineer II", url="x2")
         from compass.applications.lifecycle import add_application
 
         with pytest.raises(LookupError, match="ambiguous"):
-            add_application(job_id="Sierra-Agent")
+            add_application(job_id="AgentCo-Agent")
 
 
 class TestFindJobnoteCaseInsensitive:
-    """Regression: scraper board_tokens are usually lowercase ("sierra"), but
-    humans naturally type capitalized company names ("Sierra"). The filename
+    """Regression: scraper board_tokens are usually lowercase ("agentco"), but
+    humans naturally type capitalized company names ("AgentCo"). The filename
     substring match must be case-insensitive so MCP lookups don't fail on
     capitalization mismatches."""
 
     def test_capitalized_query_matches_lowercase_filename(self, temp_vault):
         # ATS scrapers pass lowercase board_tokens — simulate that.
-        _seed_jobnote(temp_vault, company="sierra", title="Agent Engineer", url="https://x/s")
+        _seed_jobnote(temp_vault, company="agentco", title="Agent Engineer", url="https://x/s")
         from compass.applications.lifecycle import find_jobnote
 
         # Human types capital S as they see it in target-companies.md
-        p = find_jobnote("Sierra-Agent_Engineer")
-        assert "sierra-Agent_Engineer" in p.name
+        p = find_jobnote("AgentCo-Agent_Engineer")
+        assert "agentco-Agent_Engineer" in p.name
 
     def test_lowercase_query_still_works(self, temp_vault):
-        _seed_jobnote(temp_vault, company="sierra", title="Agent Engineer", url="https://x/s")
+        _seed_jobnote(temp_vault, company="agentco", title="Agent Engineer", url="https://x/s")
         from compass.applications.lifecycle import find_jobnote
 
-        p = find_jobnote("sierra-agent_engineer")
+        p = find_jobnote("agentco-agent_engineer")
         assert p.exists()
 
     def test_url_match_is_case_sensitive(self, temp_vault):
         """URLs are spec-case-sensitive; don't fuzz them."""
-        _seed_jobnote(temp_vault, company="sierra", title="X", url="https://x/CaseSensitive")
+        _seed_jobnote(temp_vault, company="agentco", title="X", url="https://x/CaseSensitive")
         from compass.applications.lifecycle import find_jobnote
 
         # Lookup by exact URL works
@@ -91,12 +91,12 @@ class TestFindJobnoteCaseInsensitive:
 
     def test_find_application_case_insensitive(self, temp_vault):
         """Same case-sensitivity guard for _find_application (Bug E regression)."""
-        _seed_jobnote(temp_vault, company="sierra", title="Agent Engineer", url="https://x/s")
+        _seed_jobnote(temp_vault, company="agentco", title="Agent Engineer", url="https://x/s")
         from compass.applications.lifecycle import _find_application, add_application
 
-        app = add_application(job_id="sierra-Agent_Engineer")
+        app = add_application(job_id="agentco-Agent_Engineer")
         # Capital S in app_id must still match the lowercase filename
-        p = _find_application(f"{app.applied_date.isoformat()}-Sierra")
+        p = _find_application(f"{app.applied_date.isoformat()}-AgentCo")
         assert p.exists()
 
 
@@ -108,17 +108,17 @@ class TestAddApplicationOverwriteGuard:
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application
 
-        add_application(job_id="Sierra-Agent_Engineer")
+        add_application(job_id="AgentCo-Agent_Engineer")
         with pytest.raises(FileExistsError, match="already has status"):
-            add_application(job_id="Sierra-Agent_Engineer")
+            add_application(job_id="AgentCo-Agent_Engineer")
 
     def test_reapply_with_force_succeeds(self, temp_vault):
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application
 
-        app1 = add_application(job_id="Sierra-Agent_Engineer")
+        app1 = add_application(job_id="AgentCo-Agent_Engineer")
         # force=True allows the re-apply (e.g. for a reposted job)
-        app2 = add_application(job_id="Sierra-Agent_Engineer", force=True)
+        app2 = add_application(job_id="AgentCo-Agent_Engineer", force=True)
         assert app1.applied_date == app2.applied_date  # same day
         assert app2.status == "applied"
 
@@ -127,14 +127,14 @@ class TestAddApplicationOverwriteGuard:
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application, update_application_status
 
-        app = add_application(job_id="Sierra-Agent_Engineer")
+        app = add_application(job_id="AgentCo-Agent_Engineer")
         update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra", status="rejected"
+            app_id=f"{app.applied_date.isoformat()}-AgentCo", status="rejected"
         )
         with pytest.raises(FileExistsError, match="rejected"):
-            add_application(job_id="Sierra-Agent_Engineer")
+            add_application(job_id="AgentCo-Agent_Engineer")
         # But force=True still works
-        app2 = add_application(job_id="Sierra-Agent_Engineer", force=True)
+        app2 = add_application(job_id="AgentCo-Agent_Engineer", force=True)
         assert app2.status == "applied"
 
     def test_first_apply_does_not_trigger_guard(self, temp_vault):
@@ -142,7 +142,7 @@ class TestAddApplicationOverwriteGuard:
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application
 
-        app = add_application(job_id="Sierra-Agent_Engineer")
+        app = add_application(job_id="AgentCo-Agent_Engineer")
         assert app.status == "applied"
 
 
@@ -151,9 +151,9 @@ class TestUpdateStatus:
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application, update_application_status
 
-        app = add_application(job_id="Sierra")
+        app = add_application(job_id="AgentCo")
         updated = update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra",
+            app_id=f"{app.applied_date.isoformat()}-AgentCo",
             status="screen",
             next_action="prep recruiter screen",
             next_action_date=date(2026, 5, 22),
@@ -165,19 +165,19 @@ class TestUpdateStatus:
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application, update_application_status
 
-        app = add_application(job_id="Sierra")
+        app = add_application(job_id="AgentCo")
         with pytest.raises(ValueError, match="invalid transition"):
             update_application_status(
-                app_id=f"{app.applied_date.isoformat()}-Sierra", status="offer"
+                app_id=f"{app.applied_date.isoformat()}-AgentCo", status="offer"
             )
 
     def test_force_bypasses_validation(self, temp_vault):
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application, update_application_status
 
-        app = add_application(job_id="Sierra")
+        app = add_application(job_id="AgentCo")
         updated = update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra",
+            app_id=f"{app.applied_date.isoformat()}-AgentCo",
             status="offer",
             force=True,
         )
@@ -193,16 +193,16 @@ class TestListPending:
             update_application_status,
         )
 
-        app = add_application(job_id="Sierra")
+        app = add_application(job_id="AgentCo")
         update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra",
+            app_id=f"{app.applied_date.isoformat()}-AgentCo",
             status="screen",
             next_action="follow up",
             next_action_date=date(2026, 5, 18),
         )
         pending = list_pending_actions(through_date=date(2026, 5, 18))
         assert len(pending) == 1
-        assert pending[0]["company"] == "Sierra"
+        assert pending[0]["company"] == "AgentCo"
 
     def test_filters_out_future_actions(self, temp_vault):
         _seed_jobnote(temp_vault)
@@ -212,9 +212,9 @@ class TestListPending:
             update_application_status,
         )
 
-        app = add_application(job_id="Sierra")
+        app = add_application(job_id="AgentCo")
         update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra",
+            app_id=f"{app.applied_date.isoformat()}-AgentCo",
             status="screen",
             next_action_date=date(2026, 12, 1),
         )
@@ -230,21 +230,21 @@ class TestNextActionSentinel:
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application, update_application_status
 
-        app = add_application(job_id="Sierra")
+        app = add_application(job_id="AgentCo")
         update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra",
+            app_id=f"{app.applied_date.isoformat()}-AgentCo",
             status="screen",
             next_action="prep call",
             next_action_date=date(2026, 5, 25),
         )
         # Transition again without specifying next_action* — must preserve them
         update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra",
+            app_id=f"{app.applied_date.isoformat()}-AgentCo",
             status="onsite",
         )
         import frontmatter
 
-        path = next((temp_vault / "applications").glob("*Sierra*.md"))
+        path = next((temp_vault / "applications").glob("*AgentCo*.md"))
         md = frontmatter.load(path).metadata
         assert md["next_action"] == "prep call"
         assert md["next_action_date"] == "2026-05-25"  # frontmatter stores ISO string
@@ -253,23 +253,23 @@ class TestNextActionSentinel:
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application, update_application_status
 
-        app = add_application(job_id="Sierra")
+        app = add_application(job_id="AgentCo")
         update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra",
+            app_id=f"{app.applied_date.isoformat()}-AgentCo",
             status="screen",
             next_action="prep call",
             next_action_date=date(2026, 5, 25),
         )
         # Clear both with explicit None
         update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra",
+            app_id=f"{app.applied_date.isoformat()}-AgentCo",
             status="onsite",
             next_action=None,
             next_action_date=None,
         )
         import frontmatter
 
-        path = next((temp_vault / "applications").glob("*Sierra*.md"))
+        path = next((temp_vault / "applications").glob("*AgentCo*.md"))
         md = frontmatter.load(path).metadata
         assert md["next_action"] == ""
         assert md["next_action_date"] is None

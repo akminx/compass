@@ -10,8 +10,8 @@ type: profile
 ### Top-tier
 | Company | Title | Geo |
 |---|---|---|
-| Sierra | Agent Engineer | SF |
-| Decagon | MTS | SF |
+| AgentCo | Agent Engineer | SF |
+| BotCo | MTS | SF |
 | Ramp | Engineer | NYC |
 
 ### Big tech
@@ -52,7 +52,7 @@ def tiered_vault(tmp_path, monkeypatch):
 def test_get_tier_apply_now(tiered_vault):
     from compass.vault.target_companies import get_tier
 
-    assert get_tier("Sierra") == "apply-now"
+    assert get_tier("AgentCo") == "apply-now"
     assert get_tier("Ramp") == "apply-now"
     assert get_tier("Apple Apple Intelligence") == "apply-now"
 
@@ -79,9 +79,10 @@ def test_get_tier_unknown_company(tiered_vault):
 def test_case_insensitive_normalization(tiered_vault):
     from compass.vault.target_companies import get_tier
 
-    assert get_tier("sierra") == "apply-now"
-    assert get_tier("SIERRA") == "apply-now"
-    assert get_tier("sier ra") == "apply-now"
+    assert get_tier("agentco") == "apply-now"
+    assert get_tier("AGENTCO") == "apply-now"
+    # Whitespace + casing normalization: "Agent Co" / "agent co" should also resolve
+    assert get_tier("agent co") == "apply-now"
 
 
 def test_missing_file_returns_unknown(tmp_path, monkeypatch):
@@ -90,7 +91,7 @@ def test_missing_file_returns_unknown(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cfg, "VAULT_PATH", tmp_path)
     tc.refresh()
-    assert tc.get_tier("Sierra") == "unknown"
+    assert tc.get_tier("AgentCo") == "unknown"
 
 
 def test_refresh_picks_up_edits(tiered_vault):
@@ -116,7 +117,7 @@ def test_multiple_adjacent_tables_one_tier(tmp_path, monkeypatch):
 ### Startups
 | Company | Geo |
 |---|---|
-| Sierra | SF |
+| AgentCo | SF |
 ### Big tech
 | Company | Notes |
 |---|---|
@@ -130,23 +131,23 @@ def test_multiple_adjacent_tables_one_tier(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cfg, "VAULT_PATH", vault)
     tc.refresh()
-    assert tc.get_tier("Sierra") == "apply-now"
+    assert tc.get_tier("AgentCo") == "apply-now"
     assert tc.get_tier("NVIDIA") == "apply-now"
 
 
 def test_punctuation_stripped(tiered_vault):
-    """Spec: strip non-alphanumerics. 'Hebbia/Glean'-style names should normalize."""
+    """Spec: strip non-alphanumerics. 'DocCo/Glean'-style names should normalize."""
     # Append a punctuated company to the fixture
     md = (tiered_vault / "_profile" / "target-companies.md").read_text()
-    md += "\n## Tier `apply-now`\n\n| Company | Notes |\n|---|---|\n| Hebbia/Glean | combo |\n"
+    md += "\n## Tier `apply-now`\n\n| Company | Notes |\n|---|---|\n| DocCo/Glean | combo |\n"
     (tiered_vault / "_profile" / "target-companies.md").write_text(md)
     import compass.vault.target_companies as tc
 
     tc.refresh()
     # All three should resolve to the same canonical entry
-    assert tc.get_tier("Hebbia/Glean") == "apply-now"
-    assert tc.get_tier("HebbiaGlean") == "apply-now"
-    assert tc.get_tier("hebbia glean") == "apply-now"
+    assert tc.get_tier("DocCo/Glean") == "apply-now"
+    assert tc.get_tier("DocCoGlean") == "apply-now"
+    assert tc.get_tier("docco glean") == "apply-now"
 
 
 def test_bidirectional_substring_match(tiered_vault):
@@ -160,12 +161,12 @@ def test_bidirectional_substring_match(tiered_vault):
     # query ⊂ key — board_token "apple" matches cell "Apple Apple Intelligence"
     assert tc.get_tier("apple") == "apply-now"
     # key ⊂ query — listed "Cursor" matches scraper token "cursoranysphere"
-    # (no such entry in fixture; instead exercise key⊂query with hebbia/HebbiaLabs)
+    # (no such entry in fixture; instead exercise key⊂query with docco/DocCoLabs)
     md = (tiered_vault / "_profile" / "target-companies.md").read_text()
-    md += "\n## Tier `apply-now`\n\n| Company | Notes |\n|---|---|\n| Hebbia | combo |\n"
+    md += "\n## Tier `apply-now`\n\n| Company | Notes |\n|---|---|\n| DocCo | combo |\n"
     (tiered_vault / "_profile" / "target-companies.md").write_text(md)
     tc.refresh()
-    assert tc.get_tier("hebbialabs") == "apply-now"  # key 'hebbia' ⊂ query 'hebbialabs'
+    assert tc.get_tier("doccolabs") == "apply-now"  # key 'docco' ⊂ query 'doccolabs'
 
 
 def test_bidirectional_match_respects_min_length(tiered_vault):
@@ -220,7 +221,7 @@ def test_company_header_row_skipped(tmp_path, monkeypatch):
 
 | Company | Notes |
 |---|---|
-| Sierra | SF |
+| AgentCo | SF |
 """
     vault = tmp_path / "v"
     (vault / "_profile").mkdir(parents=True)
@@ -231,4 +232,4 @@ def test_company_header_row_skipped(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "VAULT_PATH", vault)
     tc.refresh()
     assert tc.get_tier("Company") == "unknown"
-    assert tc.get_tier("Sierra") == "apply-now"
+    assert tc.get_tier("AgentCo") == "apply-now"

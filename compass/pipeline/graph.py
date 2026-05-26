@@ -202,6 +202,53 @@ def _initial_state(job: RawJob, thread_id: str | None = None) -> CompassState:
 _langfuse_client_initialized = False
 
 
+# Phrases that signal candidate-profile content in a trace payload — we
+# never want the full resume text or skill-inventory rows to land in
+# Langfuse, because (a) traces could leak personal data if the project is
+# ever shared, and (b) the prompts are long enough that they dominate the
+# trace UI and bury the useful signal. The mask runs on every input/output
+# the SDK ships, before network egress.
+_PROFILE_MARKERS = (
+    "## RESUME",
+    "## RELEVANT SKILLS",
+    "Akash Aedavelli",
+    "_profile/skill-inventory.md",
+    "Cisco — Software Engineer",
+)
+
+
+def _langfuse_pii_mask(data):  # type: ignore[no-untyped-def]
+    """Redact candidate-profile content from Langfuse trace payloads.
+
+    Per the Langfuse skill's instrumentation reference: "Logging sensitive
+    data → Data leakage risk → Mask PII before tracing." Implemented as the
+    `mask=` callable on the Langfuse client so it runs on every trace
+    egress without per-callsite changes.
+
+    Strategy: leave structured fields (skills lists, scores, role family)
+    intact — those are the useful signal — but replace verbatim resume +
+    skill-inventory content with a one-line marker so spans stay
+    inspectable but PII never crosses the network boundary.
+    """
+    if isinstance(data, str):
+        return _mask_str(data)
+    if isinstance(data, list):
+        return [_langfuse_pii_mask(x) for x in data]
+    if isinstance(data, dict):
+        return {k: _langfuse_pii_mask(v) for k, v in data.items()}
+    return data
+
+
+def _mask_str(s: str) -> str:
+    """Replace the candidate-profile block with a length-preserving marker.
+    Other strings (JD bodies, scorer reasoning, skill names) pass through."""
+    if not s or len(s) < 200:
+        return s
+    if any(marker in s for marker in _PROFILE_MARKERS):
+        return f"<masked: candidate profile, {len(s)} chars>"
+    return s
+
+
 def _langfuse_config() -> dict:
     """Return a LangGraph config dict with the Langfuse callback if usable.
 
@@ -213,7 +260,12 @@ def _langfuse_config() -> dict:
 
     Pattern:
       1. Initialize the Langfuse client once (idempotent — singleton).
-      2. Construct a CallbackHandler that picks up the singleton's config.
+      2. Enable Pydantic AI OTel instrumentation so calls outside the
+         LangChain integration (extract/score/reflect/tailor/judge) also
+         emit spans into the same trace. Per the Langfuse skill's
+         instrumentation reference + the official pydantic-ai integration:
+         https://langfuse.com/integrations/frameworks/pydantic-ai
+      3. Construct a CallbackHandler that picks up the singleton's config.
 
     Returns {} when Langfuse env is unset or langfuse fails to import — the
     pipeline never blocks on observability.
@@ -232,13 +284,77 @@ def _langfuse_config() -> dict:
                 host=LANGFUSE_HOST,
                 public_key=LANGFUSE_PUBLIC_KEY,
                 secret_key=LANGFUSE_SECRET_KEY,
+                mask=_langfuse_pii_mask,
             )
+            try:
+                from pydantic_ai import Agent
+
+                Agent.instrument_all()
+                logger.info(
+                    "langfuse: enabled pydantic-ai OTel instrumentation (Agent.instrument_all)"
+                )
+            except Exception as e:
+                logger.warning(
+                    "langfuse: pydantic-ai instrumentation failed — extract/score "
+                    "spans may not appear: %s", e
+                )
             _langfuse_client_initialized = True
         handler = CallbackHandler()
         return {"callbacks": [handler]}
     except Exception as e:
         logger.warning("langfuse: failed to init callback, continuing without traces — %s", e)
         return {}
+
+
+def _langfuse_flush() -> None:
+    """Flush buffered traces. Call at script-end — without this, the SDK's
+    background batcher can drop traces when the process exits abruptly.
+
+    Flagged as a 'common mistake' in the Langfuse skill's instrumentation
+    reference. Safe to call without keys set (no-op).
+    """
+    try:
+        from compass.config import LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY
+
+        if not (LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY):
+            return
+        from langfuse import get_client
+
+        get_client().flush()
+    except Exception as e:
+        logger.warning("langfuse: flush failed — %s", e)
+
+
+def _trace_context(thread_id: str, job: RawJob):
+    """Context manager that tags all Langfuse spans inside it with the
+    pipeline run's session_id + per-job metadata.
+
+    Per the Langfuse skill (instrumentation.md): use `session_id` to group
+    related traces, set tags for per-feature filtering, and put trace input
+    on the trace itself rather than letting the LangGraph callback capture
+    the full CompassState (which would leak the candidate profile into the
+    Langfuse UI).
+
+    Returns a real context manager when Langfuse is configured; a no-op
+    `contextlib.nullcontext()` otherwise so callers always have a single
+    code path regardless of whether traces are wired.
+    """
+    import contextlib
+
+    try:
+        from compass.config import LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY
+
+        if not (LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY):
+            return contextlib.nullcontext()
+        from langfuse import propagate_attributes
+
+        return propagate_attributes(
+            session_id=thread_id,
+            tags=["pipeline", f"source:{job.source}"],
+            metadata={"company": job.company, "title": job.title, "url": job.url},
+        )
+    except Exception:
+        return contextlib.nullcontext()
 
 
 async def _process_one(
@@ -254,7 +370,10 @@ async def _process_one(
     }
     async with sem:
         try:
-            result = await graph.ainvoke(_initial_state(job, thread_id=thread_id), config=config)
+            with _trace_context(thread_id, job):
+                result = await graph.ainvoke(
+                    _initial_state(job, thread_id=thread_id), config=config
+                )
         except Exception as e:
             logger.exception("pipeline: graph crashed on %s", job.url)
             return (
@@ -387,6 +506,11 @@ async def run_pipeline(raw_jobs: list[RawJob] | None = None) -> CompassState:
         unknown_count,
         duration_s,
     )
+    # Flush buffered traces before returning — without this, the SDK's
+    # background batcher can drop traces if the caller exits promptly after
+    # `run_pipeline` returns. Flagged as a common-mistake in the Langfuse
+    # skill's instrumentation reference.
+    _langfuse_flush()
     return aggregate
 
 

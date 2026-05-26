@@ -25,9 +25,9 @@ def _company_roles_seen(vault, company: str) -> int:
 def test_write_company_note_does_not_increment(temp_vault):
     """5 sequential writes (simulating parallel writes) must NOT inflate roles_seen."""
     for _ in range(5):
-        write_company_note(CompanyNote(company="sierra", tier="apply-now", roles_seen=1))
+        write_company_note(CompanyNote(company="agentco", tier="apply-now", roles_seen=1))
     # Existing value preserved each write — never accumulates
-    assert _company_roles_seen(temp_vault, "sierra") == 1
+    assert _company_roles_seen(temp_vault, "agentco") == 1
 
 
 def test_first_write_uses_incoming_roles_seen(temp_vault):
@@ -41,11 +41,11 @@ def test_first_write_uses_incoming_roles_seen(temp_vault):
 
 def test_gap_aggregator_derives_roles_seen_from_jobnotes(temp_vault):
     """The actual count should come from gap_aggregator counting JobNotes."""
-    # Create 3 JobNotes for sierra, 1 for decagon
+    # Create 3 JobNotes for agentco, 1 for botco
     for i, url in enumerate(["https://x/s1", "https://x/s2", "https://x/s3"]):
         write_job_note(
             JobNote(
-                company="sierra",
+                company="agentco",
                 title=f"Engineer {i}",
                 url=url,
                 source="manual",
@@ -55,7 +55,7 @@ def test_gap_aggregator_derives_roles_seen_from_jobnotes(temp_vault):
         )
     write_job_note(
         JobNote(
-            company="decagon",
+            company="botco",
             title="MTS",
             url="https://x/d1",
             source="manual",
@@ -65,16 +65,16 @@ def test_gap_aggregator_derives_roles_seen_from_jobnotes(temp_vault):
     )
 
     # Seed CompanyNotes with stale roles_seen=0
-    write_company_note(CompanyNote(company="sierra", tier="apply-now", roles_seen=0))
-    write_company_note(CompanyNote(company="decagon", tier="apply-now", roles_seen=0))
+    write_company_note(CompanyNote(company="agentco", tier="apply-now", roles_seen=0))
+    write_company_note(CompanyNote(company="botco", tier="apply-now", roles_seen=0))
 
     # Regenerate — derives roles_seen from JobNote count
     from compass.analysis.gap_aggregator import regenerate
 
     regenerate(write=True)
 
-    assert _company_roles_seen(temp_vault, "sierra") == 3
-    assert _company_roles_seen(temp_vault, "decagon") == 1
+    assert _company_roles_seen(temp_vault, "agentco") == 3
+    assert _company_roles_seen(temp_vault, "botco") == 1
 
 
 def test_sync_company_counters_zeroes_orphan_companies(temp_vault):
@@ -97,10 +97,10 @@ def test_invalid_tier_in_existing_file_does_not_crash(temp_vault, caplog):
     and ignored — pipeline continues with whatever tier the pipeline computed."""
     import logging
 
-    path = temp_vault / "companies" / "sierra.md"
+    path = temp_vault / "companies" / "agentco.md"
     path.write_text(
         "---\n"
-        "company: sierra\n"
+        "company: agentco\n"
         "tier: favorite\n"  # ← user typo
         "roles_seen: 5\n"
         "hiring_signal: unknown\n"
@@ -109,12 +109,12 @@ def test_invalid_tier_in_existing_file_does_not_crash(temp_vault, caplog):
         "known_stack: []\n"
         "interview_format_notes: ''\n"
         "tags: []\n"
-        "---\n# sierra\n"
+        "---\n# agentco\n"
     )
 
     # Pipeline tries to write — must NOT raise
     with caplog.at_level(logging.WARNING):
-        write_company_note(CompanyNote(company="sierra", tier="apply-now", roles_seen=0))
+        write_company_note(CompanyNote(company="agentco", tier="apply-now", roles_seen=0))
 
     assert any("invalid tier" in r.message for r in caplog.records), (
         "warning should mention the invalid tier"
@@ -129,15 +129,15 @@ def test_invalid_tier_with_unknown_incoming_resets_to_unknown(temp_vault, caplog
     we can't preserve the bad value — log and use 'unknown'."""
     import logging
 
-    path = temp_vault / "companies" / "sierra.md"
+    path = temp_vault / "companies" / "agentco.md"
     path.write_text(
-        "---\ncompany: sierra\ntier: applynow\nroles_seen: 0\nhiring_signal: unknown\n"
+        "---\ncompany: agentco\ntier: applynow\nroles_seen: 0\nhiring_signal: unknown\n"
         "geo: []\nwhy_interesting: ''\nknown_stack: []\n"
-        "interview_format_notes: ''\ntags: []\n---\n# sierra\n"
+        "interview_format_notes: ''\ntags: []\n---\n# agentco\n"
     )
 
     with caplog.at_level(logging.WARNING):
-        write_company_note(CompanyNote(company="sierra", tier="unknown", roles_seen=0))
+        write_company_note(CompanyNote(company="agentco", tier="unknown", roles_seen=0))
 
     md = frontmatter.load(path).metadata
     assert md["tier"] == "unknown"
@@ -148,16 +148,16 @@ def test_human_edits_preserved_through_resync(temp_vault):
     # Seed with human edits
     write_company_note(
         CompanyNote(
-            company="sierra",
+            company="agentco",
             tier="stretch",  # human override
             roles_seen=0,
             why_interesting="They love production MCP work",  # human edit
         )
     )
-    # JobNote for sierra
+    # JobNote for agentco
     write_job_note(
         JobNote(
-            company="sierra",
+            company="agentco",
             title="Eng",
             url="https://x/1",
             source="manual",
@@ -169,7 +169,7 @@ def test_human_edits_preserved_through_resync(temp_vault):
 
     regenerate(write=True)
 
-    md = frontmatter.load(temp_vault / "companies" / "sierra.md").metadata
+    md = frontmatter.load(temp_vault / "companies" / "agentco.md").metadata
     assert md["roles_seen"] == 1  # updated
     assert md["tier"] == "stretch"  # preserved
     assert md["why_interesting"] == "They love production MCP work"  # preserved

@@ -9,9 +9,9 @@ def _make_job_note(**overrides):
     from compass.vault.schemas import JobNote
 
     defaults = dict(
-        company="Sierra",
+        company="AgentCo",
         title="Agent Engineer",
-        url="https://jobs.ashbyhq.com/sierra/abc-123",
+        url="https://jobs.ashbyhq.com/agentco/abc-123",
         source="ashby",
         date_found=date(2026, 5, 17),
         match_score=4.2,
@@ -33,7 +33,7 @@ def test_write_job_note_creates_file(temp_vault):
     path = write_job_note(note)
     assert path.exists()
     assert path.parent == temp_vault / "jobs"
-    assert path.name.startswith("2026-05-17-Sierra-")
+    assert path.name.startswith("2026-05-17-AgentCo-")
     assert path.suffix == ".md"
 
 
@@ -43,7 +43,7 @@ def test_write_job_note_frontmatter_roundtrips(temp_vault):
     note = _make_job_note()
     path = write_job_note(note)
     loaded = frontmatter.load(path)
-    assert loaded.metadata["company"] == "Sierra"
+    assert loaded.metadata["company"] == "AgentCo"
     assert loaded.metadata["match_score"] == 4.2
     assert loaded.metadata["url"] == note.url
     assert "MCP" in loaded.metadata["skills_required"]
@@ -197,10 +197,10 @@ def test_write_company_note_creates_file(temp_vault):
     from compass.vault.schemas import CompanyNote
     from compass.vault.writer import write_company_note
 
-    note = CompanyNote(company="Sierra", tier="apply-now", roles_seen=1, geo=["NYC"])
+    note = CompanyNote(company="AgentCo", tier="apply-now", roles_seen=1, geo=["NYC"])
     path = write_company_note(note)
     assert path.exists()
-    assert path.name == "Sierra.md"
+    assert path.name == "AgentCo.md"
     loaded = frontmatter.load(path)
     assert loaded.metadata["tier"] == "apply-now"
     assert loaded.metadata["roles_seen"] == 1
@@ -214,9 +214,9 @@ def test_write_company_note_does_not_increment_roles_seen(temp_vault):
     from compass.vault.schemas import CompanyNote
     from compass.vault.writer import write_company_note
 
-    write_company_note(CompanyNote(company="Sierra", tier="apply-now", roles_seen=1))
-    write_company_note(CompanyNote(company="Sierra", tier="apply-now", roles_seen=1))
-    loaded = frontmatter.load(temp_vault / "companies" / "Sierra.md")
+    write_company_note(CompanyNote(company="AgentCo", tier="apply-now", roles_seen=1))
+    write_company_note(CompanyNote(company="AgentCo", tier="apply-now", roles_seen=1))
+    loaded = frontmatter.load(temp_vault / "companies" / "AgentCo.md")
     # First write set it to 1; subsequent writes preserve existing (1), NOT add to it
     assert loaded.metadata["roles_seen"] == 1
 
@@ -274,17 +274,17 @@ def test_write_company_note_preserves_human_edits(temp_vault):
     from compass.vault.writer import write_company_note
 
     # First write: pipeline-default (unknown tier, empty fields)
-    write_company_note(CompanyNote(company="Sierra", tier="unknown", roles_seen=1))
+    write_company_note(CompanyNote(company="AgentCo", tier="unknown", roles_seen=1))
 
     # User edits the file in Obsidian to set tier + a why_interesting note
-    company_path = temp_vault / "companies" / "Sierra.md"
+    company_path = temp_vault / "companies" / "AgentCo.md"
     text = company_path.read_text()
     text = text.replace("tier: unknown", "tier: apply-now")
     text = text.replace("why_interesting: ''", "why_interesting: 'Top tier agentic startup'")
     company_path.write_text(text)
 
     # Pipeline runs again with default-shaped note — must NOT clobber human edits
-    write_company_note(CompanyNote(company="Sierra", tier="unknown", roles_seen=1))
+    write_company_note(CompanyNote(company="AgentCo", tier="unknown", roles_seen=1))
 
     import frontmatter
 

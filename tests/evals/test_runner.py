@@ -11,6 +11,13 @@ from compass.evals.runner import run_against_judge, run_against_labels
 from compass.pipeline.state import JobRequirements, JobScore
 
 
+async def _fake_classify_role_family(jd_text: str) -> str:
+    """Tests never want the real role-family LLM call. Returning an in-scope
+    family that's NOT in `ROLE_FAMILY_SCORE_CAP` lets the stubbed score
+    survive through the cap layer unchanged."""
+    return "agent-engineer"
+
+
 async def _fake_extract(jd_text: str) -> JobRequirements:
     """Deterministic stub — pretends extract found Python + MCP from every JD."""
     return JobRequirements(
@@ -54,9 +61,13 @@ async def test_run_against_labels_computes_aggregate(temp_vault):
             expected_skills=["Kubernetes", "Go"],
         ),
     ]
+    # Patch _score at its source (compass.pipeline.nodes.score) because the
+    # runner now goes through `_score_ensemble` → `_score_with_retry` → `_score`,
+    # and the inner call resolves the module-local symbol.
     with (
         patch("compass.evals.runner._extract", new=_fake_extract),
-        patch("compass.evals.runner._score", new=_fake_score),
+        patch("compass.evals.runner._classify_role_family_from_body", new=_fake_classify_role_family),
+        patch("compass.pipeline.nodes.score._score", new=_fake_score),
     ):
         metrics, per_record = await run_against_labels(records)
 
@@ -97,7 +108,8 @@ async def test_run_against_judge_uses_judge_verdict(temp_vault):
     ]
     with (
         patch("compass.evals.runner._extract", new=_fake_extract),
-        patch("compass.evals.runner._score", new=_fake_score),
+        patch("compass.evals.runner._classify_role_family_from_body", new=_fake_classify_role_family),
+        patch("compass.pipeline.nodes.score._score", new=_fake_score),
         patch("compass.evals.judge.judge_jd", new=fake_judge),
     ):
         metrics, per_record = await run_against_judge(records)
@@ -139,7 +151,8 @@ async def test_runner_applies_extract_normalization(temp_vault):
     ]
     with (
         patch("compass.evals.runner._extract", new=hallucinating_extract),
-        patch("compass.evals.runner._score", new=_fake_score),
+        patch("compass.evals.runner._classify_role_family_from_body", new=_fake_classify_role_family),
+        patch("compass.pipeline.nodes.score._score", new=_fake_score),
     ):
         metrics, per_record = await run_against_labels(records)
 
@@ -188,7 +201,8 @@ async def test_runner_applies_score_constraint(temp_vault):
     ]
     with (
         patch("compass.evals.runner._extract", new=fake_extract_python_only),
-        patch("compass.evals.runner._score", new=hallucinating_score),
+        patch("compass.evals.runner._classify_role_family_from_body", new=_fake_classify_role_family),
+        patch("compass.pipeline.nodes.score._score", new=hallucinating_score),
     ):
         metrics, _per = await run_against_labels(records)
 
@@ -219,7 +233,8 @@ async def test_run_against_labels_handles_extract_failure(temp_vault):
     ]
     with (
         patch("compass.evals.runner._extract", new=flaky_extract),
-        patch("compass.evals.runner._score", new=_fake_score),
+        patch("compass.evals.runner._classify_role_family_from_body", new=_fake_classify_role_family),
+        patch("compass.pipeline.nodes.score._score", new=_fake_score),
     ):
         metrics, per_record = await run_against_labels(records)
 

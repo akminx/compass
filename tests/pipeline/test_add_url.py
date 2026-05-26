@@ -19,7 +19,7 @@ def test_detect_provider_lever():
 
 
 def test_detect_provider_ashby():
-    assert _detect_provider("https://jobs.ashbyhq.com/sierra/agent-eng") == "ashby"
+    assert _detect_provider("https://jobs.ashbyhq.com/agentco/agent-eng") == "ashby"
 
 
 def test_detect_provider_workday():

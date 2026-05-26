@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import logging
 
-from compass.config import SCORE_THRESHOLD
+from compass.config import CALIBRATOR_ENABLED, SCORE_ENSEMBLE_N, SCORE_THRESHOLD
+from compass.evals.calibrator import apply as _calibrator_apply, load as _calibrator_load
 from compass.llm import make_agent
 from compass.pipeline.state import CompassState, JobRequirements, JobScore, RawJob
 from compass.rag.retriever import retrieve as rag_retrieve
@@ -39,6 +40,62 @@ Calibration:
   is a calibration smell.
 - "Conceptual but not shipped" knocks ONE skill down, not the whole score. Score the
   whole-candidate fit, not the worst gap.
+
+HARD GATES — cap the score regardless of stack overlap when ANY of these
+multi-year hands-on prerequisites appear. These are not "minor gaps" — they
+are deal-breakers a strong stack cannot offset:
+
+- 5+ years of CUDA / GPU kernel programming / vLLM-Triton-TensorRT internals
+  → cap at 1.5 (multi-year hands-on, not learnable in interview prep)
+- 5+ years of Rust systems programming / Linux kernel / eBPF / runc / Firecracker
+  → cap at 1.5
+- 5+ years of embedded firmware / FreeRTOS / real-time OS / ARM bring-up
+  → cap at 0.5 (entirely different discipline)
+- Senior frontend specialization (5+ yr React + editor frameworks like
+  Slate/Lexical/ProseMirror, or "pixel-perfect" + design-system fluency)
+  → cap at 0.75 (candidate is not a frontend specialist)
+- Staff / Principal / Distinguished engineer titles when YoE ask >= 7
+  → cap at 1.75 (severe over-level; candidate is L3 equivalent)
+
+Do NOT trigger these gates on "Deployed Engineer", "Solutions Architect",
+"Forward Deployed Engineer", or "GTM Engineer" — those are handled by the
+role-family cap, not by hard-gate logic, and read as 2.5–3.25 strong-stack
+matches per the rubric above.
+
+These gates apply AFTER all other rubric and YoE logic. Clearance gates
+(US Secret / TS/SCI / Public Trust) are enforced in code, not in this
+prompt — you don't need to look for them.
+
+INCLUSIVE READING OF JD REQUIREMENTS (do not treat reqs as strict checklists):
+- "particularly X and Y" / "X or Y" / "such as X, Y, or Z" → preference, not gate.
+  If the candidate has ANY one of the listed items, that requirement is met.
+  Example: "particularly Java and Python" — strong Python alone satisfies this.
+  Example: "Azure preferred; AWS or GCP acceptable" — AWS basic satisfies this.
+- "Including X" with a list of examples → X is an example, not a literal gate.
+  Example: "relational and NoSQL datastores, including Cassandra" — any SQL +
+  any NoSQL (MongoDB, Firebase, Redis) satisfies this; Cassandra is not required.
+- "Bonus" / "nice-to-have" / "preferred" requirements NEVER drag a score DOWN.
+  Their only effect is to push a score UP when satisfied.
+- Concepts that are 1–2 weeks of focused study (a new framework, a vector DB
+  variant, a new prompting pattern, a specific MLOps tool) are NOT meaningful
+  gaps for a candidate who has demonstrated the underlying concept elsewhere
+  (e.g., "no Pinecone but shipped Chroma" is a 1-week ramp).
+- Multi-year skills are real gaps: CUDA / GPU programming, deep Rust systems
+  work, on-device ML kernels, specific security clearances, embedded firmware,
+  staff-level distributed systems experience.
+
+ROLE-FAMILY FIT IS THE PRIMARY SIGNAL:
+- If the role family matches the candidate's targets (agent-engineer, applied-AI,
+  AI-platform, MTS at frontier labs, L3/L4 agentic at big-tech, devtools-AI,
+  junior agent-eng), default to the HIGH end of the rubric band. Strong stack
+  + in-target role-family = 3.5+, not 2.75.
+- Category-mismatch is the dominant penalty: frontend specialist, embedded
+  firmware, EM track, customer-success engineer, hardware-clearance gates.
+  A category-mismatch caps the score around 1.5–2.0 regardless of stack overlap.
+- FDE / Deployed-Engineer / Forward-Deployed roles are softer-no for this
+  candidate (no formal customer-facing pre-sales background) — score them at
+  3.0–3.25 when the stack overlap is strong, NOT 2.0. Strict "no" only when
+  the role title is literally "FDE" AND on-site/clearance gates also apply.
 
 YEARS-OF-EXPERIENCE NUDGE (small, offsettable):
 The JD's `years_experience` is the minimum-years ask. Compare against the
@@ -69,6 +126,11 @@ Return a JobScore with:
 - matched_skills: skills from the JD's required+nice-to-have list that the candidate has (level >= 2)
 - missing_skills: skills from the JD's required+nice-to-have list that the candidate lacks (level < 2)
 - tailoring_notes: ONE sentence suggesting how to frame the application (skip if score < 3.0)
+- evidence: dict[str, str] mapping EVERY skill in matched_skills and missing_skills
+  to a 5–15 word VERBATIM phrase from the JD that names the skill or asks for it.
+  Example: {"LangGraph": "build agents using LangGraph and LangSmith", "CUDA": "experience with CUDA / Triton programming"}.
+  This grounds each classification in the JD's own words. Skip evidence for a skill
+  only if the JD's mention is too long to quote in 15 words (rare).
 
 SECONDARY SIGNAL — company targeting context:
 The job's company carries a tier classification from the candidate's strategic
@@ -222,6 +284,186 @@ async def _score_with_retry(
     return retry
 
 
+# Score caps by role family. The intent is to dampen the over-scoring tail
+# the eval surfaced: out-of-scope JDs (CS engineer, data engineer, embedded)
+# scored +1.5 to +1.75 above what a strict judge gave them, because the
+# Python/SQL/AWS overlap with the candidate profile is enough to push the
+# scorer into the 2.5–3.0 band. These caps gate the score AFTER the LLM runs
+# so the LLM's reasoning is still informative for the user, but the number
+# can't escape the realistic ceiling for that role family.
+ROLE_FAMILY_SCORE_CAP: dict[str, float] = {
+    "out-of-scope": 1.5,
+    "swe-mobile": 2.5,  # mobile is out-of-scope per role-clarifications
+    "swe-frontend": 2.5,  # frontend-only roles are out-of-scope
+    # FDE / Deployed-Engineer: softer-no, strong-stack matches around 3.0–3.25.
+    "fde-eng": 3.25,
+    # Other-eng (everything the LLM classifier wasn't sure about) gets a soft
+    # cap that's high enough not to catch genuine agent-eng roles the
+    # classifier mislabeled, but low enough to prevent a generic-backend JD
+    # from sneaking into the "apply" tier on Python overlap alone. Note:
+    # swe-backend / swe-fullstack are INTENTIONALLY NOT capped here — many
+    # real L4 agentic-platform roles ship at big-tech under generic SWE
+    # titles (we saw this in the eval), and the body-upgrader handles
+    # promotion via `upgrade_family` for AI-rich JDs.
+    "other-eng": 3.0,
+}
+
+
+def _apply_role_family_cap(score: JobScore, role_family: str | None) -> JobScore:
+    """Cap the score when the role family doesn't fit the candidate's target."""
+    if not role_family:
+        return score
+    cap = ROLE_FAMILY_SCORE_CAP.get(role_family)
+    if cap is None or score.score <= cap:
+        return score
+    logger.info(
+        "score_node: capping score %.2f → %.2f for role_family=%s",
+        score.score, cap, role_family,
+    )
+    return score.model_copy(
+        update={
+            "score": cap,
+            "reasoning": f"[capped at {cap} for role_family={role_family}] {score.reasoning}",
+        }
+    )
+
+
+# Phrases that signal an explicit clearance / citizenship requirement in the JD
+# body. Matched case-insensitively as substrings — false positives are
+# acceptable here (a JD that mentions "clearance" as a benefit description
+# without requiring one is rare), and the cost of a false positive is one
+# under-scored job, vs the cost of a false negative being a 3.0 score on a
+# job the candidate can't even apply to.
+_CLEARANCE_GATES: tuple[str, ...] = (
+    "secret clearance",
+    "top secret clearance",
+    "ts/sci",
+    "active clearance",
+    "u.s. government secret",
+    "us government secret",
+    "public trust clearance",
+    "polygraph clearance",
+    "must be a u.s. citizen",
+    "must be a us citizen",
+    "u.s. citizenship is required",
+    "us citizenship is required",
+    "u.s. citizenship and eligibility",
+    "us citizenship and eligibility",
+)
+
+# When a clearance gate fires, cap the score at this level — clearance is a
+# multi-year hands-on prerequisite that no amount of stack overlap can offset
+# for an applicant who doesn't already have one.
+_CLEARANCE_GATE_CAP = 1.5
+
+
+def _apply_clearance_gate(score: JobScore, jd_text: str) -> JobScore:
+    """Deterministic JD-body scan for clearance/citizenship gates.
+
+    The scorer prompt asks the LLM to honor these, but flash-tier models drop
+    that instruction unreliably on dense JDs. A code-level scan guarantees the
+    cap fires — much more reliable than trusting prompt adherence on a low-
+    frequency signal that's structurally important.
+    """
+    if score.score <= _CLEARANCE_GATE_CAP:
+        return score
+    body = (jd_text or "").lower()
+    matched = next((g for g in _CLEARANCE_GATES if g in body), None)
+    if matched is None:
+        return score
+    logger.info(
+        "score_node: clearance gate fired (%r) — capping %.2f → %.2f",
+        matched, score.score, _CLEARANCE_GATE_CAP,
+    )
+    return score.model_copy(
+        update={
+            "score": _CLEARANCE_GATE_CAP,
+            "reasoning": f"[clearance gate: {matched!r}] {score.reasoning}",
+        }
+    )
+
+
+async def _score_ensemble(
+    req: JobRequirements,
+    profile_text: str,
+    job: RawJob | None,
+    *,
+    n: int = 3,
+) -> JobScore:
+    """Self-consistency for the scorer: run N times at temp=0, take the median
+    score + majority-vote matched/missing skills + reasoning from the verdict
+    closest to the median.
+
+    Mirrors `compass.evals.judge.judge_jd`'s ensemble logic. Even at temp=0,
+    the OpenRouter provider + structured-output retry can produce small
+    variance run-to-run. The ensemble compresses random-noise MAE while
+    preserving the scorer's "shape" — bias and rank ordering are unchanged.
+
+    Use `n=1` to disable (production default, controlled by SCORE_ENSEMBLE_N).
+    """
+    import statistics
+
+    if n < 1:
+        raise ValueError(f"n must be >= 1, got {n}")
+
+    verdicts: list[JobScore] = []
+    for _ in range(n):
+        verdicts.append(await _score_with_retry(req, profile_text, job))
+
+    if n == 1:
+        return verdicts[0]
+
+    scores = [v.score for v in verdicts]
+    median_score = statistics.median(scores)
+
+    # Majority vote on matched/missing — keep a skill that appears in at
+    # least ceil(N/2) verdicts. Filters out one-off LLM noise without
+    # losing skills that the scorer is genuinely confident about.
+    threshold = (n + 1) // 2
+    matched_counts: dict[str, int] = {}
+    matched_form: dict[str, str] = {}
+    missing_counts: dict[str, int] = {}
+    missing_form: dict[str, str] = {}
+    evidence_pool: dict[str, str] = {}
+    for v in verdicts:
+        for s in v.matched_skills:
+            k = s.lower()
+            matched_counts[k] = matched_counts.get(k, 0) + 1
+            matched_form.setdefault(k, s)
+        for s in v.missing_skills:
+            k = s.lower()
+            missing_counts[k] = missing_counts.get(k, 0) + 1
+            missing_form.setdefault(k, s)
+        for skill, quote in (v.evidence or {}).items():
+            # Keep the first quote we see for each skill — verdicts agree
+            # closely on quotes when they agree on the skill at all.
+            evidence_pool.setdefault(skill.lower(), quote)
+
+    matched_majority = [matched_form[k] for k, c in matched_counts.items() if c >= threshold]
+    missing_majority = [
+        missing_form[k]
+        for k, c in missing_counts.items()
+        if c >= threshold and k not in {kk for kk in matched_counts if matched_counts[kk] >= threshold}
+    ]
+    closest = min(verdicts, key=lambda v: abs(v.score - median_score))
+    # Restrict evidence to the surviving skills.
+    surviving_keys = {s.lower() for s in (*matched_majority, *missing_majority)}
+    evidence_out = {
+        closest_form: evidence_pool[lk]
+        for lk, closest_form in {**matched_form, **missing_form}.items()
+        if lk in surviving_keys and lk in evidence_pool
+    }
+
+    return JobScore(
+        score=median_score,
+        reasoning=f"[ensemble-{n} median] {closest.reasoning}",
+        matched_skills=matched_majority,
+        missing_skills=missing_majority,
+        tailoring_notes=closest.tailoring_notes,
+        evidence=evidence_out,
+    )
+
+
 async def _profile_text(req: JobRequirements) -> str:
     """Build candidate-profile context for the score prompt.
 
@@ -252,7 +494,7 @@ async def score_node(state: CompassState) -> dict:
 
     try:
         profile = await _profile_text(req)
-        result = await _score_with_retry(req, profile, state.get("current_job"))
+        result = await _score_ensemble(req, profile, state.get("current_job"), n=SCORE_ENSEMBLE_N)
     except Exception as e:
         logger.exception("score_node: LLM call failed")
         return {
@@ -261,10 +503,62 @@ async def score_node(state: CompassState) -> dict:
             "score_threshold": SCORE_THRESHOLD,
         }
 
+    constrained = _constrain_to_jd_skills(result, req)
+    family_capped = _apply_role_family_cap(constrained, state.get("role_family"))
+    job = state.get("current_job")
+    clearance_capped = _apply_clearance_gate(
+        family_capped, job.description if job is not None else ""
+    )
+    calibrated = _apply_calibrator(clearance_capped)
     return {
-        "score_result": _constrain_to_jd_skills(result, req),
+        "score_result": calibrated,
         "score_threshold": SCORE_THRESHOLD,
     }
+
+
+def _apply_calibrator(score: JobScore) -> JobScore:
+    """Apply the isotonic calibrator to the score, if one has been fit AND
+    `CALIBRATOR_ENABLED=1` is set in the environment.
+
+    Opt-in by design: tests, debugging runs, and the eval harness (when
+    measuring the un-calibrated scorer's contribution) all want to bypass
+    the calibrator. Production sets the env var.
+
+    Loaded lazily and memoized at module level — re-reading the JSON on every
+    score call would dominate the per-call cost. To re-fit and pick up changes,
+    run `python -m compass.evals.calibrator fit` and restart the process.
+    """
+    if not CALIBRATOR_ENABLED:
+        return score
+    cal = _get_calibrator()
+    if cal is None:
+        return score
+    adjusted = _calibrator_apply(cal, score.score)
+    if abs(adjusted - score.score) < 0.005:
+        return score
+    logger.info(
+        "score_node: calibrator adjusted %.2f → %.2f (n=%d training pairs)",
+        score.score, adjusted, cal.n_training_pairs,
+    )
+    return score.model_copy(
+        update={
+            "score": round(adjusted, 2),
+            "reasoning": f"[calibrated {score.score:.2f}→{adjusted:.2f}] {score.reasoning}",
+        }
+    )
+
+
+_CALIBRATOR_LOADED = False
+_CALIBRATOR = None
+
+
+def _get_calibrator():
+    global _CALIBRATOR_LOADED, _CALIBRATOR
+    if _CALIBRATOR_LOADED:
+        return _CALIBRATOR
+    _CALIBRATOR = _calibrator_load()
+    _CALIBRATOR_LOADED = True
+    return _CALIBRATOR
 
 
 def _constrain_to_jd_skills(score: JobScore, req: JobRequirements) -> JobScore:

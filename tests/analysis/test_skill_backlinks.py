@@ -71,16 +71,16 @@ def test_skill_backlinks_block_added_to_skillnote(temp_vault):
     _seed_skill(temp_vault, "Python", "language", body_extra="_Category: language_\n")
     _seed_job(
         temp_vault,
-        "sierra",
-        company="Sierra",
+        "agentco",
+        company="AgentCo",
         title="Agent Eng",
         required=["Python"],
         score=4.0,
     )
     _seed_job(
         temp_vault,
-        "decagon",
-        company="Decagon",
+        "botco",
+        company="BotCo",
         title="MTS",
         required=["Python"],
         score=3.0,
@@ -93,10 +93,10 @@ def test_skill_backlinks_block_added_to_skillnote(temp_vault):
     # Existing description preserved
     assert "_Category: language_" in body
     # Both jobs linked, with company — title display
-    assert "[[sierra|Sierra — Agent Eng]]" in body
-    assert "[[decagon|Decagon — MTS]]" in body
-    # Sierra (score 4.0) appears before Decagon (score 3.0)
-    assert body.index("Sierra — Agent Eng") < body.index("Decagon — MTS")
+    assert "[[agentco|AgentCo — Agent Eng]]" in body
+    assert "[[botco|BotCo — MTS]]" in body
+    # AgentCo (score 4.0) appears before BotCo (score 3.0)
+    assert body.index("AgentCo — Agent Eng") < body.index("BotCo — MTS")
     # Score + tier rendered
     assert "score 4.0" in body
     assert "apply-now" in body
@@ -109,8 +109,8 @@ def test_skill_backlinks_idempotent_on_rerun(temp_vault):
     _seed_skill(temp_vault, "Python", "language")
     _seed_job(
         temp_vault,
-        "sierra",
-        company="Sierra",
+        "agentco",
+        company="AgentCo",
         title="Agent Eng",
         required=["Python"],
         score=4.0,
@@ -131,8 +131,8 @@ def test_skill_backlinks_removed_when_no_jobs_reference_skill(temp_vault):
     _seed_skill(temp_vault, "Python", "language")
     _seed_job(
         temp_vault,
-        "sierra",
-        company="Sierra",
+        "agentco",
+        company="AgentCo",
         title="Agent Eng",
         required=["Python"],
         score=4.0,
@@ -141,6 +141,6 @@ def test_skill_backlinks_removed_when_no_jobs_reference_skill(temp_vault):
     assert "## Jobs requiring this skill" in (temp_vault / "skills" / "Python.md").read_text()
 
     # Remove the only job
-    (temp_vault / "jobs" / "sierra.md").unlink()
+    (temp_vault / "jobs" / "agentco.md").unlink()
     gap_aggregator.regenerate(write=True)
     assert "## Jobs requiring this skill" not in (temp_vault / "skills" / "Python.md").read_text()

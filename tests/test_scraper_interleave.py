@@ -53,22 +53,22 @@ def test_starvation_fix_high_volume_board_does_not_dominate_first_n():
     has 100x the volume of the others."""
     big = [_job("databricks", n) for n in range(322)]
     small = [_job("anthropic", n) for n in range(5)]
-    smaller = [_job("sierra", n) for n in range(2)]
+    smaller = [_job("agentco", n) for n in range(2)]
 
     out = round_robin_by_board([big, small, smaller])
 
     # First 3 slots: one job from each board (round 1)
     first_three_companies = {j.company for j in out[:3]}
-    assert first_three_companies == {"databricks", "anthropic", "sierra"}
+    assert first_three_companies == {"databricks", "anthropic", "agentco"}
 
-    # After 2 rounds, sierra is exhausted; rounds 3-5 alternate databricks + anthropic
+    # After 2 rounds, agentco is exhausted; rounds 3-5 alternate databricks + anthropic
     # After 5 rounds, anthropic is exhausted; the rest is databricks tail
     # Total: 322 + 5 + 2 = 329 jobs
     assert len(out) == 329
 
     # Top 10 should contain at least 1 job per non-empty board
     top10_companies = {j.company for j in out[:10]}
-    assert {"databricks", "anthropic", "sierra"} <= top10_companies
+    assert {"databricks", "anthropic", "agentco"} <= top10_companies
 
 
 def test_within_board_freshest_first():

@@ -8,7 +8,7 @@
 
 ## What Compass is (one-paragraph recap)
 
-Compass is an agentic career-coaching system. It scrapes ATS job boards, scores each posting against a candidate profile, identifies skill gaps, and generates a weekly study plan. The candidate profile + every JD + every skill grade + every gap-plan output lives in an Obsidian-readable vault at `~/Documents/compass-vault/`. the candidate builds and uses it himself; it's both a daily tool and a public portfolio artifact for tier-2 agentic-AI hiring (Sierra Agent Engineer, Decagon MTS, Ramp ADP, etc.).
+Compass is an agentic career-coaching system. It scrapes ATS job boards, scores each posting against a candidate profile, identifies skill gaps, and generates a weekly study plan. The candidate profile + every JD + every skill grade + every gap-plan output lives in an Obsidian-readable vault at `~/Documents/compass-vault/`. the candidate builds and uses it himself; it's both a daily tool and a public portfolio artifact for tier-2 agentic-AI hiring.
 
 **Authoritative spec:** `docs/superpowers/specs/2026-05-17-compass-mvp-to-portfolio-ship-design.md`
 
@@ -68,7 +68,7 @@ The pattern that surfaced over and over: **unit tests passed, smoke tests passed
 ✅ **Scrapers return real JD content** across all 3 ATSes (Greenhouse, Lever, Ashby) — 1023+ jobs sampled, 0 silent-empty bugs
 ✅ **Extract** produces canonical-typed skills, drops hallucinations against JD text
 ✅ **Score** is constrained to JD universe; matched/missing overlap deduped
-✅ **Tailor** fires only on `human_approved=True`; references real candidate projects (verified on Sierra/Decagon/Cresta/Ramp JobNotes — "production MCP", "a personal local-first OS project", concrete numbers)
+✅ **Tailor** fires only on `human_approved=True`; references real candidate projects (verified on multiple target-company JobNotes — "production MCP", "a personal local-first OS project", concrete numbers)
 ✅ **Vault writes** are idempotent on URL; filenames collision-free; human Obsidian edits preserved
 ✅ **gap_aggregator** weights correctly; counts are derived (no drift); creates missing skill notes; zeros below-rubric scores
 ✅ **skill_assessor agent** constructs without error (was broken before)
@@ -153,8 +153,8 @@ cd ~/Documents/compass
 
 # Run pipeline once on a few apply-now boards
 MAX_JOBS_PER_RUN=10 \
-  GREENHOUSE_BOARDS=anthropic,hebbia,gleanwork,cresta \
-  ASHBY_BOARDS=sierra,decagon,ramp \
+  GREENHOUSE_BOARDS=acme,exampleco \
+  ASHBY_BOARDS=democorp,acme \
   uv run python -m compass.pipeline.graph
 
 # Or use the full configured set from .env
@@ -206,7 +206,7 @@ Adversarial re-verification of Phase 0 surfaced 6 additional silent bugs that th
 | 17 | **`SCORE_THRESHOLD` not enforced on vault writes** — `.env` documented it as gating writes but only `hitl_node` used it. Vault filled with sub-3.5 sales/PM/designer noise. | `vault_write_node` short-circuits and logs to agent-log below threshold; regression test in `tests/pipeline/test_vault_write.py` |
 | 18 | **"LLMs" / "Large Language Models" / "Machine Learning" / "Deep Learning" / "Reinforcement Learning" missing from taxonomy** — agentic-AI JDs lost their core skill signal and dropped to unknown-skills log. | Added 4 canonicals with synonym coverage to `_meta/skill-taxonomy.md`; regression test in `tests/vault/test_taxonomy.py::test_normalize_ml_foundations` |
 | 19 | **Full JD body discarded** — only the LLM-generated summary survived to the JobNote, blocking human verification of agent extractions. | `write_job_note(note, full_description=...)` appends a `## Full JD` section; vault_write_node passes `job.description`; regression tests |
-| 20 | **Ashby scraper read wrong field** — used `locationName` but live boards (Sierra, Posthog, Ramp) populate `location`. Every Ashby JobNote had `location: null`. Also: `isRemote` was discarded. | Fall back through `location → locationName`; capture `isRemote` into `RawJob.remote`; regression test |
+| 20 | **Ashby scraper read wrong field** — used `locationName` but live boards populate `location`. Every Ashby JobNote had `location: null`. Also: `isRemote` was discarded. | Fall back through `location → locationName`; capture `isRemote` into `RawJob.remote`; regression test |
 | 21 | **`score_reasoning` occasionally truncated mid-clause** by Gemini Flash structured-output; passed Pydantic validation because any non-empty string was valid. | `_score_with_retry` enforces minimum length + terminal punctuation; retries once before accepting; regression tests for both retry and no-retry paths |
 | 22 | **31 stale pre-fix JobNotes still in vault** with hallucinated matched/missing skills (URL-dedup prevented refresh). | One-shot cleanup script `scripts/cleanup_stale_jobnotes.py` — dry-run by default, `--apply` deletes. Mtime cutoff + JD-universe leak check identify the bad notes. Per CLAUDE.md, deletion is human-triggered. |
 | 23 | **Langfuse callback API mismatch** (`host` kwarg invalid in newer `langfuse.langchain.CallbackHandler`). Already flagged in retro; degrades gracefully but no traces recorded. | Deferred to Phase 1.B observability work — already in deferred table above. |
@@ -269,7 +269,7 @@ The unifying criterion is **"engineering work that touches agentic AI or product
 
 The cost of one extra LLM extract+score (~$0.003) is far lower than the cost of silently filtering out a role the candidate would have wanted to see. So the classifier should be biased toward inclusion, and the rejection prompt should require explicit evidence (job title in OUT list OR JD body shows zero engineering work) rather than the default.
 
-**Verification after implementing:** run the pipeline on `sierra,decagon,ramp,langchain,posthog,linear,gleanwork,cresta,databricks,anthropic`. Manually scan the resulting JobNotes — every one should be a role the candidate would conceivably want. Any false negatives (an agentic-eng role that got dropped) is a worse bug than a false positive (a borderline role that got scored).
+**Verification after implementing:** run the pipeline on a representative mix of agentic-AI startup boards plus 2-3 generalist tech boards. Manually scan the resulting JobNotes — every one should be a role the candidate would conceivably want. Any false negatives (an agentic-eng role that got dropped) is a worse bug than a false positive (a borderline role that got scored).
 
 ---
 

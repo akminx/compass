@@ -15,7 +15,7 @@ async def _add_one(thread_id: str = "tid-1", **overrides) -> None:
     defaults = dict(
         thread_id=thread_id,
         job_url="https://jobs.example.com/abc",
-        company="Sierra",
+        company="AgentCo",
         title="Software Engineer, Agent",
         score=4.2,
         score_reasoning="Strong match on MCP + LangGraph.",
@@ -31,7 +31,7 @@ async def test_add_and_get_round_trips(frozen_now):
     row = await state_store.get_pending("tid-1")
     assert row is not None
     assert row["thread_id"] == "tid-1"
-    assert row["company"] == "Sierra"
+    assert row["company"] == "AgentCo"
     assert row["score"] == pytest.approx(4.2)
     assert row["matched_skills"] == ["MCP", "Python"]
     assert row["missing_skills"] == ["LangGraph"]

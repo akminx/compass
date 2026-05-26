@@ -77,7 +77,7 @@ async def test_resume_approve_runs_tailor_then_vault_write(stub_llm_nodes):
     from compass.pipeline.graph import run_pipeline
 
     job = RawJob(
-        company="Sierra",
+        company="AgentCo",
         title="SWE",
         url="https://x/1",
         source="ashby",
@@ -105,7 +105,7 @@ async def test_resume_reject_skips_tailor_writes_to_vault(stub_llm_nodes):
     from compass.pipeline.graph import run_pipeline
 
     job = RawJob(
-        company="Sierra",
+        company="AgentCo",
         title="SWE",
         url="https://x/2",
         source="ashby",
@@ -139,7 +139,7 @@ async def test_resume_status_derives_from_final_state_not_input(stub_llm_nodes, 
     from compass.pipeline.graph import run_pipeline
 
     job = RawJob(
-        company="Sierra",
+        company="AgentCo",
         title="SWE",
         url="https://x/divergence-probe",
         source="ashby",
@@ -180,7 +180,7 @@ async def test_resume_regenerates_counters(stub_llm_nodes, monkeypatch):
     monkeypatch.setattr("compass.analysis.gap_aggregator.regenerate", fake_regenerate)
 
     job = RawJob(
-        company="Sierra",
+        company="AgentCo",
         title="SWE",
         url="https://x/regen-probe",
         source="ashby",
@@ -204,7 +204,7 @@ async def test_resume_already_resolved_raises(stub_llm_nodes):
     from compass.pipeline.graph import run_pipeline
 
     job = RawJob(
-        company="Sierra",
+        company="AgentCo",
         title="SWE",
         url="https://x/3",
         source="ashby",
@@ -233,7 +233,7 @@ async def test_resume_purges_thread_checkpoint_blobs(stub_llm_nodes):
     from compass.pipeline.graph import run_pipeline
 
     job = RawJob(
-        company="Sierra",
+        company="AgentCo",
         title="SWE",
         url="u://purge-probe",
         source="ashby",

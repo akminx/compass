@@ -10,38 +10,38 @@ class TestNormalization:
     """Cosmetic variants of the same JD URL must normalize to one string."""
 
     def test_trailing_slash(self):
-        assert normalize_url("https://jobs.ashbyhq.com/sierra/abc") == normalize_url(
-            "https://jobs.ashbyhq.com/sierra/abc/"
+        assert normalize_url("https://jobs.ashbyhq.com/agentco/abc") == normalize_url(
+            "https://jobs.ashbyhq.com/agentco/abc/"
         )
 
     def test_utm_tracking_params_stripped(self):
-        assert normalize_url("https://jobs.ashbyhq.com/sierra/abc") == normalize_url(
-            "https://jobs.ashbyhq.com/sierra/abc?utm_source=google&utm_medium=cpc"
+        assert normalize_url("https://jobs.ashbyhq.com/agentco/abc") == normalize_url(
+            "https://jobs.ashbyhq.com/agentco/abc?utm_source=google&utm_medium=cpc"
         )
 
     def test_gclid_stripped(self):
-        assert normalize_url("https://jobs.ashbyhq.com/sierra/abc") == normalize_url(
-            "https://jobs.ashbyhq.com/sierra/abc?gclid=ABCDEF"
+        assert normalize_url("https://jobs.ashbyhq.com/agentco/abc") == normalize_url(
+            "https://jobs.ashbyhq.com/agentco/abc?gclid=ABCDEF"
         )
 
     def test_http_collapses_to_https(self):
-        assert normalize_url("http://jobs.ashbyhq.com/sierra/abc") == normalize_url(
-            "https://jobs.ashbyhq.com/sierra/abc"
+        assert normalize_url("http://jobs.ashbyhq.com/agentco/abc") == normalize_url(
+            "https://jobs.ashbyhq.com/agentco/abc"
         )
 
     def test_host_case_insensitive(self):
-        assert normalize_url("https://JOBS.ASHBYHQ.COM/sierra/abc") == normalize_url(
-            "https://jobs.ashbyhq.com/sierra/abc"
+        assert normalize_url("https://JOBS.ASHBYHQ.COM/agentco/abc") == normalize_url(
+            "https://jobs.ashbyhq.com/agentco/abc"
         )
 
     def test_fragment_dropped(self):
-        assert normalize_url("https://jobs.ashbyhq.com/sierra/abc#apply") == normalize_url(
-            "https://jobs.ashbyhq.com/sierra/abc"
+        assert normalize_url("https://jobs.ashbyhq.com/agentco/abc#apply") == normalize_url(
+            "https://jobs.ashbyhq.com/agentco/abc"
         )
 
     def test_default_ports_dropped(self):
-        assert normalize_url("https://jobs.ashbyhq.com:443/sierra/abc") == normalize_url(
-            "https://jobs.ashbyhq.com/sierra/abc"
+        assert normalize_url("https://jobs.ashbyhq.com:443/agentco/abc") == normalize_url(
+            "https://jobs.ashbyhq.com/agentco/abc"
         )
 
     def test_non_default_port_preserved(self):

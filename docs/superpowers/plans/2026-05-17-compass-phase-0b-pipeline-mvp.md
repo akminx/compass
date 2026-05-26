@@ -830,7 +830,7 @@ def _state(approved: bool = True) -> CompassState:
     return {
         "raw_jobs": [],
         "current_job": RawJob(
-            company="Sierra", title="Agent Engineer", url="https://example.com/x",
+            company="AgentCo", title="Agent Engineer", url="https://example.com/x",
             source="ashby", description="Build agentic systems.", date_posted=date.today(),
         ),
         "extracted_requirements": JobRequirements(
@@ -1258,8 +1258,8 @@ def _state(skills_required: list[str], skills_matched: list[str], score: float =
     return {
         "raw_jobs": [],
         "current_job": RawJob(
-            company="Sierra", title="Agent Engineer",
-            url="https://jobs.ashbyhq.com/sierra/abc-123",
+            company="AgentCo", title="Agent Engineer",
+            url="https://jobs.ashbyhq.com/agentco/abc-123",
             source="ashby", description="Build agentic systems.",
             location="NYC", date_posted=date(2026, 5, 17),
         ),
@@ -1291,7 +1291,7 @@ async def test_vault_write_node_writes_jobnote(temp_vault):
     job_files = list((temp_vault / "jobs").glob("*.md"))
     assert len(job_files) == 1
     loaded = frontmatter.load(job_files[0])
-    assert loaded.metadata["company"] == "Sierra"
+    assert loaded.metadata["company"] == "AgentCo"
     assert loaded.metadata["match_score"] == 4.2
     assert "MCP" in loaded.metadata["skills_required"]
 
@@ -1308,7 +1308,7 @@ async def test_vault_write_node_increments_skill_counters(temp_vault):
 async def test_vault_write_node_writes_company_note(temp_vault):
     from compass.pipeline.nodes.vault_write import vault_write_node
     await vault_write_node(_state(["MCP"], ["MCP"]))
-    company_path = temp_vault / "companies" / "Sierra.md"
+    company_path = temp_vault / "companies" / "AgentCo.md"
     assert company_path.exists()
 
 
@@ -1479,9 +1479,9 @@ async def test_run_pipeline_end_to_end(temp_vault, mocked_llms):
 
     raw_jobs = [
         RawJob(
-            company="Sierra", title="Agent Engineer",
-            url="https://jobs.ashbyhq.com/sierra/test-uuid",
-            source="ashby", description="Build agents at Sierra.",
+            company="AgentCo", title="Agent Engineer",
+            url="https://jobs.ashbyhq.com/agentco/test-uuid",
+            source="ashby", description="Build agents at AgentCo.",
             location="NYC", date_posted=date(2026, 5, 17),
         ),
     ]
@@ -1490,7 +1490,7 @@ async def test_run_pipeline_end_to_end(temp_vault, mocked_llms):
     assert state["jobs_written"] == 1
 
     # JobNote exists
-    job_files = list((temp_vault / "jobs").glob("*Sierra*.md"))
+    job_files = list((temp_vault / "jobs").glob("*AgentCo*.md"))
     assert len(job_files) == 1
     loaded = frontmatter.load(job_files[0])
     assert loaded.metadata["match_score"] == 4.2
@@ -1504,7 +1504,7 @@ async def test_run_pipeline_end_to_end(temp_vault, mocked_llms):
     assert (temp_vault / "skills" / "MCP.md").exists()
     assert (temp_vault / "skills" / "LangGraph.md").exists()
     # Company was upserted
-    assert (temp_vault / "companies" / "Sierra.md").exists()
+    assert (temp_vault / "companies" / "AgentCo.md").exists()
 
 
 async def test_run_pipeline_skips_dedup_urls(temp_vault, mocked_llms):
@@ -1512,14 +1512,14 @@ async def test_run_pipeline_skips_dedup_urls(temp_vault, mocked_llms):
     from compass.pipeline.graph import run_pipeline
 
     # Seed a prior write
-    (temp_vault / "jobs" / "2026-05-15-Sierra-Prior.md").write_text(
-        "---\ntype: job\nurl: https://jobs.ashbyhq.com/sierra/test-uuid\ncompany: Sierra\n"
+    (temp_vault / "jobs" / "2026-05-15-AgentCo-Prior.md").write_text(
+        "---\ntype: job\nurl: https://jobs.ashbyhq.com/agentco/test-uuid\ncompany: AgentCo\n"
         "title: Prior\nmatch_score: 0\nsource: ashby\ndate_found: 2026-05-15\n---\n# Prior\n"
     )
     raw_jobs = [
         RawJob(
-            company="Sierra", title="Agent Engineer",
-            url="https://jobs.ashbyhq.com/sierra/test-uuid",
+            company="AgentCo", title="Agent Engineer",
+            url="https://jobs.ashbyhq.com/agentco/test-uuid",
             source="ashby", description="...", date_posted=date(2026, 5, 17),
         ),
     ]
@@ -1534,8 +1534,8 @@ async def test_run_pipeline_regenerates_gap_plan(temp_vault, mocked_llms):
 
     raw_jobs = [
         RawJob(
-            company="Sierra", title="Agent Engineer",
-            url="https://jobs.ashbyhq.com/sierra/test-uuid",
+            company="AgentCo", title="Agent Engineer",
+            url="https://jobs.ashbyhq.com/agentco/test-uuid",
             source="ashby", description="...", date_posted=date(2026, 5, 17),
         ),
     ]
@@ -1597,8 +1597,8 @@ async def test_run_pipeline_appends_to_run_log(temp_vault, mocked_llms):
 
     raw_jobs = [
         RawJob(
-            company="Sierra", title="Agent Engineer",
-            url="https://jobs.ashbyhq.com/sierra/run-log-test",
+            company="AgentCo", title="Agent Engineer",
+            url="https://jobs.ashbyhq.com/agentco/run-log-test",
             source="ashby", description="...", date_posted=date(2026, 5, 17),
         ),
     ]
@@ -1919,31 +1919,31 @@ uv run ruff check compass tests && uv run ruff format --check compass tests
 
 Expected: clean.
 
-- [ ] **Step 2: Live pipeline run on 5 Sierra jobs (small batch)**
+- [ ] **Step 2: Live pipeline run on 5 AgentCo jobs (small batch)**
 
 ```bash
 cd ~/Documents/compass
 MAX_JOBS_PER_RUN=5 \
   GREENHOUSE_BOARDS= \
   LEVER_COMPANIES= \
-  ASHBY_BOARDS=sierra \
+  ASHBY_BOARDS=agentco \
   uv run python -m compass.pipeline.graph
 ```
 
 Expected:
 - Exits with "Processed: K | Written: K | Errors: 0" where K ≤ 5
-- **K may be < 5 if some Sierra URLs are already in the vault from earlier runs** (dedup drops them). To force a full 5-job run, delete recent `compass-vault/jobs/2026-*Sierra*` files first, OR use a different `ASHBY_BOARDS` slug (e.g. `decagon`, `traversal`, `vapi`)
+- **K may be < 5 if some AgentCo URLs are already in the vault from earlier runs** (dedup drops them). To force a full 5-job run, delete recent `compass-vault/jobs/2026-*AgentCo*` files first, OR use a different `ASHBY_BOARDS` slug (e.g. `botco`, `traversal`, `acme`)
 - K new files in `compass-vault/jobs/2026-*` matching the Ashby slug used
 - `compass-vault/study-plans/master-gap-plan.md` has been regenerated with a non-empty Top 10 table
 
 - [ ] **Step 3: Spot-check one written JobNote**
 
 ```bash
-ls -la ~/Documents/compass-vault/jobs/2026-*Sierra* | head -3
-cat ~/Documents/compass-vault/jobs/$(ls ~/Documents/compass-vault/jobs/2026-*Sierra* | head -1 | xargs basename) | head -30
+ls -la ~/Documents/compass-vault/jobs/2026-*AgentCo* | head -3
+cat ~/Documents/compass-vault/jobs/$(ls ~/Documents/compass-vault/jobs/2026-*AgentCo* | head -1 | xargs basename) | head -30
 ```
 
-Expected: frontmatter has `match_score`, `skills_required`, `skills_matched`, `skills_missing` populated; body has the `# Sierra — <Title>` heading + `jd_summary`.
+Expected: frontmatter has `match_score`, `skills_required`, `skills_matched`, `skills_missing` populated; body has the `# AgentCo — <Title>` heading + `jd_summary`.
 
 - [ ] **Step 4: Verify master-gap-plan.md regenerated**
 
@@ -1960,7 +1960,7 @@ VAULT_PATH=~/Documents/compass-vault OPENROUTER_API_KEY=stub \
   uv run python -m compass.analysis.gap_aggregator 2>&1 | tail -10
 ```
 
-Expected: prints top 10 gaps including some Sierra-relevant skills (LangGraph, MCP, Python, etc. depending on what the JDs required).
+Expected: prints top 10 gaps including some AgentCo-relevant skills (LangGraph, MCP, Python, etc. depending on what the JDs required).
 
 - [ ] **Step 6: Full pytest run one more time**
 
@@ -1996,7 +1996,7 @@ If all six are checked, Phase 0.B is done.
 |---|---|
 | Run all tests | `uv run pytest -q` |
 | Run pipeline tests only | `uv run pytest tests/pipeline/ -v` |
-| Live pipeline (small batch) | `MAX_JOBS_PER_RUN=5 ASHBY_BOARDS=sierra uv run python -m compass.pipeline.graph` |
+| Live pipeline (small batch) | `MAX_JOBS_PER_RUN=5 ASHBY_BOARDS=agentco uv run python -m compass.pipeline.graph` |
 | Live pipeline (full set) | `uv run python -m compass.pipeline.graph` |
 | Regen gap plan only | `uv run python -m compass.analysis.gap_aggregator` |
 | Ruff + format | `uv run ruff check compass tests && uv run ruff format compass tests` |

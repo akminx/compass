@@ -112,7 +112,7 @@ def main() -> int:
     parser.add_argument(
         "jobnote",
         nargs="?",
-        help="JobNote filename (e.g. 2026-05-19-sierra-Engineer-abc.md). "
+        help="JobNote filename (e.g. 2026-05-19-acme-Engineer-abc.md). "
         "Omit for interactive paste mode.",
     )
     parser.add_argument(

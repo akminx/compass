@@ -887,8 +887,8 @@ type: profile
 ### Top-tier
 | Company | Title | Geo |
 |---|---|---|
-| Sierra | Agent Engineer | SF |
-| Decagon | MTS | SF |
+| AgentCo | Agent Engineer | SF |
+| BotCo | MTS | SF |
 | Ramp | Engineer | NYC |
 
 ### Big tech
@@ -927,7 +927,7 @@ def tiered_vault(tmp_path, monkeypatch):
 
 def test_get_tier_apply_now(tiered_vault):
     from compass.vault.target_companies import get_tier
-    assert get_tier("Sierra") == "apply-now"
+    assert get_tier("AgentCo") == "apply-now"
     assert get_tier("Ramp") == "apply-now"
     assert get_tier("Apple Apple Intelligence") == "apply-now"
 
@@ -946,8 +946,8 @@ def test_get_tier_unknown_company(tiered_vault):
 
 def test_case_insensitive_normalization(tiered_vault):
     from compass.vault.target_companies import get_tier
-    assert get_tier("sierra") == "apply-now"
-    assert get_tier("SIERRA") == "apply-now"
+    assert get_tier("agentco") == "apply-now"
+    assert get_tier("AGENTCO") == "apply-now"
     assert get_tier("sier ra") == "apply-now"   # whitespace tolerated
 
 def test_missing_file_returns_unknown(tmp_path, monkeypatch):
@@ -955,7 +955,7 @@ def test_missing_file_returns_unknown(tmp_path, monkeypatch):
     import compass.vault.target_companies as tc
     monkeypatch.setattr(cfg, "VAULT_PATH", tmp_path)
     tc.refresh()
-    assert tc.get_tier("Sierra") == "unknown"
+    assert tc.get_tier("AgentCo") == "unknown"
 
 def test_refresh_picks_up_edits(tiered_vault):
     from compass.vault.target_companies import get_tier, refresh
@@ -974,7 +974,7 @@ def test_multiple_adjacent_tables_one_tier(tmp_path, monkeypatch):
 ### Startups
 | Company | Geo |
 |---|---|
-| Sierra | SF |
+| AgentCo | SF |
 ### Big tech
 | Company | Notes |
 |---|---|
@@ -987,7 +987,7 @@ def test_multiple_adjacent_tables_one_tier(tmp_path, monkeypatch):
     import compass.vault.target_companies as tc
     monkeypatch.setattr(cfg, "VAULT_PATH", vault)
     tc.refresh()
-    assert tc.get_tier("Sierra") == "apply-now"
+    assert tc.get_tier("AgentCo") == "apply-now"
     assert tc.get_tier("NVIDIA") == "apply-now"
 
 
@@ -997,7 +997,7 @@ def test_company_header_row_skipped(tmp_path, monkeypatch):
 
 | Company | Notes |
 |---|---|
-| Sierra | SF |
+| AgentCo | SF |
 """
     vault = tmp_path / "v"
     (vault / "_profile").mkdir(parents=True)
@@ -1007,7 +1007,7 @@ def test_company_header_row_skipped(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "VAULT_PATH", vault)
     tc.refresh()
     assert tc.get_tier("Company") == "unknown"
-    assert tc.get_tier("Sierra") == "apply-now"
+    assert tc.get_tier("AgentCo") == "apply-now"
 ```
 
 - [ ] **Step 2: Run — expect ImportError**
@@ -1028,7 +1028,7 @@ The file is human-edited but follows a stable section structure:
   ## Tier `apply-now`
   | Company | ... |
   |---|---|
-  | Sierra | ... |
+  | AgentCo | ... |
   | ...
   ## Tier `6-month`
   ...
@@ -1192,7 +1192,7 @@ async def test_low_score_in_scope_still_writes(temp_vault):
     result = await vault_write_node(state)
 
     assert result["vault_written"] is True
-    assert len(list((temp_vault / "jobs").glob("*Sierra*.md"))) == 1
+    assert len(list((temp_vault / "jobs").glob("*AgentCo*.md"))) == 1
 
 
 async def test_role_family_threaded_to_jobnote(temp_vault):
@@ -1204,14 +1204,14 @@ async def test_role_family_threaded_to_jobnote(temp_vault):
     state["role_family"] = "agent-engineer"
     await vault_write_node(state)
 
-    path = next((temp_vault / "jobs").glob("*Sierra*.md"))
+    path = next((temp_vault / "jobs").glob("*AgentCo*.md"))
     assert frontmatter.load(path).metadata["role_family"] == "agent-engineer"
 
 
 async def test_tier_resolved_from_target_companies(temp_vault):
-    """target-companies.md says Sierra=apply-now → JobNote.tier == 'apply-now'."""
+    """target-companies.md says AgentCo=apply-now → JobNote.tier == 'apply-now'."""
     (temp_vault / "_profile" / "target-companies.md").write_text(
-        "## Tier `apply-now`\n\n| Company | Geo |\n|---|---|\n| Sierra | SF |\n"
+        "## Tier `apply-now`\n\n| Company | Geo |\n|---|---|\n| AgentCo | SF |\n"
     )
     import compass.vault.target_companies as tc
     tc.refresh()
@@ -1223,7 +1223,7 @@ async def test_tier_resolved_from_target_companies(temp_vault):
     state["role_family"] = "agent-engineer"
     await vault_write_node(state)
 
-    path = next((temp_vault / "jobs").glob("*Sierra*.md"))
+    path = next((temp_vault / "jobs").glob("*AgentCo*.md"))
     assert frontmatter.load(path).metadata["tier"] == "apply-now"
 
 
@@ -1251,16 +1251,16 @@ async def test_human_edited_company_tier_preserved(temp_vault):
     # 1. Seed CompanyNote on disk with tier=stretch (simulating a human edit)
     from compass.vault.schemas import CompanyNote
     from compass.vault.writer import write_company_note
-    write_company_note(CompanyNote(company="Sierra", tier="stretch", roles_seen=3))
+    write_company_note(CompanyNote(company="AgentCo", tier="stretch", roles_seen=3))
 
-    # 2. Seed target-companies.md saying Sierra is apply-now (conflicts with edit)
+    # 2. Seed target-companies.md saying AgentCo is apply-now (conflicts with edit)
     (temp_vault / "_profile" / "target-companies.md").write_text(
-        "## Tier `apply-now`\n\n| Company | Notes |\n|---|---|\n| Sierra | x |\n"
+        "## Tier `apply-now`\n\n| Company | Notes |\n|---|---|\n| AgentCo | x |\n"
     )
     import compass.vault.target_companies as tc
     tc.refresh()
 
-    # 3. Run vault_write_node with a Sierra job
+    # 3. Run vault_write_node with a AgentCo job
     from compass.pipeline.nodes.vault_write import vault_write_node
     state = _state(["MCP"], ["MCP"], score=4.5)
     state["in_scope"] = True
@@ -1268,11 +1268,11 @@ async def test_human_edited_company_tier_preserved(temp_vault):
     await vault_write_node(state)
 
     # 4. CompanyNote.tier must still be 'stretch' (human edit preserved)
-    md = frontmatter.load(temp_vault / "companies" / "Sierra.md").metadata
+    md = frontmatter.load(temp_vault / "companies" / "AgentCo.md").metadata
     assert md["tier"] == "stretch", "human-edited CompanyNote tier was clobbered"
 
     # 5. But the new JobNote snapshots the resolved tier (apply-now) at write time
-    job_path = next((temp_vault / "jobs").glob("*Sierra*.md"))
+    job_path = next((temp_vault / "jobs").glob("*AgentCo*.md"))
     assert frontmatter.load(job_path).metadata["tier"] == "apply-now"
 ```
 
@@ -1415,15 +1415,15 @@ from compass.vault.schemas import ApplicationNote
 def test_write_application_note_creates_file(temp_vault):
     from compass.vault.writer import write_application_note
     note = ApplicationNote(
-        company="Sierra", title="Agent Engineer", job_ref="https://x/sierra",
+        company="AgentCo", title="Agent Engineer", job_ref="https://x/agentco",
         applied_date=date(2026, 5, 18),
     )
     path = write_application_note(note)
     assert path.exists()
-    assert path.name.startswith("2026-05-18-Sierra-Agent_Engineer-")
+    assert path.name.startswith("2026-05-18-AgentCo-Agent_Engineer-")
     assert path.name.endswith(".md")
     # 8-char hash suffix present
-    stem = path.stem  # "2026-05-18-Sierra-Agent_Engineer-<hash>"
+    stem = path.stem  # "2026-05-18-AgentCo-Agent_Engineer-<hash>"
     suffix = stem.rsplit("-", 1)[-1]
     assert len(suffix) == 8
 
@@ -1431,8 +1431,8 @@ def test_write_application_note_creates_file(temp_vault):
 def test_write_application_idempotent_same_jobref_same_day(temp_vault):
     """Same (company, title, applied_date, job_ref) → same file, updated."""
     from compass.vault.writer import write_application_note
-    note = ApplicationNote(company="Sierra", title="Agent Engineer",
-                           job_ref="https://x/sierra-team-a", applied_date=date(2026, 5, 18))
+    note = ApplicationNote(company="AgentCo", title="Agent Engineer",
+                           job_ref="https://x/agentco-team-a", applied_date=date(2026, 5, 18))
     p1 = write_application_note(note)
     note2 = note.model_copy(update={"next_action": "follow up", "next_action_date": date(2026, 5, 25)})
     p2 = write_application_note(note2)
@@ -1446,20 +1446,20 @@ def test_write_application_same_company_title_same_day_different_jobref(temp_vau
     """Two different postings at the same company on the same day produce
     distinct files (different job_ref → different filename hash)."""
     from compass.vault.writer import write_application_note
-    n1 = ApplicationNote(company="Sierra", title="Agent Engineer",
-                         job_ref="https://x/sierra-team-a", applied_date=date(2026, 5, 18))
-    n2 = ApplicationNote(company="Sierra", title="Agent Engineer",
-                         job_ref="https://x/sierra-team-b", applied_date=date(2026, 5, 18))
+    n1 = ApplicationNote(company="AgentCo", title="Agent Engineer",
+                         job_ref="https://x/agentco-team-a", applied_date=date(2026, 5, 18))
+    n2 = ApplicationNote(company="AgentCo", title="Agent Engineer",
+                         job_ref="https://x/agentco-team-b", applied_date=date(2026, 5, 18))
     assert write_application_note(n1) != write_application_note(n2)
 
 
 def test_write_application_separate_files_per_date(temp_vault):
     """Re-applying to the same posting on a different date is allowed."""
     from compass.vault.writer import write_application_note
-    n1 = ApplicationNote(company="Sierra", title="Agent Engineer",
-                         job_ref="https://x/sierra", applied_date=date(2026, 1, 1))
-    n2 = ApplicationNote(company="Sierra", title="Agent Engineer",
-                         job_ref="https://x/sierra", applied_date=date(2026, 5, 18))
+    n1 = ApplicationNote(company="AgentCo", title="Agent Engineer",
+                         job_ref="https://x/agentco", applied_date=date(2026, 1, 1))
+    n2 = ApplicationNote(company="AgentCo", title="Agent Engineer",
+                         job_ref="https://x/agentco", applied_date=date(2026, 5, 18))
     assert write_application_note(n1) != write_application_note(n2)
 ```
 
@@ -1551,7 +1551,7 @@ from datetime import date
 from pathlib import Path
 
 
-def _seed_jobnote(vault: Path, company="Sierra", title="Agent Engineer", url="https://x/s") -> Path:
+def _seed_jobnote(vault: Path, company="AgentCo", title="Agent Engineer", url="https://x/s") -> Path:
     """Write a minimal JobNote frontmatter that the lifecycle can find."""
     from compass.vault.schemas import JobNote
     from compass.vault.writer import write_job_note
@@ -1566,16 +1566,16 @@ class TestAddApplication:
     def test_creates_application_note(self, temp_vault):
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application
-        app = add_application(job_id="Sierra-Agent_Engineer")
-        assert app.company == "Sierra"
+        app = add_application(job_id="AgentCo-Agent_Engineer")
+        assert app.company == "AgentCo"
         assert app.status == "applied"
         # Application file exists
-        assert any((temp_vault / "applications").glob("*Sierra*"))
+        assert any((temp_vault / "applications").glob("*AgentCo*"))
 
     def test_marks_jobnote_status_applied(self, temp_vault):
         job_path = _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application
-        add_application(job_id="Sierra-Agent_Engineer")
+        add_application(job_id="AgentCo-Agent_Engineer")
         import frontmatter
         md = frontmatter.load(job_path)
         assert md["status"] == "applied"
@@ -1587,20 +1587,20 @@ class TestAddApplication:
             add_application(job_id="not-a-real-job")
 
     def test_ambiguous_job_raises(self, temp_vault):
-        _seed_jobnote(temp_vault, company="Sierra", title="Agent Engineer", url="x1")
-        _seed_jobnote(temp_vault, company="Sierra", title="Agent Engineer II", url="x2")
+        _seed_jobnote(temp_vault, company="AgentCo", title="Agent Engineer", url="x1")
+        _seed_jobnote(temp_vault, company="AgentCo", title="Agent Engineer II", url="x2")
         from compass.applications.lifecycle import add_application
         with pytest.raises(LookupError, match="ambiguous"):
-            add_application(job_id="Sierra-Agent")
+            add_application(job_id="AgentCo-Agent")
 
 
 class TestUpdateStatus:
     def test_valid_transition(self, temp_vault):
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application, update_application_status
-        app = add_application(job_id="Sierra")
+        app = add_application(job_id="AgentCo")
         updated = update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra", status="screen",
+            app_id=f"{app.applied_date.isoformat()}-AgentCo", status="screen",
             next_action="prep recruiter screen", next_action_date=date(2026, 5, 22),
         )
         assert updated.status == "screen"
@@ -1609,16 +1609,16 @@ class TestUpdateStatus:
     def test_invalid_transition_raises(self, temp_vault):
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application, update_application_status
-        app = add_application(job_id="Sierra")
+        app = add_application(job_id="AgentCo")
         with pytest.raises(ValueError, match="invalid transition"):
-            update_application_status(app_id=f"{app.applied_date.isoformat()}-Sierra", status="offer")
+            update_application_status(app_id=f"{app.applied_date.isoformat()}-AgentCo", status="offer")
 
     def test_force_bypasses_validation(self, temp_vault):
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application, update_application_status
-        app = add_application(job_id="Sierra")
+        app = add_application(job_id="AgentCo")
         updated = update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra", status="offer", force=True,
+            app_id=f"{app.applied_date.isoformat()}-AgentCo", status="offer", force=True,
         )
         assert updated.status == "offer"
 
@@ -1627,21 +1627,21 @@ class TestListPending:
     def test_returns_due_actions(self, temp_vault):
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application, update_application_status, list_pending_actions
-        app = add_application(job_id="Sierra")
+        app = add_application(job_id="AgentCo")
         update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra", status="screen",
+            app_id=f"{app.applied_date.isoformat()}-AgentCo", status="screen",
             next_action="follow up", next_action_date=date(2026, 5, 18),
         )
         pending = list_pending_actions(through_date=date(2026, 5, 18))
         assert len(pending) == 1
-        assert pending[0]["company"] == "Sierra"
+        assert pending[0]["company"] == "AgentCo"
 
     def test_filters_out_future_actions(self, temp_vault):
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application, update_application_status, list_pending_actions
-        app = add_application(job_id="Sierra")
+        app = add_application(job_id="AgentCo")
         update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra", status="screen",
+            app_id=f"{app.applied_date.isoformat()}-AgentCo", status="screen",
             next_action_date=date(2026, 12, 1),
         )
         pending = list_pending_actions(through_date=date(2026, 5, 18))
@@ -1656,17 +1656,17 @@ class TestNextActionSentinel:
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application, update_application_status
 
-        app = add_application(job_id="Sierra")
+        app = add_application(job_id="AgentCo")
         update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra", status="screen",
+            app_id=f"{app.applied_date.isoformat()}-AgentCo", status="screen",
             next_action="prep call", next_action_date=date(2026, 5, 25),
         )
         # Transition again without specifying next_action* — must preserve them
         update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra", status="onsite",
+            app_id=f"{app.applied_date.isoformat()}-AgentCo", status="onsite",
         )
         import frontmatter
-        path = next((temp_vault / "applications").glob("*Sierra*.md"))
+        path = next((temp_vault / "applications").glob("*AgentCo*.md"))
         md = frontmatter.load(path).metadata
         assert md["next_action"] == "prep call"
         assert md["next_action_date"] == "2026-05-25"  # frontmatter stores ISO string
@@ -1675,18 +1675,18 @@ class TestNextActionSentinel:
         _seed_jobnote(temp_vault)
         from compass.applications.lifecycle import add_application, update_application_status
 
-        app = add_application(job_id="Sierra")
+        app = add_application(job_id="AgentCo")
         update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra", status="screen",
+            app_id=f"{app.applied_date.isoformat()}-AgentCo", status="screen",
             next_action="prep call", next_action_date=date(2026, 5, 25),
         )
         # Clear both with explicit None
         update_application_status(
-            app_id=f"{app.applied_date.isoformat()}-Sierra", status="onsite",
+            app_id=f"{app.applied_date.isoformat()}-AgentCo", status="onsite",
             next_action=None, next_action_date=None,
         )
         import frontmatter
-        path = next((temp_vault / "applications").glob("*Sierra*.md"))
+        path = next((temp_vault / "applications").glob("*AgentCo*.md"))
         md = frontmatter.load(path).metadata
         assert md["next_action"] == ""
         assert md["next_action_date"] is None
@@ -2114,12 +2114,12 @@ git commit -m "feat(scrapers): parse remote policy from Greenhouse/Lever locatio
 from datetime import date
 
 
-def _seed_sierra_jobnote(vault):
+def _seed_agentco_jobnote(vault):
     from compass.vault.schemas import JobNote
     from compass.vault.writer import write_job_note
     write_job_note(JobNote(
-        company="Sierra", title="Agent Engineer",
-        url="https://x/sierra-agent", source="manual",
+        company="AgentCo", title="Agent Engineer",
+        url="https://x/agentco-agent", source="manual",
         date_found=date(2026, 5, 10), match_score=4.5,
     ))
 
@@ -2129,13 +2129,13 @@ def test_mcp_add_application_creates_note(temp_vault):
     via the MCP registration confirms wiring."""
     from compass.mcp_server.server import add_application
 
-    _seed_sierra_jobnote(temp_vault)
-    result = add_application(job_id="Sierra-Agent_Engineer")
+    _seed_agentco_jobnote(temp_vault)
+    result = add_application(job_id="AgentCo-Agent_Engineer")
 
     assert "error" not in result
-    assert result["company"] == "Sierra"
+    assert result["company"] == "AgentCo"
     assert result["status"] == "applied"
-    assert any((temp_vault / "applications").glob("*Sierra*.md"))
+    assert any((temp_vault / "applications").glob("*AgentCo*.md"))
 
 
 def test_mcp_add_application_unknown_job_returns_error(temp_vault):
@@ -2149,12 +2149,12 @@ def test_mcp_add_application_unknown_job_returns_error(temp_vault):
 def test_mcp_update_application_status_valid_transition(temp_vault):
     from compass.mcp_server.server import add_application, update_application_status
 
-    _seed_sierra_jobnote(temp_vault)
-    app = add_application(job_id="Sierra")
+    _seed_agentco_jobnote(temp_vault)
+    app = add_application(job_id="AgentCo")
     today_iso = date.today().isoformat()
 
     result = update_application_status(
-        app_id=f"{today_iso}-Sierra",
+        app_id=f"{today_iso}-AgentCo",
         status="screen",
         next_action="prep recruiter call",
         next_action_date="2026-05-25",
@@ -2167,12 +2167,12 @@ def test_mcp_update_application_status_valid_transition(temp_vault):
 def test_mcp_update_application_status_invalid_transition(temp_vault):
     from compass.mcp_server.server import add_application, update_application_status
 
-    _seed_sierra_jobnote(temp_vault)
-    add_application(job_id="Sierra")
+    _seed_agentco_jobnote(temp_vault)
+    add_application(job_id="AgentCo")
     today_iso = date.today().isoformat()
 
     # applied → offer is invalid; must go via screen → onsite first
-    result = update_application_status(app_id=f"{today_iso}-Sierra", status="offer")
+    result = update_application_status(app_id=f"{today_iso}-AgentCo", status="offer")
     assert "error" in result
     assert "invalid transition" in result["error"]
 
@@ -2182,11 +2182,11 @@ def test_mcp_list_pending_actions_returns_due_rows(temp_vault):
         add_application, update_application_status, list_pending_actions,
     )
 
-    _seed_sierra_jobnote(temp_vault)
-    add_application(job_id="Sierra")
+    _seed_agentco_jobnote(temp_vault)
+    add_application(job_id="AgentCo")
     today_iso = date.today().isoformat()
     update_application_status(
-        app_id=f"{today_iso}-Sierra",
+        app_id=f"{today_iso}-AgentCo",
         status="screen",
         next_action="follow up",
         next_action_date=today_iso,
@@ -2194,7 +2194,7 @@ def test_mcp_list_pending_actions_returns_due_rows(temp_vault):
 
     pending = list_pending_actions(through_date=today_iso)
     assert len(pending) == 1
-    assert pending[0]["company"] == "Sierra"
+    assert pending[0]["company"] == "AgentCo"
 
 
 def test_mcp_list_pending_filters_future_dates(temp_vault):
@@ -2202,11 +2202,11 @@ def test_mcp_list_pending_filters_future_dates(temp_vault):
         add_application, update_application_status, list_pending_actions,
     )
 
-    _seed_sierra_jobnote(temp_vault)
-    add_application(job_id="Sierra")
+    _seed_agentco_jobnote(temp_vault)
+    add_application(job_id="AgentCo")
     today_iso = date.today().isoformat()
     update_application_status(
-        app_id=f"{today_iso}-Sierra", status="screen",
+        app_id=f"{today_iso}-AgentCo", status="screen",
         next_action_date="2099-01-01",
     )
 
@@ -2222,11 +2222,11 @@ async def test_mcp_tailor_resume_reads_existing_paragraph(temp_vault):
     from compass.mcp_server.server import tailor_resume
 
     write_job_note(JobNote(
-        company="Sierra", title="Agent Engineer", url="https://x/sierra-agent",
+        company="AgentCo", title="Agent Engineer", url="https://x/agentco-agent",
         source="manual", date_found=date(2026, 5, 10), match_score=4.5,
         tailored_paragraph="Lead with MCP project in a prior role.",
     ))
-    result = await tailor_resume(job_id="Sierra-Agent_Engineer")
+    result = await tailor_resume(job_id="AgentCo-Agent_Engineer")
     assert "error" not in result
     assert result["tailored_paragraph"] == "Lead with MCP project in a prior role."
 ```
@@ -2238,7 +2238,7 @@ async def test_mcp_tailor_resume_reads_existing_paragraph(temp_vault):
 def add_application(job_id: str, resume_variant: str = "resume.md", referral: bool = False) -> dict:
     """Create an ApplicationNote linked to a JobNote. Marks the JobNote as applied.
 
-    job_id: substring of the JobNote filename (e.g. 'Sierra-Agent_Engineer') or
+    job_id: substring of the JobNote filename (e.g. 'AgentCo-Agent_Engineer') or
             the JobNote's url field. Raises if zero or >1 match.
     """
     from compass.applications.lifecycle import add_application as _add
@@ -2490,8 +2490,8 @@ Expected: all green.
 
 ```bash
 MAX_JOBS_PER_RUN=20 \
-  GREENHOUSE_BOARDS=anthropic,hebbia,gleanwork,cresta \
-  ASHBY_BOARDS=sierra,decagon,ramp \
+  GREENHOUSE_BOARDS=anthropic,docco,searchco,voiceco \
+  ASHBY_BOARDS=agentco,botco,ramp \
   uv run python -m compass.pipeline.graph
 ```
 

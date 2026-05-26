@@ -32,6 +32,10 @@ IN_TITLE_KEYWORDS: dict[str, list[str]] = {
         "agentic engineer",
         "agentic ai engineer",
         "agent platform",
+        "agentic ai platform",  # "Software Engineer, Agentic AI Platform" — big-tech naming
+        "agent runtime",
+        "agent infrastructure",
+        "agent sdk",
         "agent orchestration",
         "agent reliability",
         "software engineer, agents",

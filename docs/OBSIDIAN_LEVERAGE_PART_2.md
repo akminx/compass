@@ -69,7 +69,7 @@ LIMIT 3
 
 ## Problem 2: "I have an interview Friday — what do I prepare?"
 
-You get a recruiter screen for Sierra Agent Engineer. You need to know which of your skills + stories to lead with, which gaps to acknowledge, which to deflect.
+You get a recruiter screen for AgentCo Agent Engineer. You need to know which of your skills + stories to lead with, which gaps to acknowledge, which to deflect.
 
 ### Idea 2.1: STAR story bank linked to skills
 
@@ -124,7 +124,7 @@ SORT file.name DESC
 After every interview, a retro note in `learning-vault/interview-prep/postmortems/`:
 
 ```markdown
-# 2026-05-25 — Sierra Agent Engineer screen
+# 2026-05-25 — AgentCo Agent Engineer screen
 
 Result: passed → onsite
 
@@ -140,7 +140,7 @@ Result: passed → onsite
   hasn't shipped). Pivoted to general k8s cron experience.
 
 ## Linked
-[[applications/2026-05-19-sierra-Software_Engineer_Agent_Architecture]]
+[[applications/2026-05-19-agentco-Software_Engineer_Agent_Architecture]]
 ```
 
 **Automation hook:** add `learning-vault://interview-prep/postmortems/*.md` to every relevant SkillNote's `evidence:` on save. Skills you successfully described in interviews accumulate proof. Skills that got flagged as gaps move up the study priority.
@@ -257,12 +257,12 @@ You apply to 5 jobs. Three ghost you. Two screen you out. You don't have a recor
 A note per application with the decision rationale:
 
 ```markdown
-# 2026-05-19 — Why I applied to Sierra Agent Architecture
+# 2026-05-19 — Why I applied to AgentCo Agent Architecture
 
 ## Why yes
 - Score 3.0 + my MCP/LangGraph fit
 - Stretch role — gets me to the agent-engineering interview table
-- Sierra is well-funded, founder-mindset language matches
+- AgentCo is well-funded, founder-mindset language matches
 - Has [[Compass-style HITL]] in their JD → talking point
 
 ## Why I almost said no
@@ -307,14 +307,14 @@ When you have 2+ offers, a single note `offers/2026-Q2-comparison.md`:
 ```markdown
 # Q2 Offer Comparison
 
-| Attribute | Sierra | Decagon | Cognition |
+| Attribute | CompanyA | CompanyB | CompanyC |
 |---|---|---|---|
 | Base | $220K | $235K | $210K |
 | Equity (4-yr) | $400K | $300K | $600K |
 | Bonus | 15% | 20% | 10% |
 | Role family | Agent Eng | Agent Eng | Applied AI |
 | Tier | apply-now | apply-now | apply-now |
-| Notes link | [[applications/sierra-...]] | [[applications/decagon-...]] | [[applications/cognition-...]] |
+| Notes link | [[applications/companya-...]] | [[applications/companyb-...]] | [[applications/companyc-...]] |
 ```
 
 Dataview can auto-build this from ApplicationNotes once they exist.
@@ -333,7 +333,7 @@ Recruiters DM you. Former coworkers refer roles. Friends-of-friends offer intros
 ---
 type: person
 role: Engineering Manager
-company: Sierra
+company: AgentCo
 relationship: ex-coworker | recruiter | referral | mutual
 linkedin: https://linkedin.com/in/janedoe
 first_contact: 2026-05-15
@@ -341,18 +341,18 @@ last_contact: 2026-05-19
 status: warm
 ---
 
-# Jane Doe — Sierra
+# Jane Doe — AgentCo
 
 Met at the AI agents meetup in Austin (April 2026). Now EM of the agent
 orchestration team. Offered to refer me when I apply.
 
 ## Conversations
 - 2026-05-15 — DM exchange about Compass project. Liked the HITL design.
-- 2026-05-19 — Referral offered for [[applications/sierra-...]]
+- 2026-05-19 — Referral offered for [[applications/agentco-...]]
 
 ## Related
-- [[applications/2026-05-19-sierra-Software_Engineer_Agent_Architecture]]
-- [[companies/sierra]]
+- [[applications/2026-05-19-agentco-Software_Engineer_Agent_Architecture]]
+- [[companies/agentco]]
 ```
 
 **Graph view payoff:** people → companies → JobNotes → skills. The whole network as a navigable map.
@@ -725,4 +725,4 @@ What Compass + Obsidian leverage gives you:
 - Interview prep that maps directly to JobNote requirements
 - Skill trajectory tracking
 
-This is the kind of system a Sierra/Decagon/Cognition hiring manager wants to *see*. Not just hear about — but click through. The Obsidian rendering layer IS the demo.
+This is the kind of system a tier-2 agentic-AI hiring manager wants to *see*. Not just hear about — but click through. The Obsidian rendering layer IS the demo.

@@ -17,9 +17,9 @@ The `compass.vault.learning_bridge` module resolves those URIs; the `compass.ana
 
 ## Portfolio Context (read this — it shapes every decision)
 
-This project exists to close specific skill gaps and produce a concrete interview story. The target roles are **tier-2 product engineering at agentic startups** (Sierra Agent Engineer, Decagon MTS Agent Engineering, Ramp Agent Developer Platform, Hebbia/Glean Applied AI, Cognition AI Enablement, Maven AGI, Traversal, Cresta-stretch) and **tier-3 big-tech L3/L4 agentic roles** (NVIDIA Agentic AI, Apple Apple Intelligence, Google Cloud GenAI, AWS Bedrock).
+This project exists to close specific skill gaps and produce a concrete interview story. The target roles are **tier-2 product engineering at agentic startups** and **tier-3 big-tech L3/L4 agentic roles**.
 
-**FDE-track roles (Anthropic FDE, OpenAI FDE, Salesforce AI FDE) are out of scope** — Akash has insufficient YoE (1.5 vs 3+ required) and will revisit in 12–18 months.
+**FDE-track roles are out of scope for now** — the operator has insufficient YoE for those listings and will revisit them later.
 
 **What this project must demonstrate by the time it ships (Phase 2 complete per spec):**
 - **LangGraph**: stateful graph, conditional edges, `interrupt()` for HiTL, `AsyncSqliteSaver` checkpointing (Phase 1.B)

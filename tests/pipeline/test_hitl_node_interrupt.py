@@ -12,9 +12,9 @@ from compass.pipeline.state import CompassState, JobScore, RawJob
 
 def _state(score: float | None) -> CompassState:
     job = RawJob(
-        company="Sierra",
+        company="AgentCo",
         title="SWE, Agent",
-        url="https://jobs.example.com/sierra-1",
+        url="https://jobs.example.com/agentco-1",
         source="ashby",
         description="...",
         date_posted=_dt.date(2026, 5, 18),
@@ -78,7 +78,7 @@ async def test_above_threshold_calls_interrupt_with_payload(monkeypatch):
     monkeypatch.setattr("compass.pipeline.nodes.hitl.interrupt", fake_interrupt)
     result = await hitl_node(_state(score=4.2))
     assert captured["kind"] == "approval_request"
-    assert captured["company"] == "Sierra"
+    assert captured["company"] == "AgentCo"
     assert captured["score"] == pytest.approx(4.2)
     assert captured["matched_skills"] == ["MCP"]
     assert result == {"human_approved": True, "human_feedback": "Strong fit"}

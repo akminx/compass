@@ -133,7 +133,7 @@ async def test_run_pipeline_emits_no_unregistered_warnings(checkpoint_db, monkey
     await run_pipeline(
         raw_jobs=[
             RawJob(
-                company="Sierra",
+                company="AgentCo",
                 title="SWE",
                 url="u://x/1",
                 source="ashby",

@@ -396,7 +396,7 @@ def minimal_state():
     return CompassState(
         raw_jobs=[],
         current_job=RawJob(
-            company="Sierra AI",
+            company="AgentCo",
             title="AI Engineer",
             url="https://example.com/job/1",
             source="greenhouse",

@@ -27,7 +27,7 @@ adversarial review waves complete. Concretely:
   - 49 auto-scrapable apply-now/opportunistic companies (Greenhouse/Ashby/Workday)
   - 23 manual-add entries for banks/consulting (JPM/Capital One/GS/BofA/Deloitte/Accenture/etc.)
   - 5 Workday tenants verified (Wells Fargo, Citi, Morgan Stanley, BlackRock, Adobe)
-  - 8 Austin/local startups added (Self Financial, AlertMedia, Diligent, Apptronik, Roboflow, Maven Clinic, Maven AGI, Vapi)
+  - 8 Austin/local startups added (Self Financial, AlertMedia, Diligent, Apptronik, Roboflow, Maven Clinic, and others)
   - Aliases on banks for tenant-slug ↔ name resolution (JPMC↔JPMorgan, BofA↔BankofAmerica, etc.)
 - **Audit findings 1-8** all shipped (see commit `b13e1a2`)
 - **Workday scraper** built (`compass/scrapers/workday.py`) — 5 confirmed
@@ -202,8 +202,8 @@ Pattern they've used several times:
 These are documented in `docs/KNOWN_DATA_QUALITY_ISSUES.md`. The most likely
 to surface tomorrow:
 
-1. **B1 — extract under-extracts on best-fit JDs** (Sierra, Decagon, etc.).
-   Symptom: a JobNote for "Software Engineer, Agents" at Sierra shows only
+1. **B1 — extract under-extracts on best-fit JDs** (top agentic-AI startups).
+   Symptom: a JobNote for "Software Engineer, Agents" at a target company shows only
    3 skills in the `## Skills` block when the JD body listed 12. Fix path:
    eval baseline → see the per-record `missed_skills` set → prompt-tune
    extract_node. Day 9 work in the sprint plan.
@@ -220,7 +220,7 @@ to surface tomorrow:
    One scores. Fix path: demote reference-only sections during retrieval
    (~30 min). Do AFTER measurement.
 
-4. **Anthropic/Sierra/Decagon may dominate vault attention** even though
+4. **Frontier agentic-AI startups may dominate vault attention** even though
    they're `opportunistic` tier. Their JDs survive intake_filter (strong
    agent signal). Just monitor — if the dashboard "apply-now top 5" is
    filled with frontier startups, the apply-now anchors (banks/consulting/

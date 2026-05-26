@@ -206,7 +206,7 @@ async def _add_one(thread_id: str = "tid-1", **overrides) -> None:
     defaults = dict(
         thread_id=thread_id,
         job_url="https://jobs.example.com/abc",
-        company="Sierra",
+        company="AgentCo",
         title="Software Engineer, Agent",
         score=4.2,
         score_reasoning="Strong match on MCP + LangGraph.",
@@ -222,7 +222,7 @@ async def test_add_and_get_round_trips(frozen_now):
     row = await state_store.get_pending("tid-1")
     assert row is not None
     assert row["thread_id"] == "tid-1"
-    assert row["company"] == "Sierra"
+    assert row["company"] == "AgentCo"
     assert row["score"] == pytest.approx(4.2)
     assert row["matched_skills"] == ["MCP", "Python"]
     assert row["missing_skills"] == ["LangGraph"]
@@ -578,9 +578,9 @@ from compass.pipeline.state import CompassState, JobScore, RawJob
 
 def _state(score: float | None) -> CompassState:
     job = RawJob(
-        company="Sierra",
+        company="AgentCo",
         title="SWE, Agent",
-        url="https://jobs.example.com/sierra-1",
+        url="https://jobs.example.com/agentco-1",
         source="ashby",
         description="...",
         date_posted=_dt.date(2026, 5, 18),
@@ -644,7 +644,7 @@ async def test_above_threshold_calls_interrupt_with_payload(monkeypatch):
     monkeypatch.setattr("compass.pipeline.nodes.hitl.interrupt", fake_interrupt)
     result = await hitl_node(_state(score=4.2))
     assert captured["kind"] == "approval_request"
-    assert captured["company"] == "Sierra"
+    assert captured["company"] == "AgentCo"
     assert captured["score"] == pytest.approx(4.2)
     assert captured["matched_skills"] == ["MCP"]
     assert result == {"human_approved": True, "human_feedback": "Strong fit"}
@@ -1112,13 +1112,13 @@ def checkpoint_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return db
 
 
-def _job(url: str = "https://jobs.example.com/sierra-1") -> RawJob:
+def _job(url: str = "https://jobs.example.com/agentco-1") -> RawJob:
     return RawJob(
-        company="Sierra",
+        company="AgentCo",
         title="SWE, Agent",
         url=url,
         source="ashby",
-        description="An agent engineering role at Sierra.",
+        description="An agent engineering role at AgentCo.",
         date_posted=_dt.date(2026, 5, 18),
     )
 
@@ -1137,9 +1137,9 @@ async def test_above_threshold_job_pauses_and_registers_in_state_store(monkeypat
     assert result["jobs_paused"] == 1
     rows = await state_store.list_pending()
     assert len(rows) == 1
-    assert rows[0]["company"] == "Sierra"
+    assert rows[0]["company"] == "AgentCo"
     assert rows[0]["score"] == pytest.approx(4.2)
-    assert rows[0]["job_url"] == "https://jobs.example.com/sierra-1"
+    assert rows[0]["job_url"] == "https://jobs.example.com/agentco-1"
 
 
 @pytest.mark.usefixtures("temp_hitl_db", "checkpoint_db", "stub_llm_nodes")
@@ -1501,7 +1501,7 @@ async def test_resume_approve_runs_tailor_then_vault_write(stub_llm_nodes):
     from compass.hitl.resume import resume_pending
     from compass.pipeline.graph import run_pipeline
 
-    job = RawJob(company="Sierra", title="SWE", url="https://x/1", source="ashby",
+    job = RawJob(company="AgentCo", title="SWE", url="https://x/1", source="ashby",
                  description="...", date_posted=_dt.date(2026, 5, 18))
     pre = await run_pipeline(raw_jobs=[job])
     assert pre["jobs_paused"] == 1
@@ -1523,7 +1523,7 @@ async def test_resume_reject_skips_tailor_writes_to_vault(stub_llm_nodes):
     from compass.hitl.resume import resume_pending
     from compass.pipeline.graph import run_pipeline
 
-    job = RawJob(company="Sierra", title="SWE", url="https://x/2", source="ashby",
+    job = RawJob(company="AgentCo", title="SWE", url="https://x/2", source="ashby",
                  description="...", date_posted=_dt.date(2026, 5, 18))
     await run_pipeline(raw_jobs=[job])
     tid = (await state_store.list_pending())[0]["thread_id"]
@@ -1548,7 +1548,7 @@ async def test_resume_already_resolved_is_noop(stub_llm_nodes):
     from compass.hitl.resume import resume_pending
     from compass.pipeline.graph import run_pipeline
 
-    job = RawJob(company="Sierra", title="SWE", url="https://x/3", source="ashby",
+    job = RawJob(company="AgentCo", title="SWE", url="https://x/3", source="ashby",
                  description="...", date_posted=_dt.date(2026, 5, 18))
     await run_pipeline(raw_jobs=[job])
     tid = (await state_store.list_pending())[0]["thread_id"]
@@ -1712,7 +1712,7 @@ async def test_timeout_checker_resumes_old_pending_as_rejected(monkeypatch):
     from compass.hitl import timeout_checker
     from compass.pipeline.graph import run_pipeline
 
-    job = RawJob(company="Sierra", title="SWE", url="https://x/1", source="ashby",
+    job = RawJob(company="AgentCo", title="SWE", url="https://x/1", source="ashby",
                  description="...", date_posted=_dt.date(2026, 5, 18))
     await run_pipeline(raw_jobs=[job])
     tid = (await state_store.list_pending())[0]["thread_id"]
@@ -1744,7 +1744,7 @@ async def test_timeout_checker_leaves_young_pending_alone():
     from compass.hitl import timeout_checker
     from compass.pipeline.graph import run_pipeline
 
-    job = RawJob(company="Sierra", title="SWE", url="https://x/2", source="ashby",
+    job = RawJob(company="AgentCo", title="SWE", url="https://x/2", source="ashby",
                  description="...", date_posted=_dt.date(2026, 5, 18))
     await run_pipeline(raw_jobs=[job])
     n = await timeout_checker.check_and_resume_timeouts(timeout_hours=4)
@@ -1932,7 +1932,7 @@ async def test_pending_approvals_tool_returns_jsonable_rows():
     from compass.mcp_server.server import pending_approvals
 
     await state_store.add_pending(
-        thread_id="tid-1", job_url="https://x/1", company="Sierra",
+        thread_id="tid-1", job_url="https://x/1", company="AgentCo",
         title="SWE Agent", score=4.2, score_reasoning="solid",
         matched_skills=["MCP"], missing_skills=["LangGraph"],
     )
@@ -2074,7 +2074,7 @@ cd ~/Documents/compass
 MAX_JOBS_PER_RUN=10 \
   GREENHOUSE_BOARDS= \
   LEVER_COMPANIES= \
-  ASHBY_BOARDS=sierra \
+  ASHBY_BOARDS=agentco \
   uv run python -m compass.pipeline.graph
 ```
 
@@ -2082,7 +2082,7 @@ Expected output:
 ```
 Processed: N | Written: M | Paused: K | Errors: 0
 ```
-where `K >= 1` (at least one above-threshold Sierra job should pause).
+where `K >= 1` (at least one above-threshold AgentCo job should pause).
 
 - [ ] **Step 3: Confirm pending row exists from a SEPARATE Python process**
 
@@ -2101,7 +2101,7 @@ asyncio.run(main())
 "
 ```
 
-Expected: at least one row printed with a real Sierra job.
+Expected: at least one row printed with a real AgentCo job.
 
 - [ ] **Step 4: Resume one thread via the MCP path, confirm JobNote written**
 
@@ -2125,7 +2125,7 @@ Expected: `vault_written = True`, `human_approved = True`. Then verify the JobNo
 ls -ltr ~/Documents/compass-vault/jobs/ | tail -3
 ```
 
-The most recent file should be the Sierra job. Open it and confirm:
+The most recent file should be the AgentCo job. Open it and confirm:
 - `tailored_paragraph:` is populated with real Sonnet output (not empty)
 - `match_score:` is the same float seen in Step 3
 - `hitl_decision: approved` in the frontmatter (NOT `human_approved` — that key lives in pipeline state, not the JobNote)
@@ -2193,7 +2193,7 @@ All of the following must hold before declaring Phase 1.B.1 complete:
 | Modal Secrets for `OPENROUTER_API_KEY`, `LANGFUSE_*` | Cloud deploy | **1.B.3** | Same — couples with cron deploy |
 | Langfuse callback API mismatch (`host=` kwarg) | Observability | **1.B.3** | Bug #23 from Phase 0; dedicated 1.B.3 work |
 | URL dedup for `intake_filter`-rejected JDs | Cost + log growth | **1.B.3** | Natural fit with caching layer |
-| Hebbia Greenhouse 404 cleanup in `.env.example` | Coverage | **1.B.3** | Bundle with config restructure for Modal Secrets |
+| DocCo Greenhouse 404 cleanup in `.env.example` | Coverage | **1.B.3** | Bundle with config restructure for Modal Secrets |
 | `approve(thread_id, approved=None)` "request changes" branch | UX | post-1.B | Today binary; if needed, ship as third decision dict key |
 | Per-thread auth (anyone with MCP access can approve) | Security | post-1.B | Solo-user system; revisit if hosted |
 | Surface `pending_approvals` in the Dataview dashboard | UX polish | **2.B** | Dataview can't read SQLite; needs a tiny exporter |

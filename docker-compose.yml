@@ -1,31 +1,120 @@
+# Langfuse v3 self-host (local). v3 splits storage across Postgres (OLTP),
+# ClickHouse (OLAP trace store), Redis (queues), and MinIO (S3-compatible
+# event blobs). v3-web serves the UI; v3-worker drains the Redis queue and
+# writes to ClickHouse. Both web and worker share the same Postgres + Redis
+# + MinIO. See https://langfuse.com/self-hosting/docker-compose
+#
+# For Compass's portfolio demo all secrets are local-only — DO NOT REUSE
+# any of the credentials below in production.
+
 services:
-  langfuse-server:
-    image: langfuse/langfuse:latest
+  langfuse-web:
+    image: langfuse/langfuse:3
     depends_on:
-      db:
-        condition: service_healthy
+      langfuse-postgres: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      langfuse-minio: { condition: service_healthy }
+      redis: { condition: service_healthy }
     ports:
       - "3000:3000"
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/langfuse
-      - NEXTAUTH_SECRET=compass-local-secret-change-in-prod
-      - NEXTAUTH_URL=http://localhost:3000
-      - SALT=compass-local-salt
+    environment: &langfuse-env
+      DATABASE_URL: postgresql://postgres:postgres@langfuse-postgres:5432/postgres
+      SALT: compass-local-salt
+      ENCRYPTION_KEY: a3d9c5b7b816be0684c41b26a17e1c82db145f064c4b182dc55522de5344e307
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "true"
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: compass-local-nextauth-secret
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_AUTH: compass-local-redis
 
-  db:
-    image: postgres:15-alpine
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    depends_on:
+      langfuse-postgres: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      langfuse-minio: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports:
+      - "3030:3030"
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=langfuse
+      <<: *langfuse-env
+
+  clickhouse:
+    image: clickhouse/clickhouse-server
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
     volumes:
-      - langfuse_postgres:/var/lib/postgresql/data
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: always
+
+  langfuse-minio:
+    image: minio/minio
+    restart: always
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniosecret
+    ports:
+      - "9090:9000"
+      - "9091:9001"
+    volumes:
+      - langfuse_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    restart: always
+    command: --requirepass compass-local-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "--pass", "compass-local-redis", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  langfuse-postgres:
+    image: postgres:15-alpine
+    restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
 
 volumes:
-  langfuse_postgres:
-    driver: local
+  langfuse_postgres_data:
+  langfuse_clickhouse_data:
+  langfuse_clickhouse_logs:
+  langfuse_minio_data:

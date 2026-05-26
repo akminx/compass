@@ -2,7 +2,7 @@
 
 > Surfaced during the Phase 1.B.2 deep adversarial review against real vault data. These are pre-existing Phase 0.B / 1.A LLM-behavior defects that distort scoring + skill matching. Fix scope: **Phase 2.A's eval harness work** — each needs a regression test against labeled JDs before prompt tuning, otherwise we whack-a-mole.
 
-**Tag context:** discovered at `phase-1b2-rag`. Vault snapshot: 23 JobNotes across Anthropic / Decagon / Cognition / Sierra / Ramp.
+**Tag context:** discovered at `phase-1b2-rag`. Vault snapshot: 23 JobNotes across multiple target-company boards.
 
 ---
 
@@ -11,8 +11,8 @@
 **Symptom:** roles that are obvious matches for the candidate end up with empty or near-empty `skills_required` lists, which artificially caps the score because the scorer has nothing to match against.
 
 **Evidence:**
-- `jobs/2026-03-27-sierra-Software_Engineer_Agent_Architecture-04a9b65f.md` → `skills_required: []`, `skills_matched: []`, `match_score: 3.0`. The JD describes building an agent SDK + runtime + evals — a near-perfect fit for the candidate's MCP/agent cluster (level 3-4). The score reasoning even acknowledges the alignment, but the score caps at 3.0 because there are no required-skill entries to flip into matched. **A fair human grade is ~4.0.**
-- `jobs/2026-05-06-cognition-Software_Engineer-7c26fdaf.md` → `skills_required: [Python]` only, despite the JD emphasizing sub-agent orchestration, tool use, agent infrastructure.
+- `jobs/2026-03-27-companya-Software_Engineer_Agent_Architecture-04a9b65f.md` → `skills_required: []`, `skills_matched: []`, `match_score: 3.0`. The JD describes building an agent SDK + runtime + evals — a near-perfect fit for the candidate's MCP/agent cluster (level 3-4). The score reasoning even acknowledges the alignment, but the score caps at 3.0 because there are no required-skill entries to flip into matched. **A fair human grade is ~4.0.**
+- `jobs/2026-05-06-companyb-Software_Engineer-7c26fdaf.md` → `skills_required: [Python]` only, despite the JD emphasizing sub-agent orchestration, tool use, agent infrastructure.
 
 **Hypothesis:** the extract prompt is being too literal about "explicit requirements only" and missing skills implied by responsibility statements. JDs at agentic startups frequently lead with mission text ("build the orchestration engine"), with the canonical skill list buried or implied.
 
@@ -27,7 +27,7 @@
 **Symptom:** "languages such as A, B, C, or similar" is interpreted as four ANDed requirements. Candidate gets dinged on missing alternatives the JD didn't actually require.
 
 **Evidence:**
-- `jobs/2026-04-15-cognition-AI_Support_Engineer-25133cbd.md` → JD: "Strong ability to read and reason about code in **multiple languages, such as Python, TypeScript, Java, Go, or similar**". Extracted: `skills_required: [Python, TypeScript, Go, Docker]`. Scorer marked TS+Go as missing → 2.0 → auto-rejected. **A fair human assigns ~3.0-3.5.** The role was incorrectly auto-rejected by extraction artefact.
+- `jobs/2026-04-15-companyb-AI_Support_Engineer-25133cbd.md` → JD: "Strong ability to read and reason about code in **multiple languages, such as Python, TypeScript, Java, Go, or similar**". Extracted: `skills_required: [Python, TypeScript, Go, Docker]`. Scorer marked TS+Go as missing → 2.0 → auto-rejected. **A fair human assigns ~3.0-3.5.** The role was incorrectly auto-rejected by extraction artefact.
 
 **Phase 2.A fix surface:**
 - Extract prompt addendum: explicit OR-list detection ("languages such as X, Y, or Z" → store as `nice_to_have_skills` or a separate `language_alternatives` field, not as `skills_required`).
@@ -40,7 +40,7 @@
 **Symptom:** scorer LLM lists a skill in `missing_skills` despite the candidate having a non-trivial level in the profile.
 
 **Evidence:**
-- `jobs/2026-04-07-ramp-Security_Engineer_Cloud-a25113ae.md` → `skills_required: [Python]`, `skills_missing: [Python]`, `skills_matched: []`. The candidate has Python at level 3 (skill-inventory.md). RAG would have surfaced the Python chunk on any query containing "Python". The scorer LLM didn't consult the retrieved profile faithfully.
+- `jobs/2026-04-07-companyc-Security_Engineer_Cloud-a25113ae.md` → `skills_required: [Python]`, `skills_missing: [Python]`, `skills_matched: []`. The candidate has Python at level 3 (skill-inventory.md). RAG would have surfaced the Python chunk on any query containing "Python". The scorer LLM didn't consult the retrieved profile faithfully.
 - Low-fit branch failure mode: when the overall role is wildly off (security, in this case), the scorer appears to short-circuit and declare every required skill missing without verifying the candidate's level.
 
 **Phase 2.A fix surface:**
@@ -52,7 +52,7 @@
 
 ## B4. ✅ FIXED in `phase-1b2-rag` — `intake_filter` title-keyword stage was leaky
 
-Resolved at this tag: added `engineering manager`, `engineering lead`, `director/head/vp of engineering`, `solutions engineer`, `solution engineer`, `security engineer`, `application security`, `infrastructure security`, `operations specialist`, `product operations`, `program manager` to `OUT_SUBSTRING_KEYWORDS`. The four false-negatives observed (Decagon EM, Ramp AI Ops Specialist, Decagon Senior Solutions Eng, Sierra Security Eng) now correctly drop at intake.
+Resolved at this tag: added `engineering manager`, `engineering lead`, `director/head/vp of engineering`, `solutions engineer`, `solution engineer`, `security engineer`, `application security`, `infrastructure security`, `operations specialist`, `product operations`, `program manager` to `OUT_SUBSTRING_KEYWORDS`. The four false-negatives observed (Company-A EM, Company-B AI Ops Specialist, Company-A Senior Solutions Eng, Company-C Security Eng) now correctly drop at intake.
 
 ---
 
@@ -61,8 +61,8 @@ Resolved at this tag: added `engineering manager`, `engineering lead`, `director
 **Symptom:** the candidate's `role-clarifications.md` declares SFT/LoRA/RLHF/DPO as level 0 (explicit anti-claim). Sometimes the scorer catches this, sometimes it doesn't.
 
 **Evidence:**
-- Cognition Research Post-Training role → correctly scored 0.0, reasoning cited RLHF=0.
-- `jobs/2025-08-22-decagon-Senior_Research_Engineer-5030d3e2.md` → JD requires "Prior experience post-training and deploying LLMs in production". Scored 3.0. The disqualifier was missed.
+- Company-B Research Post-Training role → correctly scored 0.0, reasoning cited RLHF=0.
+- `jobs/2025-08-22-companyb-Senior_Research_Engineer-5030d3e2.md` → JD requires "Prior experience post-training and deploying LLMs in production". Scored 3.0. The disqualifier was missed.
 
 **Phase 2.A fix surface:**
 - The anti-claim signal should be a hard rule, not a contextual hint. Add an explicit pre-score check: if JD `required_skills` contains any of {fine-tuning, RLHF, post-training, SFT, LoRA, DPO} AND candidate role-clarification anti-claims include them, then score is capped at 1.0 regardless of LLM output.
@@ -76,7 +76,7 @@ Resolved at this tag: added `engineering manager`, `engineering lead`, `director
 **Symptom:** when the keyword OUT list expands (as in commit `3828d8f`), existing JobNotes that should now be classified out-of-scope keep their old `role_family`. `gap_aggregator.regenerate()` reads ALL JobNotes regardless of `role_family`, so stale entries keep contributing to the master gap plan.
 
 **Evidence:**
-- `jobs/2026-03-17-ramp-AI_Operations_Specialist_Agentic_Workflows-f489c32b.md` has `role_family: agent-engineer` but `keyword_classify()` now correctly returns `out-of-scope` for that title. The JobNote was written before "operations specialist" was in the OUT list. Its skills still feed gap-plan weights.
+- `jobs/2026-03-17-companyb-AI_Operations_Specialist_Agentic_Workflows-f489c32b.md` has `role_family: agent-engineer` but `keyword_classify()` now correctly returns `out-of-scope` for that title. The JobNote was written before "operations specialist" was in the OUT list. Its skills still feed gap-plan weights.
 
 **Pattern:** counters (`appears_in_jobs`, `roles_seen`) are derived at every gap_aggregator run — Phase 0 bug #12 / Phase 1.A bug #1 enforced this discipline. But `role_family` is treated as ground truth once written. **Same asymmetry could repeat for any future "set-once classification" field** (e.g. `tier`, `seniority`).
 
@@ -106,7 +106,7 @@ Resolved at this tag: added `engineering manager`, `engineering lead`, `director
 
 **Symptom:** unlike `score_node`'s `_constrain_to_jd_skills`, `tailor_node`'s prompt says "Mention real projects and concrete numbers when the profile provides them" but enforces nothing. The agent could invent project names and they'd ship to the JobNote.
 
-**Evidence:** the one tailored paragraph in the vault (Cognition Special Projects) was spot-checked — every concrete claim verified against `_profile/resume.md`. **No hallucination in this sample**, but n=1 with no code-level defense.
+**Evidence:** the one tailored paragraph in the vault (a target-company Special Projects role) was spot-checked — every concrete claim verified against `_profile/resume.md`. **No hallucination in this sample**, but n=1 with no code-level defense.
 
 **Risk:** Sonnet on a sparse JD ("Founder mindset, 2+ years exp") with a longer profile could easily invent specifics.
 

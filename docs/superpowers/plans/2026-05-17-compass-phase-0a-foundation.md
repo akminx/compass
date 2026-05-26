@@ -149,9 +149,9 @@ MAX_CONCURRENT_JOBS=5
 
 # ── ATS targets (tier `apply-now` from compass-vault/_profile/target-companies.md) ──
 # Comma-separated. Slugs verified May 2026.
-GREENHOUSE_BOARDS=anthropic,hebbia,gleanwork,cresta,andurilindustries,vannevarlabs,cadencehealth,vercel
-LEVER_COMPANIES=shieldai
-ASHBY_BOARDS=sierra,decagon,cognition,ramp,traversal,vapi,retell-ai,wispr-flow,browserbase,openai,cursor,harvey,perplexity
+GREENHOUSE_BOARDS=anthropic,docco,searchco,voiceco,hardwareco,defenseco,cadencehealth,vercel
+LEVER_COMPANIES=aviationco
+ASHBY_BOARDS=agentco,botco,devco,ramp,examplelab,acme,beta-ai,examplecorp,webdriver,openai,cursor,legalco,queryco
 ```
 
 - [ ] **Step 3: Verify config imports cleanly**
@@ -660,7 +660,7 @@ Replace `compass/scrapers/ashby.py` with:
 Ashby public API scraper.
 
 Endpoint: GET https://api.ashbyhq.com/posting-api/job-board/{slug}?includeCompensation=true
-No authentication required. Covers Sierra, Decagon, Cognition, Ramp, OpenAI, Cursor, and many more.
+No authentication required. Covers AgentCo, BotCo, DevCo, Ramp, OpenAI, Cursor, and many more.
 """
 from __future__ import annotations
 
@@ -998,9 +998,9 @@ import pytest
 def _make_job_note(**overrides):
     from compass.vault.schemas import JobNote
     defaults = dict(
-        company="Sierra",
+        company="AgentCo",
         title="Agent Engineer",
-        url="https://jobs.ashbyhq.com/sierra/abc-123",
+        url="https://jobs.ashbyhq.com/agentco/abc-123",
         source="ashby",
         date_found=date(2026, 5, 17),
         match_score=4.2,
@@ -1022,7 +1022,7 @@ def test_write_job_note_creates_file(temp_vault):
     assert path.exists()
     assert path.parent == temp_vault / "jobs"
     # Filename pattern: YYYY-MM-DD-Company-Title.md
-    assert path.name.startswith("2026-05-17-Sierra-")
+    assert path.name.startswith("2026-05-17-AgentCo-")
     assert path.suffix == ".md"
 
 
@@ -1031,7 +1031,7 @@ def test_write_job_note_frontmatter_roundtrips(temp_vault):
     note = _make_job_note()
     path = write_job_note(note)
     loaded = frontmatter.load(path)
-    assert loaded.metadata["company"] == "Sierra"
+    assert loaded.metadata["company"] == "AgentCo"
     assert loaded.metadata["match_score"] == 4.2
     assert loaded.metadata["url"] == note.url
     assert "MCP" in loaded.metadata["skills_required"]
@@ -1085,10 +1085,10 @@ def test_update_skill_note_creates_if_missing(temp_vault):
 def test_write_company_note_creates_file(temp_vault):
     from compass.vault.writer import write_company_note
     from compass.vault.schemas import CompanyNote
-    note = CompanyNote(company="Sierra", tier="apply-now", roles_seen=1, geo=["NYC"])
+    note = CompanyNote(company="AgentCo", tier="apply-now", roles_seen=1, geo=["NYC"])
     path = write_company_note(note)
     assert path.exists()
-    assert path.name == "Sierra.md"
+    assert path.name == "AgentCo.md"
     loaded = frontmatter.load(path)
     assert loaded.metadata["tier"] == "apply-now"
     assert loaded.metadata["roles_seen"] == 1
@@ -1097,9 +1097,9 @@ def test_write_company_note_creates_file(temp_vault):
 def test_write_company_note_increments_roles_seen(temp_vault):
     from compass.vault.writer import write_company_note
     from compass.vault.schemas import CompanyNote
-    write_company_note(CompanyNote(company="Sierra", tier="apply-now", roles_seen=1))
-    write_company_note(CompanyNote(company="Sierra", tier="apply-now", roles_seen=1))
-    loaded = frontmatter.load(temp_vault / "companies" / "Sierra.md")
+    write_company_note(CompanyNote(company="AgentCo", tier="apply-now", roles_seen=1))
+    write_company_note(CompanyNote(company="AgentCo", tier="apply-now", roles_seen=1))
+    loaded = frontmatter.load(temp_vault / "companies" / "AgentCo.md")
     assert loaded.metadata["roles_seen"] == 2
 
 
@@ -1298,8 +1298,8 @@ from compass.scrapers.lever import scrape_lever
 async def main() -> int:
     targets = [
         ("greenhouse", "anthropic", scrape_greenhouse),
-        ("lever", "shieldai", scrape_lever),
-        ("ashby", "sierra", scrape_ashby),
+        ("lever", "aviationco", scrape_lever),
+        ("ashby", "agentco", scrape_ashby),
     ]
     failures = 0
     for source, slug, fn in targets:

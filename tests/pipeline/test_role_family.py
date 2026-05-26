@@ -65,8 +65,8 @@ class TestKeywordClassify:
             assert family == "applied-ai", f"{title!r} → {family!r}"
 
     def test_member_of_technical_staff_routes_to_agent_engineer(self):
-        """MTS is a frontier-startup flat-hierarchy signal — Sierra / Decagon /
-        Cognition / Cursor / xAI / Mistral all use it for agent-eng ICs.
+        """MTS is a frontier-startup flat-hierarchy signal — AgentCo / BotCo /
+        DevCo / Cursor / xAI / Mistral all use it for agent-eng ICs.
         Per _profile/target-roles.md it's in-range, so the keyword classifier
         routes it to agent-engineer; the body-signal upgrader can move it
         elsewhere if the JD is research-flavored."""

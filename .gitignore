@@ -39,3 +39,6 @@ Thumbs.db
 
 # Per-run eval outputs (the labeled dataset IS tracked; per-run results are not)
 compass/evals/results-*.json
+
+# Playwright MCP screenshot scratch dir
+.playwright-mcp/

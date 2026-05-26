@@ -58,11 +58,11 @@ async def test_run_pipeline_end_to_end(temp_vault, mocked_llms, auto_approve_hit
 
     raw_jobs = [
         RawJob(
-            company="Sierra",
+            company="AgentCo",
             title="Agent Engineer",
-            url="https://jobs.ashbyhq.com/sierra/test-uuid",
+            url="https://jobs.ashbyhq.com/agentco/test-uuid",
             source="ashby",
-            description="Build agents at Sierra with Python, LangGraph, MCP, and FastAPI.",
+            description="Build agents at AgentCo with Python, LangGraph, MCP, and FastAPI.",
             location="NYC",
             date_posted=date(2026, 5, 17),
         ),
@@ -72,7 +72,7 @@ async def test_run_pipeline_end_to_end(temp_vault, mocked_llms, auto_approve_hit
     assert state["jobs_written"] == 1
 
     # JobNote exists
-    job_files = list((temp_vault / "jobs").glob("*Sierra*.md"))
+    job_files = list((temp_vault / "jobs").glob("*AgentCo*.md"))
     assert len(job_files) == 1
     loaded = frontmatter.load(job_files[0])
     assert loaded.metadata["match_score"] == 4.2
@@ -85,7 +85,7 @@ async def test_run_pipeline_end_to_end(temp_vault, mocked_llms, auto_approve_hit
     assert (temp_vault / "skills" / "MCP.md").exists()
     assert (temp_vault / "skills" / "LangGraph.md").exists()
     # Company was upserted
-    assert (temp_vault / "companies" / "Sierra.md").exists()
+    assert (temp_vault / "companies" / "AgentCo.md").exists()
 
 
 async def test_run_pipeline_skips_dedup_urls(temp_vault, mocked_llms):
@@ -93,15 +93,15 @@ async def test_run_pipeline_skips_dedup_urls(temp_vault, mocked_llms):
     from compass.pipeline.graph import run_pipeline
 
     # Seed a prior write with frontmatter that vault reader can parse
-    (temp_vault / "jobs" / "2026-05-15-Sierra-Prior.md").write_text(
-        "---\ntype: job\nurl: https://jobs.ashbyhq.com/sierra/test-uuid\ncompany: Sierra\n"
+    (temp_vault / "jobs" / "2026-05-15-AgentCo-Prior.md").write_text(
+        "---\ntype: job\nurl: https://jobs.ashbyhq.com/agentco/test-uuid\ncompany: AgentCo\n"
         "title: Prior\nmatch_score: 0\nsource: ashby\ndate_found: 2026-05-15\n---\n# Prior\n"
     )
     raw_jobs = [
         RawJob(
-            company="Sierra",
+            company="AgentCo",
             title="Agent Engineer",
-            url="https://jobs.ashbyhq.com/sierra/test-uuid",
+            url="https://jobs.ashbyhq.com/agentco/test-uuid",
             source="ashby",
             description="Build LangGraph agents with MCP tool calling.",
             date_posted=date(2026, 5, 17),
@@ -118,9 +118,9 @@ async def test_run_pipeline_regenerates_gap_plan(temp_vault, mocked_llms, auto_a
 
     raw_jobs = [
         RawJob(
-            company="Sierra",
+            company="AgentCo",
             title="Agent Engineer",
-            url="https://jobs.ashbyhq.com/sierra/test-uuid",
+            url="https://jobs.ashbyhq.com/agentco/test-uuid",
             source="ashby",
             description="Build LangGraph agents with MCP tool calling.",
             date_posted=date(2026, 5, 17),
@@ -195,9 +195,9 @@ async def test_run_pipeline_appends_to_run_log(temp_vault, mocked_llms, auto_app
 
     raw_jobs = [
         RawJob(
-            company="Sierra",
+            company="AgentCo",
             title="Agent Engineer",
-            url="https://jobs.ashbyhq.com/sierra/run-log-test",
+            url="https://jobs.ashbyhq.com/agentco/run-log-test",
             source="ashby",
             description="...",
             date_posted=date(2026, 5, 17),

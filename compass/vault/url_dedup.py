@@ -4,10 +4,10 @@ The pipeline dedups jobs by URL — but raw URLs vary in case, scheme, trailing
 slashes, and tracking params. Two scrapers (or the same scraper across runs)
 can produce different strings for the same job:
 
-  https://jobs.ashbyhq.com/sierra/abc
-  https://jobs.ashbyhq.com/sierra/abc/
-  https://jobs.ashbyhq.com/sierra/abc?utm_source=google
-  http://JOBS.ASHBYHQ.COM/sierra/abc
+  https://jobs.ashbyhq.com/acme/abc
+  https://jobs.ashbyhq.com/acme/abc/
+  https://jobs.ashbyhq.com/acme/abc?utm_source=google
+  http://JOBS.ASHBYHQ.COM/acme/abc
 
 Without normalization the dedup at `_vault_url_set()` and the URL-match in
 `write_job_note()` treat all of these as distinct, leading to duplicate

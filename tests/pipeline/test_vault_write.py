@@ -20,9 +20,9 @@ def _build_state_for_score(
     return {
         "raw_jobs": [],
         "current_job": RawJob(
-            company="Sierra",
+            company="AgentCo",
             title="Agent Engineer",
-            url="https://jobs.ashbyhq.com/sierra/abc-123",
+            url="https://jobs.ashbyhq.com/agentco/abc-123",
             source="ashby",
             description="Build agentic systems.",
             location="NYC",
@@ -66,7 +66,7 @@ async def test_vault_write_node_writes_jobnote(temp_vault):
     job_files = list((temp_vault / "jobs").glob("*.md"))
     assert len(job_files) == 1
     loaded = frontmatter.load(job_files[0])
-    assert loaded.metadata["company"] == "Sierra"
+    assert loaded.metadata["company"] == "AgentCo"
     assert loaded.metadata["match_score"] == 4.2
     assert "MCP" in loaded.metadata["skills_required"]
 
@@ -94,7 +94,7 @@ async def test_vault_write_node_writes_company_note(temp_vault):
     from compass.pipeline.nodes.vault_write import vault_write_node
 
     await vault_write_node(_build_state_for_score(skills_required=["MCP"], skills_matched=["MCP"]))
-    company_path = temp_vault / "companies" / "Sierra.md"
+    company_path = temp_vault / "companies" / "AgentCo.md"
     assert company_path.exists()
 
 
@@ -130,7 +130,7 @@ async def test_vault_write_node_persists_full_jd_body(temp_vault):
         update={"description": "VERY_DISTINCTIVE_RAW_JD_MARKER agentic engineering."}
     )
     await vw.vault_write_node(state)
-    body = next((temp_vault / "jobs").glob("*Sierra*.md")).read_text()
+    body = next((temp_vault / "jobs").glob("*AgentCo*.md")).read_text()
     assert "## Full JD" in body
     assert "VERY_DISTINCTIVE_RAW_JD_MARKER" in body
 
@@ -146,7 +146,7 @@ async def test_low_score_in_scope_still_writes(temp_vault):
     result = await vault_write_node(state)
 
     assert result["vault_written"] is True
-    assert len(list((temp_vault / "jobs").glob("*Sierra*.md"))) == 1
+    assert len(list((temp_vault / "jobs").glob("*AgentCo*.md"))) == 1
 
 
 async def test_role_family_threaded_to_jobnote(temp_vault):
@@ -160,14 +160,14 @@ async def test_role_family_threaded_to_jobnote(temp_vault):
     state["role_family"] = "agent-engineer"
     await vault_write_node(state)
 
-    path = next((temp_vault / "jobs").glob("*Sierra*.md"))
+    path = next((temp_vault / "jobs").glob("*AgentCo*.md"))
     assert frontmatter.load(path).metadata["role_family"] == "agent-engineer"
 
 
 async def test_tier_resolved_from_target_companies(temp_vault):
-    """target-companies.md says Sierra=apply-now → JobNote.tier == 'apply-now'."""
+    """target-companies.md says AgentCo=apply-now → JobNote.tier == 'apply-now'."""
     (temp_vault / "_profile" / "target-companies.md").write_text(
-        "## Tier `apply-now`\n\n| Company | Geo |\n|---|---|\n| Sierra | SF |\n"
+        "## Tier `apply-now`\n\n| Company | Geo |\n|---|---|\n| AgentCo | SF |\n"
     )
     import compass.vault.target_companies as tc
 
@@ -180,7 +180,7 @@ async def test_tier_resolved_from_target_companies(temp_vault):
     state["role_family"] = "agent-engineer"
     await vault_write_node(state)
 
-    path = next((temp_vault / "jobs").glob("*Sierra*.md"))
+    path = next((temp_vault / "jobs").glob("*AgentCo*.md"))
     assert frontmatter.load(path).metadata["tier"] == "apply-now"
 
 
@@ -209,10 +209,10 @@ async def test_human_edited_company_tier_preserved(temp_vault):
     from compass.vault.schemas import CompanyNote
     from compass.vault.writer import write_company_note
 
-    write_company_note(CompanyNote(company="Sierra", tier="stretch", roles_seen=3))
+    write_company_note(CompanyNote(company="AgentCo", tier="stretch", roles_seen=3))
 
     (temp_vault / "_profile" / "target-companies.md").write_text(
-        "## Tier `apply-now`\n\n| Company | Notes |\n|---|---|\n| Sierra | x |\n"
+        "## Tier `apply-now`\n\n| Company | Notes |\n|---|---|\n| AgentCo | x |\n"
     )
     import compass.vault.target_companies as tc
 
@@ -225,10 +225,10 @@ async def test_human_edited_company_tier_preserved(temp_vault):
     state["role_family"] = "agent-engineer"
     await vault_write_node(state)
 
-    md = frontmatter.load(temp_vault / "companies" / "Sierra.md").metadata
+    md = frontmatter.load(temp_vault / "companies" / "AgentCo.md").metadata
     assert md["tier"] == "stretch", "human-edited CompanyNote tier was clobbered"
 
-    job_path = next((temp_vault / "jobs").glob("*Sierra*.md"))
+    job_path = next((temp_vault / "jobs").glob("*AgentCo*.md"))
     assert frontmatter.load(job_path).metadata["tier"] == "apply-now"
 
 

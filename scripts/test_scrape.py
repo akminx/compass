@@ -19,9 +19,9 @@ from compass.scrapers.lever import scrape_lever
 
 async def main() -> int:
     targets = [
-        ("greenhouse", "anthropic", scrape_greenhouse),
-        ("lever", "shieldai", scrape_lever),
-        ("ashby", "sierra", scrape_ashby),
+        ("greenhouse", "stripe", scrape_greenhouse),
+        ("lever", "netflix", scrape_lever),
+        ("ashby", "posthog", scrape_ashby),
     ]
     failures = 0
     for source, slug, fn in targets:

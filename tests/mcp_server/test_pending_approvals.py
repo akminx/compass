@@ -30,7 +30,7 @@ async def test_pending_approvals_tool_returns_jsonable_rows():
     await state_store.add_pending(
         thread_id="tid-1",
         job_url="https://x/1",
-        company="Sierra",
+        company="AgentCo",
         title="SWE Agent",
         score=4.2,
         score_reasoning="solid",

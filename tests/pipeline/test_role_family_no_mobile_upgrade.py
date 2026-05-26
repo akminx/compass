@@ -35,7 +35,7 @@ def test_swe_frontend_stays_frontend_even_with_strong_agent_body():
 
 
 def test_swe_backend_still_promotion_eligible():
-    """Backend SWE titles at agent-native companies (Sierra 'Software Engineer,
+    """Backend SWE titles at agent-native companies (AgentCo 'Software Engineer,
     Product') ARE legitimately agent-eng IC roles. Keep them eligible."""
     body = (
         "Build LangGraph agents. Tool calling, multi-agent orchestration, "

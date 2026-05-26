@@ -44,9 +44,9 @@ Keep the typed frontmatter (`skills_required: [Python, LangGraph]`) as the sourc
 ```markdown
 ## Jobs requiring this skill
 
-- [[2026-03-27-sierra-Software_Engineer_Agent_Architecture-04a9b65f|Sierra — Software Engineer, Agent Architecture]] · score 3.0 · apply-now
-- [[2026-05-06-cognition-Software_Engineer-7c26fdaf|Cognition — Software Engineer]] · score 3.0 · apply-now
-- [[2025-04-18-sierra-Software_Engineer_Agent-8f58539b|Sierra — Software Engineer, Agent]] · score 4.5 · apply-now
+- [[2026-03-27-companya-Software_Engineer_Agent_Architecture-04a9b65f|CompanyA — Software Engineer, Agent Architecture]] · score 3.0 · apply-now
+- [[2026-05-06-companyb-Software_Engineer-7c26fdaf|CompanyB — Software Engineer]] · score 3.0 · apply-now
+- [[2025-04-18-companya-Software_Engineer_Agent-8f58539b|CompanyA — Software Engineer, Agent]] · score 4.5 · apply-now
 ```
 
 Sortable by score; renders as clickable links. Updated atomically on each gap-aggregator regen.

@@ -9,7 +9,7 @@ def _state(approved: bool = True) -> CompassState:
     return {
         "raw_jobs": [],
         "current_job": RawJob(
-            company="Sierra",
+            company="AgentCo",
             title="Agent Engineer",
             url="https://example.com/x",
             source="ashby",

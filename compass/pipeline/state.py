@@ -49,6 +49,11 @@ class JobScore(BaseModel):
     matched_skills: list[str]
     missing_skills: list[str]
     tailoring_notes: str
+    # JD-quote grounding for matched/missing skills. Key = skill name (exact form
+    # used in matched_skills / missing_skills), value = verbatim 5–15 word JD
+    # phrase that justifies the classification. Optional and defaults to empty
+    # for backwards-compat with pre-existing serialized JobScore records on disk.
+    evidence: dict[str, str] = Field(default_factory=dict)
 
 
 class CompassState(TypedDict):
