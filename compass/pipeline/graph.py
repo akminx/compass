@@ -202,18 +202,17 @@ def _initial_state(job: RawJob, thread_id: str | None = None) -> CompassState:
 _langfuse_client_initialized = False
 
 
-# Phrases that signal candidate-profile content in a trace payload — we
-# never want the full resume text or skill-inventory rows to land in
-# Langfuse, because (a) traces could leak personal data if the project is
-# ever shared, and (b) the prompts are long enough that they dominate the
-# trace UI and bury the useful signal. The mask runs on every input/output
-# the SDK ships, before network egress.
+# Section-header markers that identify candidate-profile content in a
+# trace payload. We never want the full resume text or skill-inventory
+# rows to land in Langfuse, because (a) traces could leak personal data
+# if the project is ever shared, and (b) the prompts are long enough
+# that they dominate the trace UI and bury the useful signal. Generic
+# section markers (not employer-specific strings) are enough signal —
+# both the resume and the skill inventory always carry these headers.
 _PROFILE_MARKERS = (
     "## RESUME",
     "## RELEVANT SKILLS",
-    "Akash Aedavelli",
     "_profile/skill-inventory.md",
-    "Cisco — Software Engineer",
 )
 
 

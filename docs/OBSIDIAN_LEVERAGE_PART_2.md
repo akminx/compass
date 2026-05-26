@@ -90,7 +90,7 @@ Designed a 4-server pattern with shared auth + tool registry. Used
 
 ## Result
 Adopted across the SRE team. Reduced incident triage time by ~40%.
-Talk: [[talks/cisco-mcp-internal-talk]]
+Talk: [[talks/internal-mcp-talk]]
 
 ## Skills demonstrated
 [[MCP]] [[MCP_server_authoring]] [[Python]] [[Multi-Agent]] [[Production_Concerns]]
@@ -267,7 +267,7 @@ A note per application with the decision rationale:
 
 ## Why I almost said no
 - Score is at threshold; not a slam-dunk fit
-- Onsite in NYC; I'm Austin-based
+- Onsite in NYC; candidate is remote-only
 - Compensation band not posted
 
 ## Decision rule applied
@@ -343,7 +343,7 @@ status: warm
 
 # Jane Doe — AgentCo
 
-Met at the AI agents meetup in Austin (April 2026). Now EM of the agent
+Met at an AI agents meetup. Now EM of the agent
 orchestration team. Offered to refer me when I apply.
 
 ## Conversations

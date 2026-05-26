@@ -1,6 +1,6 @@
 """One-shot seed: create a CompanyNote in compass-vault/companies/ for every
 company in _profile/target-companies.yaml, pre-populated with tier, geo,
-why_interesting, interview_difficulty, cisco_adjacency from the YAML.
+why_interesting, interview_difficulty, prior_employer_adjacency from the YAML.
 
 Why this exists: write_company_note auto-creates default-shaped notes on
 first sighting (tier=unknown, geo=[], etc.). Without this seed step, the

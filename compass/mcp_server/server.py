@@ -287,7 +287,9 @@ async def run_evals(mode: str = "labels", limit: int | None = None) -> dict:
         "score_bias": round(m.score_bias, 3),
         "extract_skill_recall": round(m.extract_skill_recall, 3),
         "extract_skill_precision": round(m.extract_skill_precision, 3),
-        "match_skill_recall": round(m.match_skill_recall, 3),
+        "skill_universe_recall": round(m.skill_universe_recall, 3),
+        "skill_universe_precision": round(m.skill_universe_precision, 3),
+        "candidate_match_recall": round(m.candidate_match_recall, 3),
         "results_path": result["results_path"],
     }
 

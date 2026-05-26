@@ -19,7 +19,7 @@ The `compass.vault.learning_bridge` module resolves those URIs; the `compass.ana
 
 This project exists to close specific skill gaps and produce a concrete interview story. The target roles are **tier-2 product engineering at agentic startups** and **tier-3 big-tech L3/L4 agentic roles**.
 
-**FDE-track roles are out of scope for now** — the operator has insufficient YoE for those listings and will revisit them later.
+**FDE-track roles are out of scope for now** — handled by the `fde-eng` role-family cap rather than a hard filter, so the pipeline still surfaces strong-stack FDE matches without auto-routing them to apply-tier.
 
 **What this project must demonstrate by the time it ships (Phase 2 complete per spec):**
 - **LangGraph**: stateful graph, conditional edges, `interrupt()` for HiTL, `AsyncSqliteSaver` checkpointing (Phase 1.B)

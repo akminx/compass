@@ -894,8 +894,8 @@ type: profile
 ### Big tech
 | Company | Notes |
 |---|---|
-| NVIDIA Agentic AI | Austin |
-| Apple Apple Intelligence | Austin |
+| TierCloudCo Agent Platform | Remote |
+| TierMobileCo Intelligence Frameworks | Remote |
 
 ## Tier `6-month`
 
@@ -978,7 +978,7 @@ def test_multiple_adjacent_tables_one_tier(tmp_path, monkeypatch):
 ### Big tech
 | Company | Notes |
 |---|---|
-| NVIDIA | Austin |
+| TierCloudCo | Remote |
 """
     vault = tmp_path / "v"
     (vault / "_profile").mkdir(parents=True)

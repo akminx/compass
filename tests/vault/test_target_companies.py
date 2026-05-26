@@ -17,8 +17,8 @@ type: profile
 ### Big tech
 | Company | Notes |
 |---|---|
-| NVIDIA Agentic AI | Austin |
-| Apple Apple Intelligence | Austin |
+| TierCloudCo Agent Platform | Remote |
+| TierMobileCo Intelligence Frameworks | Remote |
 
 ## Tier `6-month`
 
@@ -54,7 +54,7 @@ def test_get_tier_apply_now(tiered_vault):
 
     assert get_tier("AgentCo") == "apply-now"
     assert get_tier("Ramp") == "apply-now"
-    assert get_tier("Apple Apple Intelligence") == "apply-now"
+    assert get_tier("TierMobileCo Intelligence Frameworks") == "apply-now"
 
 
 def test_get_tier_six_month(tiered_vault):
@@ -121,7 +121,7 @@ def test_multiple_adjacent_tables_one_tier(tmp_path, monkeypatch):
 ### Big tech
 | Company | Notes |
 |---|---|
-| NVIDIA | Austin |
+| TierCloudCo | Remote |
 """
     vault = tmp_path / "v"
     (vault / "_profile").mkdir(parents=True)
@@ -132,7 +132,7 @@ def test_multiple_adjacent_tables_one_tier(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "VAULT_PATH", vault)
     tc.refresh()
     assert tc.get_tier("AgentCo") == "apply-now"
-    assert tc.get_tier("NVIDIA") == "apply-now"
+    assert tc.get_tier("TierCloudCo") == "apply-now"
 
 
 def test_punctuation_stripped(tiered_vault):
@@ -156,10 +156,10 @@ def test_bidirectional_substring_match(tiered_vault):
     import compass.vault.target_companies as tc
 
     tc.refresh()
-    # query ⊂ key — board_token "nvidia" matches cell "NVIDIA Agentic AI"
-    assert tc.get_tier("nvidia") == "apply-now"
-    # query ⊂ key — board_token "apple" matches cell "Apple Apple Intelligence"
-    assert tc.get_tier("apple") == "apply-now"
+    # query ⊂ key — short scraper-token "tiercloudco" matches cell "TierCloudCo Agent Platform"
+    assert tc.get_tier("tiercloudco") == "apply-now"
+    # query ⊂ key — short scraper-token "tiermobileco" matches cell "TierMobileCo Intelligence Frameworks"
+    assert tc.get_tier("tiermobileco") == "apply-now"
     # key ⊂ query — listed "Cursor" matches scraper token "cursoranysphere"
     # (no such entry in fixture; instead exercise key⊂query with docco/DocCoLabs)
     md = (tiered_vault / "_profile" / "target-companies.md").read_text()

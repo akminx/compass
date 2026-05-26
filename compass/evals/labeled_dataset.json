@@ -20,7 +20,7 @@
       "containers",
       "agent design"
     ],
-    "notes": "Strong stack match (Python, MCP, LangGraph). Deployed-Engineer is FDE-adjacent but the technical stack overlap is exact and the candidate's Cisco MCP team-adoption work is real customer-impacting context. YoE gap closes via exact-stack signal."
+    "notes": "Strong stack match (Python, MCP, LangGraph). Deployed-Engineer is FDE-adjacent but the technical stack overlap is exact and the candidate's MCP team-adoption work is real customer-impacting context. YoE gap closes via exact-stack signal."
   },
   {
     "id": "eval-002",
@@ -198,7 +198,7 @@
       "agile",
       "AI-native code editors"
     ],
-    "notes": "Associate level (2+ yr) fits. AI/ML reqs: 8-9/10 with production evidence — MCP at Cisco maps 1:1 to 'AI Agents, agent tools, agent skills'; LangGraph + Chroma + prompt engineering all shipped via Compass; Cursor tooling work covers AI-native IDE req. Core eng: Python ('particularly Java and Python' — Python qualifies), AWS ('Azure preferred; AWS acceptable'), SQL+MongoDB ('including Cassandra' — Cassandra is an example, not a gate). Real gaps are Java (coursework only), Kafka and distributed systems (conceptual). Strong-match band per rubric."
+    "notes": "Associate level (2+ yr) fits. AI/ML reqs: 8-9/10 with production evidence — production MCP work maps 1:1 to 'AI Agents, agent tools, agent skills'; LangGraph + Chroma + prompt engineering all shipped via Compass; Cursor tooling work covers AI-native IDE req. Core eng: Python ('particularly Java and Python' — Python qualifies), AWS ('Azure preferred; AWS acceptable'), SQL+MongoDB ('including Cassandra' — Cassandra is an example, not a gate). Real gaps are Java (coursework only), Kafka and distributed systems (conceptual). Strong-match band per rubric."
   },
   {
     "id": "eval-010",
@@ -431,7 +431,7 @@
       "gRPC",
       "distributed tracing"
     ],
-    "notes": "L4 agentic platform at big-tech cloud — top target. L4 (2+ yr) fits. Python + agent SDK + eval service work all map directly to Compass + Cisco MCP. Second-language ask (Java/Go/TS) is 'and one of' — Java coursework satisfies; would tighten before interview."
+    "notes": "L4 agentic platform at big-tech cloud — L4 (2+ yr) fits. Python + agent SDK + eval service work all map directly to the candidate's MCP and Compass work. Second-language ask (Java/Go/TS) is 'and one of' — Java coursework satisfies; would tighten before interview."
   },
   {
     "id": "eval-021",
@@ -579,7 +579,7 @@
       "LLM SDKs",
       "agent SDKs"
     ],
-    "notes": "DX/DevRel role at a developer-platform company; LLM/agent SDK work (Compass MCP server, Minx) is direct overlap. Public-facing DevRel is a partial gap but the JD frames the role as build-and-ship developer ergonomics, not pure advocacy."
+    "notes": "DX/DevRel role at a developer-platform company; LLM/agent SDK work (Compass MCP server + personal projects) is direct overlap. Public-facing DevRel is a partial gap but the JD frames the role as build-and-ship developer ergonomics, not pure advocacy."
   },
   {
     "id": "eval-028",
@@ -601,7 +601,7 @@
       "vector databases",
       "RAG"
     ],
-    "notes": "Junior agent-eng at vertical AI startup — top target. 0-3 yr band is exact; MCP at junior level is a strong differentiator; LangGraph + Pydantic AI + evals all shipped via Compass."
+    "notes": "Junior agent-eng at vertical AI startup — 0-3 yr band is exact; MCP at junior level is a strong differentiator; LangGraph + Pydantic AI + evals all shipped via Compass."
   },
   {
     "id": "eval-029",
@@ -646,6 +646,6 @@
       "Kafka",
       "Flink"
     ],
-    "notes": "Senior Data Engineer (5+ yr) in healthcare. SQL + Snowflake from Cisco overlap; dbt/Airflow/Dagster/healthcare formats are gaps. Data-eng is an adjacent track, not the agentic-AI portfolio target."
+    "notes": "Senior Data Engineer (5+ yr) in healthcare. SQL + Snowflake from prior-employer overlap; dbt/Airflow/Dagster/healthcare formats are gaps. Data-eng is an adjacent track, not the agentic-AI portfolio target."
   }
 ]

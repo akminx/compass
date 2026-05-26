@@ -8,9 +8,7 @@ No authentication required.
 from __future__ import annotations
 
 import asyncio
-import html
 import logging
-import re
 from datetime import date, datetime
 
 import httpx
@@ -25,18 +23,7 @@ _REQUEST_TIMEOUT = 20.0
 _USER_AGENT = "compass-job-scraper/0.1"
 
 
-_SCRIPT_STYLE_RE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE)
-_TAG_RE = re.compile(r"<[^>]+>")
-
-
-def _strip_html(raw: str) -> str:
-    """Cheap HTML-to-text. Good enough for JD bodies — strips `<script>` / `<style>`
-    blocks before tag removal so their content doesn't leak into the description."""
-    text = _SCRIPT_STYLE_RE.sub(" ", raw)
-    text = _TAG_RE.sub(" ", text)
-    text = html.unescape(text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+from compass.scrapers._html import strip_html as _strip_html
 
 
 def _parse_date(value: str | None) -> date | None:

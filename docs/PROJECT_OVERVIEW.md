@@ -281,7 +281,7 @@ The spec made RAG a portfolio-claim requirement. But the engineering rationale i
 
 - **Cost**: 2,500-token context costs ~3x what a 750-token one does at Gemini Flash rates. Over 50 jobs/day, that's real money.
 - **Focus**: full inventory inject includes irrelevant chunks ("Voice — skip"). Retrieved chunks are the skills actually closest to the JD's vocabulary.
-- **Demonstrable**: "I built RAG over my profile and reduced score-prompt tokens 70%" is a concrete interview talking point.
+- **Demonstrable**: "RAG over the profile reduced score-prompt tokens 70%" is a concrete interview talking point.
 
 ### Why Chroma + all-MiniLM-L6-v2
 
@@ -336,7 +336,7 @@ After wiring 4 skills to actual evidence URIs:
 
 | Skill | Current | Proposed | Reasoning |
 |---|---|---|---|
-| MCP | 4 | **2** (requires_hitl=True) | "Empty or template documents in projects/minx/. Minimal content." 2-level downgrade triggers human review. |
+| MCP | 4 | **2** (requires_hitl=True) | "Empty or template documents in projects/personal-os/. Minimal content." 2-level downgrade triggers human review. |
 | LangGraph | 1 | 1 | "Template files for Compass project, no LangGraph implementation artifacts visible. Decision log empty." |
 | Eval_harness | 0 | 0 | "Hamel reading material status=queued, read_count=0. No applied work." |
 | HiTL | 1 | 1 | "Decision log template without actual HiTL decisions or artifacts." |

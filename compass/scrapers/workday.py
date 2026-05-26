@@ -20,7 +20,6 @@ them; populate the YAML by inspecting each target tenant's careers site.
 from __future__ import annotations
 
 import asyncio
-import html
 import logging
 import re
 from datetime import date
@@ -43,17 +42,7 @@ _PAGE_SIZE = 20
 # unbounded requests. 10 pages × 50 = 500 jobs per board, more than enough.
 _MAX_PAGES = 10
 
-_SCRIPT_STYLE_RE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE)
-_TAG_RE = re.compile(r"<[^>]+>")
-
-
-def _strip_html(raw: str) -> str:
-    """Same approach as greenhouse/lever: strip script/style blocks then tags."""
-    text = _SCRIPT_STYLE_RE.sub(" ", raw)
-    text = _TAG_RE.sub(" ", text)
-    text = html.unescape(text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+from compass.scrapers._html import strip_html as _strip_html
 
 
 def _parse_slug(slug: str) -> tuple[str, str, str] | None:

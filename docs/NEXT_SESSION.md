@@ -27,7 +27,7 @@ adversarial review waves complete. Concretely:
   - 49 auto-scrapable apply-now/opportunistic companies (Greenhouse/Ashby/Workday)
   - 23 manual-add entries for banks/consulting (JPM/Capital One/GS/BofA/Deloitte/Accenture/etc.)
   - 5 Workday tenants verified (Wells Fargo, Citi, Morgan Stanley, BlackRock, Adobe)
-  - 8 Austin/local startups added (Self Financial, AlertMedia, Diligent, Apptronik, Roboflow, Maven Clinic, and others)
+  - 8 additional local/regional startups added to the target board list
   - Aliases on banks for tenant-slug ↔ name resolution (JPMC↔JPMorgan, BofA↔BankofAmerica, etc.)
 - **Audit findings 1-8** all shipped (see commit `b13e1a2`)
 - **Workday scraper** built (`compass/scrapers/workday.py`) — 5 confirmed

@@ -58,7 +58,7 @@ Resolved at this tag: added `engineering manager`, `engineering lead`, `director
 
 ## B5. Anti-claim gating is inconsistent on post-training/research roles
 
-**Symptom:** the candidate's `role-clarifications.md` declares SFT/LoRA/RLHF/DPO as level 0 (explicit anti-claim). Sometimes the scorer catches this, sometimes it doesn't.
+**Symptom:** the candidate profile declares SFT/LoRA/RLHF/DPO at level 0. Sometimes the scorer catches this, sometimes it doesn't.
 
 **Evidence:**
 - Company-B Research Post-Training role → correctly scored 0.0, reasoning cited RLHF=0.

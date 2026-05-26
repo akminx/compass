@@ -15,7 +15,7 @@ from compass.scrapers._pre_filter import pre_filter_board, pre_filter_many
 def _job(
     title: str,
     company: str = "Acme",
-    location: str = "Austin, TX",
+    location: str = "Test City, TS",
     body: str = "Build great agentic systems.",
 ) -> RawJob:
     return RawJob(

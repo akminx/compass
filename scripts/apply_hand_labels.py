@@ -40,7 +40,7 @@ LABELS: dict[str, tuple[float, list[str], str]] = {
          "Kubernetes", "containers", "agent design"],
         "Strong stack match (Python, MCP, LangGraph). Deployed-Engineer "
         "is FDE-adjacent but the technical stack overlap is exact and the "
-        "candidate's Cisco MCP team-adoption work is real customer-impacting "
+        "candidate's MCP team-adoption work is real customer-impacting "
         "context. YoE gap closes via exact-stack signal.",
     ),
     "eval-002": (
@@ -109,7 +109,7 @@ LABELS: dict[str, tuple[float, list[str], str]] = {
          "Docker", "Kubernetes", "responsible AI", "agile",
          "AI-native code editors"],
         "Associate level (2+ yr) fits. AI/ML reqs: 8-9/10 with production "
-        "evidence — MCP at Cisco maps 1:1 to 'AI Agents, agent tools, agent "
+        "evidence — production MCP work maps 1:1 to 'AI Agents, agent tools, agent "
         "skills'; LangGraph + Chroma + prompt engineering all shipped via "
         "Compass; Cursor tooling work covers AI-native IDE req. Core eng: "
         "Python ('particularly Java and Python' — Python qualifies), AWS "
@@ -203,9 +203,9 @@ LABELS: dict[str, tuple[float, list[str], str]] = {
         ["Python", "Java", "Go", "TypeScript", "LLMs", "AI agents", "LangChain",
          "LangGraph", "Pydantic AI", "DSPy", "evaluation", "datasets",
          "Kubernetes", "gRPC", "distributed tracing"],
-        "L4 agentic platform at big-tech cloud — top target. L4 (2+ yr) "
+        "L4 agentic platform at big-tech cloud — L4 (2+ yr) "
         "fits. Python + agent SDK + eval service work all map directly to "
-        "Compass + Cisco MCP. Second-language ask (Java/Go/TS) is 'and one "
+        "the candidate's MCP and Compass work. Second-language ask (Java/Go/TS) is 'and one "
         "of' — Java coursework satisfies; would tighten before interview.",
     ),
     "eval-021": (
@@ -262,7 +262,7 @@ LABELS: dict[str, tuple[float, list[str], str]] = {
          "technical writing", "DevRel", "open-source maintainership",
          "LLM SDKs", "agent SDKs"],
         "DX/DevRel role at a developer-platform company; LLM/agent SDK work "
-        "(Compass MCP server, Minx) is direct overlap. Public-facing DevRel "
+        "(Compass MCP server + personal projects) is direct overlap. Public-facing DevRel "
         "is a partial gap but the JD frames the role as build-and-ship "
         "developer ergonomics, not pure advocacy.",
     ),
@@ -271,7 +271,7 @@ LABELS: dict[str, tuple[float, list[str], str]] = {
         ["Python", "async Python", "typed Python", "LLMs", "AI agents",
          "LangGraph", "Pydantic AI", "DSPy", "MCP", "prompt engineering",
          "evaluation methodology", "vector databases", "RAG"],
-        "Junior agent-eng at vertical AI startup — top target. 0-3 yr band "
+        "Junior agent-eng at vertical AI startup — 0-3 yr band "
         "is exact; MCP at junior level is a strong differentiator; "
         "LangGraph + Pydantic AI + evals all shipped via Compass.",
     ),
@@ -290,7 +290,7 @@ LABELS: dict[str, tuple[float, list[str], str]] = {
         ["SQL", "dbt", "Snowflake", "BigQuery", "Redshift", "Python", "Airflow",
          "Dagster", "HL7", "FHIR", "Kafka", "Flink"],
         "Senior Data Engineer (5+ yr) in healthcare. SQL + Snowflake from "
-        "Cisco overlap; dbt/Airflow/Dagster/healthcare formats are gaps. "
+        "prior-employer overlap; dbt/Airflow/Dagster/healthcare formats are gaps. "
         "Data-eng is an adjacent track, not the agentic-AI portfolio target.",
     ),
 }

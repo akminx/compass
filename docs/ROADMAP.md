@@ -151,12 +151,12 @@ Ship a working agentic job search pipeline that runs daily, produces real Langfu
 **Ongoing tasks:**
 - Run the pipeline daily, review jobs in the vault
 - Update `_profile/skill-inventory.md` as skills improve
-- Add MLflow tracking to eval runs (required for Databricks interview story)
-- Write the Databricks-specific case study: "design this system using Databricks primitives"
+- Add MLflow tracking to eval runs (alternative experiment-tracking story alongside Langfuse)
+- Write a "design this system on a different observability stack (MLflow / W&B)" case study
 - Pursue consulting or external-facing project to close the FDE customer-facing gap
 
-**MLflow addition (for Databricks):**
-Add `mlflow.start_run()` to the eval harness runner. Log: match score distribution, cost per run, tokens per node, context recall per model config. This gives you the Databricks interview answer: "I use MLflow to track eval runs — here's how I compare model configurations."
+**MLflow addition:**
+Add `mlflow.start_run()` to the eval harness runner. Log: match score distribution, cost per run, tokens per node, context recall per model config. This gives an alternative experiment-tracking story alongside Langfuse — useful when interviewing for roles that prefer MLflow/W&B.
 
 ---
 

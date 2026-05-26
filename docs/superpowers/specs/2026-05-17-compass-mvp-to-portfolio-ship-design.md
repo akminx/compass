@@ -148,7 +148,7 @@ All nodes implemented as the simplest version that works end-to-end. Ends with `
 - `compass/hitl/state_store.py` + `compass/hitl/timeout_checker.py` — SQLite-backed pending-approval queue (resumes timed-out threads via `Command(resume={"approved": False})`)
 - `compass/mcp_server/server.py` — `pending_approvals()` and `approve(thread_id, decision)` tools that wrap LangGraph resume
 - `compass/rag/indexer.py` + `compass/rag/retriever.py` — Chroma index of `_profile/skill-inventory.md` chunks; `score_node` retrieves top-k relevant chunks instead of injecting full inventory (closes RAG portfolio claim)
-- `modal_app.py` (root) — `@app.function(schedule=Cron("0 9 * * *"), timezone="America/Chicago")` daily scrape + `@app.function(schedule=Cron("0 2 * * 0"), timezone="America/Chicago")` weekly skill_assessor. **Both pin TZ to America/Chicago (Austin)** — Modal cron defaults to UTC otherwise.
+- `modal_app.py` (root) — `@app.function(schedule=Cron("0 9 * * *"), timezone="America/Chicago")` daily scrape + `@app.function(schedule=Cron("0 2 * * 0"), timezone="America/Chicago")` weekly skill_assessor. **Both pin to a local TZ** — Modal cron defaults to UTC otherwise.
 - Modal Secrets configured for `OPENROUTER_API_KEY`, `LANGFUSE_*` (NOT injected via env file in cloud)
 
 ### Phase 2.A — Eval harness

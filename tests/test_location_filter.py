@@ -12,7 +12,7 @@ from compass.pipeline.location_filter import is_us_compatible
     "location",
     [
         "San Francisco, CA",
-        "Austin, TX",
+        "Test City, TS",
         "New York, NY",
         "Remote - US",
         "Remote (US)",

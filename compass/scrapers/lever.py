@@ -8,9 +8,7 @@ No authentication required.
 from __future__ import annotations
 
 import asyncio
-import html
 import logging
-import re
 from datetime import date, datetime
 
 import httpx
@@ -24,16 +22,7 @@ LEVER_BASE = "https://api.lever.co/v0/postings"
 _REQUEST_TIMEOUT = 20.0
 _USER_AGENT = "compass-job-scraper/0.1"
 
-_SCRIPT_STYLE_RE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE)
-_TAG_RE = re.compile(r"<[^>]+>")
-
-
-def _strip_html(raw: str) -> str:
-    """Same cheap HTML-to-text strategy as the Greenhouse scraper."""
-    text = _SCRIPT_STYLE_RE.sub(" ", raw)
-    text = _TAG_RE.sub(" ", text)
-    text = html.unescape(text)
-    return re.sub(r"\s+", " ", text).strip()
+from compass.scrapers._html import strip_html as _strip_html
 
 
 def _ms_to_date(ms: int | None) -> date | None:

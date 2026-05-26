@@ -10,6 +10,7 @@ Model: SCORE_MODEL (default google/gemini-2.5-flash).
 
 from __future__ import annotations
 
+import functools
 import logging
 
 from compass.config import CALIBRATOR_ENABLED, SCORE_ENSEMBLE_N, SCORE_THRESHOLD
@@ -161,8 +162,9 @@ CALIBRATION EXAMPLES (apply this calibration, don't just acknowledge it):
 Example 1 — exact-stack tier-2 agentic startup, candidate below YoE:
   JD: "Deployed Engineer, LangChain — work with customers shipping LangGraph
        agents in production. 3+ yrs eng experience. Bonus: MCP, evals."
-  Candidate: 1.5 YoE; shipped 2 production MCP servers at Cisco; built a
-       LangGraph + Pydantic AI agentic pipeline (Compass) with Langfuse traces.
+  Candidate: ~2y YoE; shipped multiple production MCP servers at a
+       previous role; built a LangGraph + Pydantic AI agentic pipeline
+       with Langfuse traces.
   → score: 4.25  (rubric: 5.0 perfect-stack − 0.25 YoE nudge + 0.0 net offset.
                   Exact-stack + shipped match the rubric's "4.0 = strong match
                   with real evidence" anchor; the YoE gap is small for a
@@ -171,9 +173,9 @@ Example 1 — exact-stack tier-2 agentic startup, candidate below YoE:
 Example 2 — adjacent-stack tier-2 SaaS, candidate has 80% skill match:
   JD: "Senior Software Engineer — Python, REST APIs, Postgres, AWS.
        5+ yrs. Bonus: LangChain experience."
-  Candidate: 1.5 YoE; Python + FastAPI + Postgres + AWS Lambda at Cisco.
-       Some LangChain in side projects, no production.
-  → score: 3.0   (skill match strong but YoE 3.5 years short → -0.5 base;
+  Candidate: ~2y YoE; Python + FastAPI + Postgres + AWS Lambda in
+       production. Some LangChain in side projects, no production.
+  → score: 3.0   (skill match strong but YoE several years short → -0.5 base;
                   no exact-stack offset because LangChain is bonus-only.
                   Rubric "decent match with core skills, missing some required"
                   applies; the YoE gap drags it from 3.5 to 3.0.)
@@ -181,7 +183,7 @@ Example 2 — adjacent-stack tier-2 SaaS, candidate has 80% skill match:
 Example 3 — tier-3 systems/infra role, candidate domain mismatch:
   JD: "ML Engineer — Inference Engine. PyTorch, vLLM, CUDA, distributed
        systems, 3+ yrs HPC. Build production inference services."
-  Candidate: 1.5 YoE; Python + PyTorch from coursework; no CUDA, no
+  Candidate: ~2y YoE; Python + PyTorch from coursework; no CUDA, no
        inference engine experience, no distributed systems work.
   → score: 1.5   (only matches Python + PyTorch; missing all core
                   infrastructure skills; YoE gap exists but isn't the primary
@@ -191,7 +193,7 @@ Example 3 — tier-3 systems/infra role, candidate domain mismatch:
 Example 4 — tier-3 big-tech generalist SWE, candidate adjacent:
   JD: "Software Engineer — backend services. Java/Kotlin, distributed
        systems, 2+ yrs. Some AI work a plus."
-  Candidate: 1.5 YoE; Python-primary, no Java production; built a
+  Candidate: ~2y YoE; Python-primary, no Java production; built a
        single-machine LangGraph pipeline (not distributed); MCP/agents.
   → score: 2.5   (rubric "stretch, adjacent skills but lacks several
                   required" — Java + distributed systems are foundational
@@ -201,7 +203,7 @@ Example 4 — tier-3 big-tech generalist SWE, candidate adjacent:
 Example 5 — anti-fit, off-target role:
   JD: "Senior Frontend Engineer — React, TypeScript, design systems.
        5+ yrs frontend experience."
-  Candidate: 1.5 YoE backend/AI; no frontend production, basic TypeScript.
+  Candidate: ~2y YoE backend/AI; no frontend production, basic TypeScript.
   → score: 1.0   (rubric "poor match, fundamental skill gaps" —
                   category mismatch, not just YoE.)
 
@@ -487,9 +489,13 @@ async def _profile_text(req: JobRequirements) -> str:
 async def score_node(state: CompassState) -> dict:
     req = state.get("extracted_requirements")
     if req is None:
+        # All three return paths in this node set `score_threshold` so
+        # `hitl_node`'s fallback fires consistently regardless of which
+        # path triggered the early exit.
         return {
             "score_result": None,
             "errors": [*state.get("errors", []), "score_node: extracted_requirements is None"],
+            "score_threshold": SCORE_THRESHOLD,
         }
 
     try:
@@ -548,17 +554,15 @@ def _apply_calibrator(score: JobScore) -> JobScore:
     )
 
 
-_CALIBRATOR_LOADED = False
-_CALIBRATOR = None
-
-
+@functools.cache
 def _get_calibrator():
-    global _CALIBRATOR_LOADED, _CALIBRATOR
-    if _CALIBRATOR_LOADED:
-        return _CALIBRATOR
-    _CALIBRATOR = _calibrator_load()
-    _CALIBRATOR_LOADED = True
-    return _CALIBRATOR
+    """Memoized load of the isotonic calibrator from disk. Mirrors the
+    `taxonomy.refresh()` pattern: call `_get_calibrator.cache_clear()` to
+    pick up a fresh fit without restarting the process — necessary for the
+    long-running MCP server when the user runs
+    `python -m compass.evals.calibrator fit` in another shell.
+    """
+    return _calibrator_load()
 
 
 def _constrain_to_jd_skills(score: JobScore, req: JobRequirements) -> JobScore:

@@ -32,17 +32,9 @@ _USER_AGENT = (
     "Chrome/120.0 Safari/537.36 compass-job-scraper/0.1"
 )
 _TIMEOUT = 20.0
-_SCRIPT_STYLE_RE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE)
-_TAG_RE = re.compile(r"<[^>]+>")
 _TITLE_RE = re.compile(r"<title[^>]*>([^<]+)</title>", re.IGNORECASE)
 
-
-def _strip_html(raw: str) -> str:
-    text = _SCRIPT_STYLE_RE.sub(" ", raw)
-    text = _TAG_RE.sub(" ", text)
-    text = html.unescape(text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+from compass.scrapers._html import strip_html as _strip_html
 
 
 def _detect_provider(url: str) -> str:
@@ -114,13 +106,10 @@ async def fetch_rawjob_from_url(
         logger.warning("add_url: refusing URL with no hostname: %r", url[:80])
         return None
 
-    # Provider detection is exposed for tests + future structured-API
-    # routing. For one-off URLs the generic static path is fast enough.
-    _detect_provider(url)
-
     # Structured-API path: not implemented here — for one-off URLs the
-    # generic path is fast enough and avoids per-provider parsing edge
-    # cases. The full-batch scrapers handle structured fetching.
+    # generic static fetch is fast enough and avoids per-provider parsing
+    # edge cases. `_detect_provider` is exported for tests + future use; the
+    # full-batch scrapers handle structured fetching.
     page_title, body = await _fetch_generic(url)
     if not body or len(body) < 200:
         # Likely JS-rendered (Oracle Cloud / LinkedIn / etc.). Drop —

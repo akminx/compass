@@ -8,7 +8,6 @@ No authentication required. Many agent-eng-native AI companies host their boards
 from __future__ import annotations
 
 import asyncio
-import html
 import logging
 import re
 from datetime import date, datetime
@@ -17,16 +16,7 @@ import httpx
 
 from compass.pipeline.state import RawJob
 
-_SCRIPT_STYLE_RE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE)
-_TAG_RE = re.compile(r"<[^>]+>")
-
-
-def _strip_html(raw: str) -> str:
-    """HTML→text fallback for Ashby boards that don't populate descriptionPlain."""
-    text = _SCRIPT_STYLE_RE.sub(" ", raw)
-    text = _TAG_RE.sub(" ", text)
-    text = html.unescape(text)
-    return re.sub(r"\s+", " ", text).strip()
+from compass.scrapers._html import strip_html as _strip_html
 
 
 logger = logging.getLogger(__name__)
