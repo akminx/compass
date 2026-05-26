@@ -97,8 +97,8 @@ def _body(row: dict[str, Any]) -> str:
         f"\n"
         f"From Claude Code / Cursor (compass MCP server):\n"
         f"\n"
-        f"- Approve: `approve(thread_id=\"{tid}\", approved=True)`\n"
-        f"- Reject:  `approve(thread_id=\"{tid}\", approved=False, feedback=\"...\")`\n"
+        f'- Approve: `approve(thread_id="{tid}", approved=True)`\n'
+        f'- Reject:  `approve(thread_id="{tid}", approved=False, feedback="...")`\n'
         f"\n"
         f"Or programmatically:\n"
         f"\n"

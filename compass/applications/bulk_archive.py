@@ -78,7 +78,8 @@ def archive_marked_jobs() -> dict:
                 # timestamp; clobbering would silently lose that signal.
                 logger.warning(
                     "archive_marked_jobs: %s already at %s; leaving both in place",
-                    path.name, target,
+                    path.name,
+                    target,
                 )
                 errors.append({"file": path.name, "error": "already archived; skipped"})
                 continue

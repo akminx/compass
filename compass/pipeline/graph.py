@@ -295,7 +295,8 @@ def _langfuse_config() -> dict:
             except Exception as e:
                 logger.warning(
                     "langfuse: pydantic-ai instrumentation failed — extract/score "
-                    "spans may not appear: %s", e
+                    "spans may not appear: %s",
+                    e,
                 )
             _langfuse_client_initialized = True
         handler = CallbackHandler()

@@ -4,7 +4,9 @@ from pathlib import Path
 import pytest
 
 
-def _seed_jobnote(vault: Path, company="AgentCo", title="Agent Engineer", url="https://x/s") -> Path:
+def _seed_jobnote(
+    vault: Path, company="AgentCo", title="Agent Engineer", url="https://x/s"
+) -> Path:
     """Write a minimal JobNote frontmatter that the lifecycle can find."""
     from compass.vault.schemas import JobNote
     from compass.vault.writer import write_job_note

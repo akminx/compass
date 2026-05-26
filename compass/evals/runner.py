@@ -37,7 +37,6 @@ from compass.pipeline.nodes.score import (
     _apply_clearance_gate,
     _apply_role_family_cap,
     _profile_text,
-    _score,
     _score_ensemble,
 )
 from compass.pipeline.role_family import keyword_classify, llm_classify, upgrade_family
@@ -148,9 +147,7 @@ async def _run_extract_and_score(
         unknown: list[str] = []
         title_hint = ""  # eval JDs don't carry titles — seniority stays as LLM said
         req = JobRequirements(
-            required_skills=_normalize_skill_list(
-                raw_req.required_skills, record.jd_text, unknown
-            ),
+            required_skills=_normalize_skill_list(raw_req.required_skills, record.jd_text, unknown),
             nice_to_have_skills=_normalize_skill_list(
                 raw_req.nice_to_have_skills, record.jd_text, unknown
             ),
@@ -250,7 +247,9 @@ async def run_against_labels(
         missing_skill_lists,
     )
     metrics._total_cost_usd = total_cost  # type: ignore[attr-defined]
-    metrics._top_k_p_at_3 = top_k_precision(predicted_scores, expected_scores, min(3, len(predicted_scores)))  # type: ignore[attr-defined]
+    metrics._top_k_p_at_3 = top_k_precision(
+        predicted_scores, expected_scores, min(3, len(predicted_scores))
+    )  # type: ignore[attr-defined]
     return metrics, per_record
 
 
@@ -377,7 +376,9 @@ async def run_against_judge(
     # We don't widen ScoreMetrics for these because they're aggregate-only
     # (not per-JD) and don't belong in the JSON snapshot schema.
     metrics._total_cost_usd = total_cost  # type: ignore[attr-defined]
-    metrics._top_k_p_at_3 = top_k_precision(predicted_scores, expected_scores, min(3, len(predicted_scores)))  # type: ignore[attr-defined]
+    metrics._top_k_p_at_3 = top_k_precision(
+        predicted_scores, expected_scores, min(3, len(predicted_scores))
+    )  # type: ignore[attr-defined]
     return metrics, per_record
 
 

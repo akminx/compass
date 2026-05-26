@@ -16,14 +16,18 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Literal
+from typing import TYPE_CHECKING
 
 import yaml
 
+if TYPE_CHECKING:
+    # Tier vocabulary lives in compass.vault.schemas — single source of truth.
+    # Type-only import: TIER_ORDER stores the literal strings; the Tier
+    # alias is only referenced in annotations (`list[Tier]`, `dict[str, Tier]`).
+    from compass.vault.schemas import Tier
+
 logger = logging.getLogger(__name__)
 
-# Tier vocabulary lives in compass.vault.schemas — single source of truth.
-from compass.vault.schemas import Tier
 # Order: most-preferred first. Used by `get_tier` to break bidirectional-match
 # ties (prefer the strongest tier when a company name matches multiple entries).
 TIER_ORDER: list[Tier] = [

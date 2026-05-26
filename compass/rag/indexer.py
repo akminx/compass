@@ -90,9 +90,7 @@ def _get_embedding_model():
 
 
 def _embed(documents: list[str]) -> list[list[float]]:
-    arr = _get_embedding_model().encode(
-        documents, convert_to_numpy=True, show_progress_bar=False
-    )
+    arr = _get_embedding_model().encode(documents, convert_to_numpy=True, show_progress_bar=False)
     return [vec.tolist() for vec in arr]
 
 

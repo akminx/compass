@@ -28,7 +28,6 @@ from typing import TYPE_CHECKING
 import yaml
 
 from compass.config import (
-    AGENT_LOG_PATH,
     SKILL_INVENTORY_PATH,
     VAULT_PATH,
 )
@@ -92,7 +91,6 @@ def _load_skill_note(canonical: str) -> tuple[Path, dict, str] | None:
 
 
 from compass.vault.writer import append_agent_log as _log_action  # noqa: E402
-
 
 # ── agent ────────────────────────────────────────────────────────────────────
 

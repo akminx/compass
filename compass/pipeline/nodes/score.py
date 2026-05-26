@@ -14,7 +14,8 @@ import functools
 import logging
 
 from compass.config import CALIBRATOR_ENABLED, SCORE_ENSEMBLE_N, SCORE_THRESHOLD
-from compass.evals.calibrator import apply as _calibrator_apply, load as _calibrator_load
+from compass.evals.calibrator import apply as _calibrator_apply
+from compass.evals.calibrator import load as _calibrator_load
 from compass.llm import make_agent
 from compass.pipeline.state import CompassState, JobRequirements, JobScore, RawJob
 from compass.rag.retriever import retrieve as rag_retrieve
@@ -321,7 +322,9 @@ def _apply_role_family_cap(score: JobScore, role_family: str | None) -> JobScore
         return score
     logger.info(
         "score_node: capping score %.2f → %.2f for role_family=%s",
-        score.score, cap, role_family,
+        score.score,
+        cap,
+        role_family,
     )
     return score.model_copy(
         update={
@@ -376,7 +379,9 @@ def _apply_clearance_gate(score: JobScore, jd_text: str) -> JobScore:
         return score
     logger.info(
         "score_node: clearance gate fired (%r) — capping %.2f → %.2f",
-        matched, score.score, _CLEARANCE_GATE_CAP,
+        matched,
+        score.score,
+        _CLEARANCE_GATE_CAP,
     )
     return score.model_copy(
         update={
@@ -450,7 +455,8 @@ async def _score_ensemble(
     missing_majority = [
         missing_form[k]
         for k, c in missing_counts.items()
-        if c >= threshold and k not in {kk for kk in matched_counts if matched_counts[kk] >= threshold}
+        if c >= threshold
+        and k not in {kk for kk in matched_counts if matched_counts[kk] >= threshold}
     ]
     closest = min(verdicts, key=lambda v: abs(v.score - median_score))
     # Restrict evidence to the surviving skills.
@@ -549,7 +555,9 @@ def _apply_calibrator(score: JobScore) -> JobScore:
         return score
     logger.info(
         "score_node: calibrator adjusted %.2f → %.2f (n=%d training pairs)",
-        score.score, adjusted, cal.n_training_pairs,
+        score.score,
+        adjusted,
+        cal.n_training_pairs,
     )
     return score.model_copy(
         update={
@@ -625,6 +633,4 @@ def _constrain_to_jd_skills(score: JobScore, req: JobRequirements) -> JobScore:
             dropped_matched,
             dropped_missing,
         )
-    return score.model_copy(
-        update={"matched_skills": matched_out, "missing_skills": missing_out}
-    )
+    return score.model_copy(update={"matched_skills": matched_out, "missing_skills": missing_out})

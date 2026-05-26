@@ -14,6 +14,7 @@ from datetime import date, datetime
 import httpx
 
 from compass.pipeline.state import RawJob
+from compass.scrapers._html import strip_html as _strip_html
 from compass.scrapers._remote_parser import infer_remote_policy
 
 logger = logging.getLogger(__name__)
@@ -21,9 +22,6 @@ logger = logging.getLogger(__name__)
 GREENHOUSE_BASE = "https://boards-api.greenhouse.io/v1/boards"
 _REQUEST_TIMEOUT = 20.0
 _USER_AGENT = "compass-job-scraper/0.1"
-
-
-from compass.scrapers._html import strip_html as _strip_html
 
 
 def _parse_date(value: str | None) -> date | None:

@@ -89,9 +89,7 @@ async def sync_decisions() -> dict[str, Any]:
             skipped.append({"thread_id": thread_id, "reason": "no state_store row"})
             continue
         if row["status"] != "pending":
-            skipped.append(
-                {"thread_id": thread_id, "reason": f"already {row['status']!r} in DB"}
-            )
+            skipped.append({"thread_id": thread_id, "reason": f"already {row['status']!r} in DB"})
             continue
 
         approved = status_str == "approved"

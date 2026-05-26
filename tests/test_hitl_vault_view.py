@@ -106,9 +106,7 @@ def test_update_pending_note_status_preserves_skills(temp_vault, sample_row):
 
 
 @pytest.mark.asyncio
-async def test_regenerate_all_pending_notes_backfills_from_db(
-    temp_vault, temp_hitl_db, sample_row
-):
+async def test_regenerate_all_pending_notes_backfills_from_db(temp_vault, temp_hitl_db, sample_row):
     # Seed two pending rows in the state_store
     await state_store.add_pending(
         thread_id=sample_row["thread_id"],

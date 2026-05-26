@@ -15,9 +15,7 @@ from datetime import date, datetime
 import httpx
 
 from compass.pipeline.state import RawJob
-
 from compass.scrapers._html import strip_html as _strip_html
-
 
 logger = logging.getLogger(__name__)
 

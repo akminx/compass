@@ -102,9 +102,14 @@ def test_signal_density_improves_per_board():
     and have 3-4 of them dropped at intake_filter. Post-fix, pre_filter
     drops them at the scraper level so round-robin sees only the eligible 30%."""
     titles = [
-        "Senior Software Engineer", "Staff Engineer", "Principal Architect",
-        "Engineering Manager", "Director of Engineering",
-        "Software Engineer", "AI Engineer", "Platform Engineer",
+        "Senior Software Engineer",
+        "Staff Engineer",
+        "Principal Architect",
+        "Engineering Manager",
+        "Director of Engineering",
+        "Software Engineer",
+        "AI Engineer",
+        "Platform Engineer",
     ]
     board = [_job(t, company="MongoDB") for t in titles]
     kept, dropped = pre_filter_board(board, _RULES_REAL)

@@ -196,7 +196,9 @@ def aggregate(
     matched_lists = (
         matched_skill_lists if matched_skill_lists is not None else predicted_skill_lists
     )
-    missing_lists = missing_skill_lists if missing_skill_lists is not None else [[] for _ in matched_lists]
+    missing_lists = (
+        missing_skill_lists if missing_skill_lists is not None else [[] for _ in matched_lists]
+    )
     universe_lists = [list({*m, *mi}) for m, mi in zip(matched_lists, missing_lists, strict=True)]
 
     extract_recalls = [

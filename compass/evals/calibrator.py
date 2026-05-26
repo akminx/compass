@@ -227,7 +227,10 @@ def fit_from_labels(path: Path | None = None) -> IsotonicCalibrator:
     save_path = save(cal, path)
     logger.info(
         "calibrator fit: n=%d pairs, train_mae=%.3f, knots=%d, written to %s",
-        cal.n_training_pairs, cal.fit_mae, len(cal.xs), save_path,
+        cal.n_training_pairs,
+        cal.fit_mae,
+        len(cal.xs),
+        save_path,
     )
     return cal
 

@@ -29,6 +29,7 @@ from compass.config import (
     PREFERENCES_PATH,
     VAULT_PATH,
 )
+from compass.vault.frontmatter_utils import parse_frontmatter as _parse_with_body
 from compass.vault.schemas import GapPlanEntry, SkillLevel, TierDemand
 from compass.vault.taxonomy import all_canonicals
 
@@ -49,8 +50,6 @@ class JobSummary:
 
 
 # ── loaders ──────────────────────────────────────────────────────────────────
-
-from compass.vault.frontmatter_utils import parse_frontmatter as _parse_with_body
 
 
 def _parse_frontmatter(path: Path) -> dict:

@@ -74,9 +74,9 @@ def test_starvation_fix_high_volume_board_does_not_dominate_first_n():
 def test_within_board_freshest_first():
     """Each board's freshest job comes out before its older jobs."""
     board = [
-        _job("a", 1, date(2026, 4, 1)),   # oldest
+        _job("a", 1, date(2026, 4, 1)),  # oldest
         _job("a", 2, date(2026, 5, 20)),  # freshest
-        _job("a", 3, date(2026, 5, 1)),   # middle
+        _job("a", 3, date(2026, 5, 1)),  # middle
     ]
     out = round_robin_by_board([board])
     assert [j.title for j in out] == ["a job 2", "a job 3", "a job 1"]

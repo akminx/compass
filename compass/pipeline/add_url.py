@@ -14,7 +14,6 @@ should fall back to `add_job_from_text` with a manual paste.
 
 from __future__ import annotations
 
-import html
 import logging
 import re
 from datetime import date
@@ -23,6 +22,7 @@ from urllib.parse import urlparse
 import httpx
 
 from compass.pipeline.state import RawJob
+from compass.scrapers._html import strip_html as _strip_html
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +33,6 @@ _USER_AGENT = (
 )
 _TIMEOUT = 20.0
 _TITLE_RE = re.compile(r"<title[^>]*>([^<]+)</title>", re.IGNORECASE)
-
-from compass.scrapers._html import strip_html as _strip_html
 
 
 def _detect_provider(url: str) -> str:

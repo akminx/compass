@@ -27,6 +27,7 @@ from datetime import date
 import httpx
 
 from compass.pipeline.state import RawJob
+from compass.scrapers._html import strip_html as _strip_html
 from compass.scrapers._remote_parser import infer_remote_policy
 
 logger = logging.getLogger(__name__)
@@ -41,8 +42,6 @@ _PAGE_SIZE = 20
 # `total` lower than the actual count and never converges) can't burn
 # unbounded requests. 10 pages × 50 = 500 jobs per board, more than enough.
 _MAX_PAGES = 10
-
-from compass.scrapers._html import strip_html as _strip_html
 
 
 def _parse_slug(slug: str) -> tuple[str, str, str] | None:
