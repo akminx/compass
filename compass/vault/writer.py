@@ -19,6 +19,9 @@ from typing import TYPE_CHECKING
 import frontmatter
 
 from compass.config import AGENT_LOG_PATH, VAULT_PATH
+from compass.vault.schemas import Tier
+
+_VALID_TIERS: frozenset[str] = frozenset(Tier.__args__)  # type: ignore[attr-defined]
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -189,22 +192,13 @@ def write_company_note(note: CompanyNote) -> Path:
         # against that by ignoring invalid tier values (they get reset to
         # whatever the pipeline computed).
         existing_tier = existing.get("tier", "unknown")
-        _valid_tiers = {
-            "apply-now",
-            "opportunistic",
-            "backend-prep",
-            "6-month",
-            "stretch",
-            "skip",
-            "unknown",
-        }
-        if existing_tier not in _valid_tiers:
+        if existing_tier not in _VALID_TIERS:
             logger.warning(
                 "write_company_note: %s has invalid tier=%r (expected one of %s); "
                 "ignoring existing value and using incoming tier=%r",
                 note.company,
                 existing_tier,
-                sorted(_valid_tiers),
+                sorted(_VALID_TIERS),
                 note.tier,
             )
         elif note.tier == "unknown" and existing_tier != "unknown":

@@ -75,12 +75,7 @@ Output a SkillAssessment object.
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 
-def _parse_frontmatter(path: Path) -> tuple[dict, str]:
-    text = path.read_text(encoding="utf-8")
-    m = re.match(r"^---\n(.*?)\n---\n(.*)$", text, re.DOTALL)
-    if not m:
-        return {}, text
-    return yaml.safe_load(m.group(1)) or {}, m.group(2)
+from compass.vault.frontmatter_utils import parse_frontmatter as _parse_frontmatter  # noqa: E402
 
 
 def _write_frontmatter(path: Path, fm: dict, body: str) -> None:
@@ -96,10 +91,7 @@ def _load_skill_note(canonical: str) -> tuple[Path, dict, str] | None:
     return path, fm, body
 
 
-def _log(line: str) -> None:
-    AGENT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with AGENT_LOG_PATH.open("a", encoding="utf-8") as f:
-        f.write(line.rstrip() + "\n")
+from compass.vault.writer import append_agent_log as _log_action  # noqa: E402
 
 
 # ── agent ────────────────────────────────────────────────────────────────────
@@ -183,9 +175,9 @@ def _apply(assessment: SkillAssessment) -> None:
         return
     path, fm, body = loaded
     if assessment.requires_hitl:
-        _log(
-            f"[{datetime.now().isoformat(timespec='seconds')}] assess_skills HITL "
-            f"{assessment.skill} {fm.get('my_level', 0)}->{assessment.proposed_level} "
+        _log_action(
+            f"assess_skills HITL {assessment.skill} "
+            f"{fm.get('my_level', 0)}->{assessment.proposed_level} "
             f"conf={assessment.confidence} (awaiting human approval)"
         )
         return
@@ -193,9 +185,9 @@ def _apply(assessment: SkillAssessment) -> None:
     fm["last_assessed"] = datetime.now().isoformat(timespec="seconds")
     body = _append_assessor_section(body, assessment)
     _write_frontmatter(path, fm, body)
-    _log(
-        f"[{datetime.now().isoformat(timespec='seconds')}] assess_skills APPLY "
-        f"{assessment.skill} -> level {assessment.proposed_level} conf={assessment.confidence}"
+    _log_action(
+        f"assess_skills APPLY {assessment.skill} -> level {assessment.proposed_level} "
+        f"conf={assessment.confidence}"
     )
 
 
@@ -223,9 +215,22 @@ def _append_assessor_section(body: str, a: SkillAssessment) -> str:
 async def assess_many(scope: list[str] | None = None) -> list[SkillAssessment]:
     """Assess all skills in scope (or every canonical skill if None)."""
     targets = scope or all_canonicals()
+    # Parallel assessment — each `assess_one` is an independent LLM call.
+    # The semaphore caps concurrency to avoid hammering the provider when
+    # the assessor runs over the full inventory (50+ skills).
+    import asyncio as _asyncio
+
+    from compass.config import MAX_CONCURRENT_JOBS
+
+    sem = _asyncio.Semaphore(MAX_CONCURRENT_JOBS)
+
+    async def _bounded(canonical: str) -> SkillAssessment | None:
+        async with sem:
+            return await assess_one(canonical)
+
+    assessments = await _asyncio.gather(*[_bounded(c) for c in targets])
     results: list[SkillAssessment] = []
-    for canonical in targets:
-        a = await assess_one(canonical)
+    for a in assessments:
         if a is None:
             continue
         _apply(a)

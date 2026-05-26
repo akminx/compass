@@ -224,7 +224,7 @@ async def intake_filter_node(state: CompassState) -> dict:
     if decided is False:
         _log_filtered(job.company, job.title, f"title keyword → {family}")
         logger.info("intake_filter: dropped %s — %s (keyword)", job.company, job.title)
-        return {"in_scope": False, "role_family": family}
+        return {"in_scope": False, "role_family": family, "agent_signal_count": 0}
 
     # Borderline — escalate to LLM
     try:
@@ -233,7 +233,11 @@ async def intake_filter_node(state: CompassState) -> dict:
         logger.warning(
             "intake_filter: LLM classify failed for %r — %s; defaulting to IN", job.title, e
         )
-        return {"in_scope": True, "role_family": upgrade_family("other-eng", body)}
+        return {
+            "in_scope": True,
+            "role_family": upgrade_family("other-eng", body),
+            "agent_signal_count": _agent_signal_count(body),
+        }
 
     if not result.in_scope:
         _log_filtered(job.company, job.title, f"llm → {result.reason}")

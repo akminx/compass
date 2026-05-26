@@ -51,13 +51,14 @@ def get_model_id(node: str) -> str:
 
 
 def _get_model(node: str) -> OpenAIChatModel:
-    """Build a pydantic-ai OpenAIChatModel pointed at OpenRouter for this node."""
+    """Build a pydantic-ai OpenAIChatModel pointed at OpenRouter for this node.
+
+    `compass.config` raises at import time if `OPENROUTER_API_KEY` is unset, so
+    reaching this function guarantees `cfg.OPENROUTER_API_KEY` is populated.
+    """
     import compass.config as cfg
 
-    api_key = getattr(cfg, "OPENROUTER_API_KEY", None) or os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-        raise ValueError("OPENROUTER_API_KEY is not set")
-    provider = OpenAIProvider(base_url=OPENROUTER_BASE_URL, api_key=api_key)
+    provider = OpenAIProvider(base_url=OPENROUTER_BASE_URL, api_key=cfg.OPENROUTER_API_KEY)
     return OpenAIChatModel(get_model_id(node), provider=provider)
 
 

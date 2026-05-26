@@ -247,7 +247,7 @@ async def _run_partial_pipeline_and_write(job) -> dict:
     if score is None:
         return {"error": "score node returned None"}
     return {
-        "path": "vault/jobs/" + (job.company + "-" + job.title),
+        "path": state.get("vault_note_path") or "(not written)",
         "company": job.company,
         "title": job.title,
         "score": score.score,

@@ -421,29 +421,36 @@ async def run_evals(
     `compass.config.SCORE_MODEL`. Used by `--scorer-model` for head-to-head
     Pareto comparisons (e.g. flash-scorer vs sonnet-scorer at same n).
     """
+    import compass.config as _cfg
+
+    original_model = _cfg.SCORE_MODEL
     if scorer_model is not None:
-        import compass.config as _cfg
-
-        original = _cfg.SCORE_MODEL
         _cfg.SCORE_MODEL = scorer_model
-        logger.info("eval: overriding SCORE_MODEL %s → %s", original, scorer_model)
+        logger.info("eval: overriding SCORE_MODEL %s → %s", original_model, scorer_model)
 
-    records = load_dataset()
-    if not records:
-        return {
-            "error": (
-                "labeled_dataset.json is empty. Add examples via "
-                "compass.evals.dataset.add_example() or use --judge mode."
-            ),
-            "metrics": None,
-        }
-    if limit is not None and limit < len(records):
-        records = random.sample(records, limit)
+    try:
+        records = load_dataset()
+        if not records:
+            return {
+                "error": (
+                    "labeled_dataset.json is empty. Add examples via "
+                    "compass.evals.dataset.add_example() or use --judge mode."
+                ),
+                "metrics": None,
+            }
+        if limit is not None and limit < len(records):
+            records = random.sample(records, limit)
 
-    if mode == "judge":
-        metrics, per_record = await run_against_judge(records, ensemble_n=ensemble_n)
-    else:
-        metrics, per_record = await run_against_labels(records, ensemble_n=ensemble_n)
+        if mode == "judge":
+            metrics, per_record = await run_against_judge(records, ensemble_n=ensemble_n)
+        else:
+            metrics, per_record = await run_against_labels(records, ensemble_n=ensemble_n)
+    finally:
+        # Restore the original SCORE_MODEL so back-to-back run_evals calls
+        # from the same process (e.g. via the MCP tool) don't inherit the
+        # prior override.
+        if scorer_model is not None:
+            _cfg.SCORE_MODEL = original_model
 
     # Flush Langfuse buffers so eval traces actually land before the script
     # exits. Without this, the SDK's background batcher can drop traces.

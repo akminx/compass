@@ -681,10 +681,6 @@ def _drop_stale_postings(jobs: list[RawJob]) -> list[RawJob]:
     return [j for j in jobs if j.date_posted is None or j.date_posted >= cutoff]
 
 
-# Backward-compat alias: external callers / tests still reference the old name.
-_filter_and_sort_by_recency = _drop_stale_postings
-
-
 def _yaml_scraper_slugs() -> dict[str, list[str]]:
     """Read `_profile/target-companies.yaml` and group eligible boards by ATS
     provider. Returns {} when the YAML is missing — caller falls back to the
@@ -722,15 +718,6 @@ def _yaml_scraper_slugs() -> dict[str, list[str]]:
             if slug not in by_provider[provider]:
                 by_provider[provider].append(slug)
     return {k: v for k, v in by_provider.items() if v}
-
-
-def _date_to_ordinal(d: object) -> int:
-    """date.toordinal() wrapper that treats None as 0 — only used for sort key."""
-    from datetime import date
-
-    if isinstance(d, date):
-        return d.toordinal()
-    return 0
 
 
 if __name__ == "__main__":

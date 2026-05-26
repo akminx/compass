@@ -71,13 +71,28 @@ def _parse_inventory(text: str) -> list[tuple[str, str]]:
     return sections
 
 
+_EMBEDDING_MODEL = None
+
+
+def _get_embedding_model():
+    """Lazy-load + cache the sentence-transformers model. Loading model weights
+    from disk on every retriever call (and on every score in production) made
+    each RAG query pay the model-load cost; singleton-cache eliminates that.
+    """
+    global _EMBEDDING_MODEL
+    if _EMBEDDING_MODEL is None:
+        from sentence_transformers import SentenceTransformer
+
+        import compass.config as cfg
+
+        _EMBEDDING_MODEL = SentenceTransformer(cfg.EMBEDDING_MODEL)
+    return _EMBEDDING_MODEL
+
+
 def _embed(documents: list[str]) -> list[list[float]]:
-    from sentence_transformers import SentenceTransformer
-
-    import compass.config as cfg
-
-    model = SentenceTransformer(cfg.EMBEDDING_MODEL)
-    arr = model.encode(documents, convert_to_numpy=True, show_progress_bar=False)
+    arr = _get_embedding_model().encode(
+        documents, convert_to_numpy=True, show_progress_bar=False
+    )
     return [vec.tolist() for vec in arr]
 
 

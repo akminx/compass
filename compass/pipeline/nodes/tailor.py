@@ -8,6 +8,7 @@ Sonnet (or TAILOR_MODEL override) for writing quality.
 
 from __future__ import annotations
 
+import functools
 import logging
 from typing import TYPE_CHECKING
 
@@ -43,6 +44,7 @@ when the profile provides them.
 _MAX_JD_CHARS_FOR_TAILOR = 6000
 
 
+@functools.cache
 def _build_agent():
     return make_agent("tailor", output_type=TailoringResult, system_prompt=_SYSTEM_PROMPT)
 

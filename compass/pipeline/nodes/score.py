@@ -215,6 +215,7 @@ skill-mismatch or category-mismatch cases, NOT for "good skills, light YoE."
 """
 
 
+@functools.cache
 def _build_agent():
     return make_agent("score", output_type=JobScore, system_prompt=_SYSTEM_PROMPT)
 
@@ -408,12 +409,16 @@ async def _score_ensemble(
     if n < 1:
         raise ValueError(f"n must be >= 1, got {n}")
 
-    verdicts: list[JobScore] = []
-    for _ in range(n):
-        verdicts.append(await _score_with_retry(req, profile_text, job))
+    # Run all samples in parallel — they're independent calls at temp=0; the
+    # whole point of the ensemble is to smooth provider-side variance, not to
+    # sequence anything. Wall-clock latency stays roughly equal to a single call.
+    import asyncio as _asyncio
 
     if n == 1:
-        return verdicts[0]
+        return await _score_with_retry(req, profile_text, job)
+    verdicts: list[JobScore] = await _asyncio.gather(
+        *[_score_with_retry(req, profile_text, job) for _ in range(n)]
+    )
 
     scores = [v.score for v in verdicts]
     median_score = statistics.median(scores)

@@ -8,7 +8,7 @@ ApplicationNotes. Status transitions are validated (see VALID_TRANSITIONS).
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
 import frontmatter
@@ -94,7 +94,7 @@ def _update_jobnote_status(jobnote_path: Path, status: str) -> None:
     md = frontmatter.load(jobnote_path)
     md["status"] = status
     if status == "applied":
-        md["applied_at"] = datetime.now().isoformat()
+        md["applied_at"] = datetime.now(UTC).isoformat()
     jobnote_path.write_text(frontmatter.dumps(md) + "\n", encoding="utf-8")
 
 

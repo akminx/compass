@@ -16,6 +16,7 @@ Cost: ~$0.002 per JD on Flash. 100 JDs = $0.20.
 
 from __future__ import annotations
 
+import functools
 import logging
 
 from pydantic import BaseModel, Field
@@ -61,6 +62,7 @@ If you disagree with the agent, say so plainly in the reasoning.
 """
 
 
+@functools.cache
 def _build_agent():
     # Route judge through REFLECT_MODEL (claude-sonnet) — using the same model
     # for both scorer and judge masks shared biases (under-scoring, taxonomy

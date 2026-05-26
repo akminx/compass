@@ -310,10 +310,17 @@ def main() -> int:
         record["notes"] = notes
         updated += 1
 
-    DATASET.write_text(
+    # Atomic write: a SIGKILL mid-write would otherwise truncate the JSON
+    # and break every subsequent `load_dataset()` call. Mirrors the
+    # `compass.evals.dataset.save_dataset()` pattern.
+    import os as _os
+
+    tmp = DATASET.with_suffix(DATASET.suffix + ".tmp")
+    tmp.write_text(
         json.dumps(existing, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+    _os.replace(tmp, DATASET)
     print(f"updated {updated} records with hand-labels")
     return 0
 

@@ -72,6 +72,19 @@ def archive_marked_jobs() -> dict:
         post["status"] = "archived"
         try:
             target = archive_dir / path.name
+            if target.exists():
+                # Already archived (e.g. retry after a partial run). Don't
+                # overwrite — the existing copy carries the original archive
+                # timestamp; clobbering would silently lose that signal.
+                logger.warning(
+                    "archive_marked_jobs: %s already at %s; leaving both in place",
+                    path.name, target,
+                )
+                errors.append({"file": path.name, "error": "already archived; skipped"})
+                continue
+            # Write target first, then atomically remove the source. If the
+            # process dies between the two we re-enter the `target.exists()`
+            # branch on retry rather than double-archiving.
             target.write_text(frontmatter.dumps(post) + "\n", encoding="utf-8")
             path.unlink()
         except Exception as e:

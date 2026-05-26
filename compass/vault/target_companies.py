@@ -22,9 +22,8 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-Tier = Literal[
-    "apply-now", "opportunistic", "backend-prep", "6-month", "stretch", "skip", "unknown"
-]
+# Tier vocabulary lives in compass.vault.schemas — single source of truth.
+from compass.vault.schemas import Tier
 # Order: most-preferred first. Used by `get_tier` to break bidirectional-match
 # ties (prefer the strongest tier when a company name matches multiple entries).
 TIER_ORDER: list[Tier] = [

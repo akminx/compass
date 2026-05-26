@@ -12,6 +12,7 @@ Model: EXTRACT_MODEL (default google/gemini-2.5-flash). Routed via compass.llm.
 
 from __future__ import annotations
 
+import functools
 import logging
 from datetime import datetime
 
@@ -77,6 +78,7 @@ _MAX_JD_CHARS_FOR_EXTRACT = 8000
 _EXTRACT_RETRIES = 3
 
 
+@functools.cache
 def _build_agent():
     return make_agent(
         "extract",

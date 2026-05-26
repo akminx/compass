@@ -16,9 +16,13 @@ Run:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
+
+# Set ensemble env BEFORE importing compass.config (which reads it at import time).
+os.environ.setdefault("SCORE_ENSEMBLE_N", "3")
+
+import asyncio  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
@@ -56,8 +60,6 @@ Compensation: $140K–$180K + equity. In-person SF.
 
 
 async def main() -> int:
-    # Force ensemble=3 for the demo so the trace shows the self-consistency stack
-    os.environ.setdefault("SCORE_ENSEMBLE_N", "3")
     job = RawJob(
         company="AgentCo",
         title="Agent Engineer",

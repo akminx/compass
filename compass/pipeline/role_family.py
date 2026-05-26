@@ -357,16 +357,20 @@ When uncertain, classify IN_SCOPE with role_family="other-eng".
 Output ONE line in `reason` explaining the decision (≤140 chars)."""
 
 
-async def llm_classify(title: str, jd_first_500: str) -> RoleFamilyClassification:
+async def llm_classify(title: str, jd_body: str) -> RoleFamilyClassification:
     """Call Gemini Flash to classify a borderline title. Caller should only invoke
-    when keyword_classify returned (None, ""). Cost ~$0.0005/call."""
-    jd_first_500 = jd_first_500[:500]
+    when keyword_classify returned (None, ""). Cost ~$0.0005/call.
+
+    Truncates the JD body to the first 500 chars internally so callers don't
+    need to pre-slice (and so we never accidentally send the whole body).
+    """
+    jd_head = jd_body[:500]
     agent = make_agent(
         "extract",
         output_type=RoleFamilyClassification,
         system_prompt=_SYSTEM_PROMPT,
     )
-    user = f"TITLE: {title}\n\nJD (first 500 chars):\n{jd_first_500}"
+    user = f"TITLE: {title}\n\nJD (first 500 chars):\n{jd_head}"
     result = await agent.run(user)
     out: RoleFamilyClassification = result.output
     if out.role_family not in VALID_FAMILIES:

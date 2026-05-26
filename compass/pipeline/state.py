@@ -78,6 +78,10 @@ class CompassState(TypedDict):
     tailored_paragraph: str | None
 
     vault_written: bool
+    # Absolute path of the JobNote written for this job, when one was written.
+    # Set by `vault_write_node` so callers (MCP server, tests, audit log) can
+    # reference the real file rather than re-deriving the path.
+    vault_note_path: str | None
     jobs_processed: int
     jobs_written: int
 

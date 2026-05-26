@@ -50,13 +50,12 @@ class JobSummary:
 
 # ── loaders ──────────────────────────────────────────────────────────────────
 
+from compass.vault.frontmatter_utils import parse_frontmatter as _parse_with_body
+
 
 def _parse_frontmatter(path: Path) -> dict:
-    text = path.read_text(encoding="utf-8")
-    m = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
-    if not m:
-        return {}
-    return yaml.safe_load(m.group(1)) or {}
+    fm, _ = _parse_with_body(path)
+    return fm
 
 
 def load_jobs() -> list[JobSummary]:

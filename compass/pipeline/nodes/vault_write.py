@@ -196,7 +196,7 @@ async def vault_write_node(state: CompassState) -> dict:
         hitl_decision=hitl_decision,
         hitl_at=hitl_at,
     )
-    write_job_note(note, full_description=job.description)
+    written_path = write_job_note(note, full_description=job.description)
 
     # Skill counters are derived data — gap_aggregator._sync_skill_counters()
     # recomputes them from JobNote frontmatter at end of each run. We do NOT
@@ -210,4 +210,5 @@ async def vault_write_node(state: CompassState) -> dict:
     return {
         "vault_written": True,
         "jobs_written": state.get("jobs_written", 0) + 1,
+        "vault_note_path": str(written_path),
     }

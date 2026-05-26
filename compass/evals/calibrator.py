@@ -208,7 +208,7 @@ def fit_from_labels(path: Path | None = None) -> IsotonicCalibrator:
     records = load_dataset()
     labeled = [r for r in records if (r.expected_score or 0) > 0 or r.expected_skills]
     if len(labeled) < 5:
-        raise SystemExit(
+        raise ValueError(
             f"fit_from_labels: only {len(labeled)} hand-labeled records found. "
             "Label at least 5 (ideally 30+) via `uv run python -m scripts.label_jd <file>`."
         )
@@ -244,7 +244,11 @@ def _cli() -> int:
     args = parser.parse_args()
 
     if args.cmd == "fit":
-        cal = fit_from_labels()
+        try:
+            cal = fit_from_labels()
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
+            return 1
         print(
             f"fit: n={cal.n_training_pairs} pairs, train_mae={cal.fit_mae}, "
             f"knots={len(cal.xs)}, file={CALIBRATOR_PATH}"

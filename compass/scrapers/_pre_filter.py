@@ -23,7 +23,7 @@ bypass _scrape_all so the intake_filter checks remain the canonical gate.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import compass.config as cfg
@@ -85,7 +85,7 @@ def log_drops(dropped: list[tuple[RawJob, str]]) -> None:
         return
     log_path = cfg.VAULT_PATH / "_meta" / "filtered-jobs.md"
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().isoformat(timespec="seconds")
+    ts = datetime.now(UTC).isoformat(timespec="seconds")
     with log_path.open("a", encoding="utf-8") as f:
         for job, reason in dropped:
             f.write(f"- [{ts}] {job.company} {job.title!r} — {reason}\n")
