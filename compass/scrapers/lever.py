@@ -7,7 +7,6 @@ No authentication required.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import date, datetime
 
@@ -15,6 +14,7 @@ import httpx
 
 from compass.pipeline.state import RawJob
 from compass.scrapers._html import strip_html as _strip_html
+from compass.scrapers._interleave import gather_filter_interleave
 from compass.scrapers._remote_parser import infer_remote_policy
 
 logger = logging.getLogger(__name__)
@@ -99,18 +99,6 @@ async def scrape_lever(company: str) -> list[RawJob]:
 
 
 async def scrape_lever_many(companies: list[str]) -> list[RawJob]:
-    """Scrape multiple Lever companies concurrently. Pre-filters at the
-    scraper layer before per-board round-robin."""
-    from compass.scrapers._interleave import round_robin_by_board
-    from compass.scrapers._pre_filter import pre_filter_many
-
-    if not companies:
-        return []
-    results = await asyncio.gather(*[scrape_lever(c) for c in companies], return_exceptions=True)
-    per_board: list[list[RawJob]] = []
-    for r in results:
-        if isinstance(r, list):
-            per_board.append(r)
-        else:
-            logger.warning("lever_many: unexpected exception: %s", r)
-    return round_robin_by_board(pre_filter_many(per_board))
+    """Scrape multiple Lever companies concurrently. Pre-filter + per-board
+    round-robin happen inside `gather_filter_interleave`."""
+    return await gather_filter_interleave(scrape_lever, companies, "lever")

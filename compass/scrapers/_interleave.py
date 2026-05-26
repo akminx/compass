@@ -13,10 +13,16 @@ trims uniformly across boards rather than from the tail of one board.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from compass.pipeline.state import RawJob
+
+logger = logging.getLogger(__name__)
 
 
 def _date_key(job: RawJob) -> tuple[bool, float]:
@@ -48,3 +54,35 @@ def round_robin_by_board(per_board: list[list[RawJob]]) -> list[RawJob]:
                 pass
         iters = next_iters
     return out
+
+
+async def gather_filter_interleave(
+    scrape_fn: Callable[[str], Awaitable[list[RawJob]]],
+    items: list[str],
+    source_name: str,
+) -> list[RawJob]:
+    """Shared `scrape_*_many` driver. Per-source scrapers (greenhouse, lever,
+    ashby, workday) previously duplicated this 5-step orchestration verbatim:
+
+        1. early-exit on empty input
+        2. asyncio.gather(*[scrape_fn(item) for item in items]) with
+           return_exceptions so one bad board doesn't kill the batch
+        3. log + drop any non-list result (an exception bubbled up)
+        4. pre-filter at the scraper layer so high-volume boards don't burn
+           round-robin slots on title-doomed jobs
+        5. per-board round-robin interleave
+
+    `source_name` is only used for the warning log on per-item failure.
+    """
+    from compass.scrapers._pre_filter import pre_filter_many
+
+    if not items:
+        return []
+    results = await asyncio.gather(*[scrape_fn(i) for i in items], return_exceptions=True)
+    per_board: list[list[RawJob]] = []
+    for item, r in zip(items, results, strict=True):
+        if isinstance(r, list):
+            per_board.append(r)
+        else:
+            logger.warning("%s_many: unexpected exception for %r: %s", source_name, item, r)
+    return round_robin_by_board(pre_filter_many(per_board))

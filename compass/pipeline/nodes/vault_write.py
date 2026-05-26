@@ -120,7 +120,7 @@ async def vault_write_node(state: CompassState) -> dict:
         ]
         return {
             "vault_written": False,
-            "errors": [*state.get("errors", []), f"vault_write_node: missing {missing}"],
+            "errors": [f"vault_write_node: missing {missing}"],
         }
 
     # SCORE_THRESHOLD is intentionally NOT applied here in Phase 1.A. The threshold

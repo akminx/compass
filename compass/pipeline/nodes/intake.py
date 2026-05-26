@@ -17,5 +17,5 @@ if TYPE_CHECKING:
 
 async def intake_node(state: CompassState) -> dict:
     if state.get("current_job") is None:
-        return {"errors": [*state.get("errors", []), "intake_node: current_job is None"]}
+        return {"errors": ["intake_node: current_job is None"]}
     return {}

@@ -168,7 +168,7 @@ async def intake_filter_node(state: CompassState) -> dict:
         return {
             "in_scope": False,
             "role_family": "out-of-scope",
-            "errors": [*state.get("errors", []), "intake_filter_node: current_job is None"],
+            "errors": ["intake_filter_node: current_job is None"],
         }
 
     body = job.description or ""

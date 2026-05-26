@@ -340,15 +340,21 @@ async def generate_cover_letter(job_filename: str) -> dict:
 
 @mcp.tool()
 def search_jobs(query: str, limit: int = 10) -> list[dict]:
-    """Substring/keyword search over vault job notes. Returns frontmatter dicts."""
-    from compass.analysis.gap_aggregator import _parse_frontmatter
+    """Substring/keyword search over vault job notes. Returns frontmatter dicts.
 
+    One `frontmatter.load()` per file — both the metadata and the body come
+    out of the same parse. Previously this read each file twice (once for
+    frontmatter, once for raw text), which doubled the I/O on a vault with
+    hundreds of notes.
+    """
+    import frontmatter
+
+    needle = query.lower()
     hits = []
     for f in (VAULT_PATH / "jobs").glob("*.md"):
-        fm = _parse_frontmatter(f)
-        text = f.read_text(encoding="utf-8").lower()
-        if query.lower() in text:
-            hits.append({"file": str(f.name), **fm})
+        post = frontmatter.load(f)
+        if needle in post.content.lower() or needle in str(post.metadata).lower():
+            hits.append({"file": str(f.name), **post.metadata})
     hits.sort(key=lambda h: h.get("match_score", 0), reverse=True)
     return hits[:limit]
 

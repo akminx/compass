@@ -28,6 +28,7 @@ import httpx
 
 from compass.pipeline.state import RawJob
 from compass.scrapers._html import strip_html as _strip_html
+from compass.scrapers._interleave import gather_filter_interleave
 from compass.scrapers._remote_parser import infer_remote_policy
 
 logger = logging.getLogger(__name__)
@@ -247,19 +248,7 @@ async def scrape_workday(slug: str, company_label: str | None = None) -> list[Ra
 
 
 async def scrape_workday_many(slugs: list[str]) -> list[RawJob]:
-    """Scrape multiple Workday tenants concurrently. Pre-filters at the
-    scraper layer before per-board round-robin. Each slug is the full
-    `subdomain/tenant/site` form."""
-    from compass.scrapers._interleave import round_robin_by_board
-    from compass.scrapers._pre_filter import pre_filter_many
-
-    if not slugs:
-        return []
-    results = await asyncio.gather(*[scrape_workday(s) for s in slugs], return_exceptions=True)
-    per_board: list[list[RawJob]] = []
-    for r in results:
-        if isinstance(r, list):
-            per_board.append(r)
-        else:
-            logger.warning("workday_many: unexpected exception: %s", r)
-    return round_robin_by_board(pre_filter_many(per_board))
+    """Scrape multiple Workday tenants concurrently. Each slug is the full
+    `subdomain/tenant/site` form. Pre-filter + per-board round-robin happen
+    inside `gather_filter_interleave`."""
+    return await gather_filter_interleave(scrape_workday, slugs, "workday")

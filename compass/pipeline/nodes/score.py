@@ -505,7 +505,7 @@ async def score_node(state: CompassState) -> dict:
         # path triggered the early exit.
         return {
             "score_result": None,
-            "errors": [*state.get("errors", []), "score_node: extracted_requirements is None"],
+            "errors": ["score_node: extracted_requirements is None"],
             "score_threshold": SCORE_THRESHOLD,
         }
 
@@ -516,7 +516,7 @@ async def score_node(state: CompassState) -> dict:
         logger.exception("score_node: LLM call failed")
         return {
             "score_result": None,
-            "errors": [*state.get("errors", []), f"score_node: {type(e).__name__}: {e}"],
+            "errors": [f"score_node: {type(e).__name__}: {e}"],
             "score_threshold": SCORE_THRESHOLD,
         }
 

@@ -104,6 +104,6 @@ async def tailor_node(state: CompassState) -> dict:
         )
     except Exception as e:
         logger.exception("tailor_node: LLM call failed for %s", job.url)
-        return {"errors": [*state.get("errors", []), f"tailor_node: {type(e).__name__}: {e}"]}
+        return {"errors": [f"tailor_node: {type(e).__name__}: {e}"]}
 
     return {"tailored_paragraph": paragraph}

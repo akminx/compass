@@ -176,7 +176,7 @@ async def extract_node(state: CompassState) -> dict:
     if job is None:
         return {
             "extracted_requirements": None,
-            "errors": [*state.get("errors", []), "extract_node: current_job is None"],
+            "errors": ["extract_node: current_job is None"],
         }
 
     try:
@@ -185,7 +185,7 @@ async def extract_node(state: CompassState) -> dict:
         logger.exception("extract_node: LLM call failed for %s", job.url)
         return {
             "extracted_requirements": None,
-            "errors": [*state.get("errors", []), f"extract_node: {type(e).__name__}: {e}"],
+            "errors": [f"extract_node: {type(e).__name__}: {e}"],
         }
 
     unknown: list[str] = []

@@ -53,23 +53,25 @@ def find_jobnote(job_id: str) -> Path:
     if not jobs_dir.exists():
         raise LookupError(f"no jobs/ directory in vault at {cfg.VAULT_PATH}")
     job_id_lower = job_id.lower()
-    matches: list[Path] = []
-    for p in jobs_dir.glob("*.md"):
-        if job_id_lower in p.name.lower():
-            matches.append(p)
-            continue
+    all_paths = list(jobs_dir.glob("*.md"))
+
+    # Fast path: filename substring match. O(n) name comparisons, zero I/O.
+    name_matches = [p for p in all_paths if job_id_lower in p.name.lower()]
+    if len(name_matches) == 1:
+        return name_matches[0]
+    if len(name_matches) > 1:
+        names = ", ".join(p.name for p in name_matches)
+        raise LookupError(f"ambiguous job_id={job_id!r} — matches {names}")
+
+    # Fallback: URL match. ONLY runs when the filename match returns zero —
+    # otherwise we were parsing every file's frontmatter on every status update.
+    for p in all_paths:
         try:
-            md = frontmatter.load(p).metadata
+            if frontmatter.load(p).metadata.get("url") == job_id:
+                return p
         except Exception:
             continue
-        if md.get("url") == job_id:
-            matches.append(p)
-    if not matches:
-        raise LookupError(f"no JobNote matched job_id={job_id!r}")
-    if len(matches) > 1:
-        names = ", ".join(p.name for p in matches)
-        raise LookupError(f"ambiguous job_id={job_id!r} — matches {names}")
-    return matches[0]
+    raise LookupError(f"no JobNote matched job_id={job_id!r}")
 
 
 def _find_application(app_id: str) -> Path:

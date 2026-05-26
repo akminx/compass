@@ -5,8 +5,9 @@ All nodes receive the full state and return partial updates — only return keys
 
 from __future__ import annotations
 
+import operator
 from datetime import date
-from typing import Literal, TypedDict
+from typing import Annotated, Literal, TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -85,7 +86,13 @@ class CompassState(TypedDict):
     jobs_processed: int
     jobs_written: int
 
-    errors: list[str]
+    # Accumulating error log: LangGraph's default merge for a plain `list[str]`
+    # key is last-write-wins, which silently drops errors from earlier nodes
+    # when a later node returns a partial update without the key. The
+    # `operator.add` reducer makes node returns append rather than replace —
+    # callers now write `{"errors": ["msg"]}` (a one-item list), NOT
+    # `{"errors": [*state.get("errors", []), "msg"]}`.
+    errors: Annotated[list[str], operator.add]
 
     thread_id: str | None
 
